@@ -17,8 +17,8 @@ function [bahn_ids, existing_bahn_ids] = getBahnIds(conn,evaluate_orientation,ev
         query = "SELECT bahn_id FROM robotervermessung.auswertung.speed_sidtw";
     end
     if evaluate_orientation == false && evaluate_velocity == false
-        query = "SELECT bahn_id FROM robotervermessung.auswertung.position_sidtw";
-        % query = "SELECT bahn_id FROM robotervermessung.auswertung.info_euclidean WHERE evaluation = 'position'";
+        query = "SELECT bahn_id FROM robotervermessung.auswertung.info_sidtw";
+        % query = "SELECT bahn_id FROM robotervermessung.auswertung.position_sidtw"; % Dauert extrem lange
     end
     
     % Extrahieren aller Bahn-ID's die in der Datenbank vorliegen

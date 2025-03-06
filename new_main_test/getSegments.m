@@ -1,5 +1,5 @@
-function getSegments(conn, bahn_id, schema, evaluate_orientation, evaluate_velocity, trafo_rot, trafo_trans, q_transform)
 %% Auslesen der für die entsprechende Auswertung benötigten Daten
+function getSegments(conn, bahn_id, schema, evaluate_orientation, evaluate_velocity, trafo_rot, trafo_trans, q_transform)
 
 % Anzahl der Segmente der gesamten Messaufnahme bestimmen 
 query = ['SELECT * FROM robotervermessung.' schema '.bahn_info ' ...
@@ -111,14 +111,18 @@ for i = 1:1:length(seg_id)
     end
 end
 
+% Speichern der einzelnen Segmente in einer Tabelle 
 
+%%%%%%%%%%%%%%%%%
+% Geschwindigkeit
 if evaluate_velocity == true && evaluate_orientation == false 
 
     disp('Es wird die Geschwindigkeit ausgewertet!')
 
-    % Speichern der einzelnen Semgente in Tabelle
+    % Erstes Segment Ist
     segments_ist = array2table([{string(bahn_id_)+"_0"} table2array(data_ist(1:idx_new_seg_ist(1)-1,[3,4]))], "VariableNames",{'segment_id','tcp_speed_ist'});
    
+    % Übrige Segmente Ist
     for i = 1:num_segments
     
         if i == length(idx_new_seg_ist)
@@ -129,11 +133,14 @@ if evaluate_velocity == true && evaluate_orientation == false
     
     end
     
+    % Erstes Segment Soll
     if idx_new_seg_soll(1) == 1
         segments_soll = array2table([{string(bahn_id_)+"_0"} table2array(data_soll(1:idx_new_seg_soll(1),[3,4]))], "VariableNames",{'segment_id','tcp_speed_soll'});
     else
         segments_soll = array2table([{string(bahn_id_)+"_0"} table2array(data_soll(1:idx_new_seg_soll(1)-1,[3,4]))], "VariableNames",{'segment_id','tcp_speed_soll'});
     end
+
+    % Übrige Segmente Soll
     for i = 1:num_segments
         if i == length(idx_new_seg_soll)
             segments_soll(i+1,:) = array2table([{segment_ids{i,:}} data_soll.tcp_speed_soll(idx_new_seg_soll(i):end)]);
@@ -141,12 +148,14 @@ if evaluate_velocity == true && evaluate_orientation == false
             segments_soll(i+1,:)= array2table([{segment_ids{i,:}} data_soll.tcp_speed_soll(idx_new_seg_soll(i):idx_new_seg_soll(i+1)-1)]);
         end    
     end
-    
+
+%%%%%%%%%%%%%%
+% Orientierung
 elseif evaluate_velocity == false && evaluate_orientation == true
 
     disp('Es wird die Orientierung ausgewertet!')
     
-    % First segment IST data (quaternions)
+    % Erstes Segment Ist (quaternions)
     segments_ist = array2table([{data_ist.segment_id(1)} ...
                               data_ist.qw_ist(1:idx_new_seg_ist(1)-1) ...
                               data_ist.qx_ist(1:idx_new_seg_ist(1)-1) ...
@@ -154,17 +163,15 @@ elseif evaluate_velocity == false && evaluate_orientation == true
                               data_ist.qz_ist(1:idx_new_seg_ist(1)-1)], ...
                               'VariableNames', {'segment_id', 'qw_ist', 'qx_ist', 'qy_ist', 'qz_ist'});
     
-    % Remaining IST segments
+    % Übrige Segmente Ist
     for i = 1:num_segments
         if i == length(idx_new_seg_ist)
-            % Last segment
             segments_ist(i+1,:) = array2table([{segment_ids{i,:}} ...
                                              data_ist.qw_ist(idx_new_seg_ist(i):end) ...
                                              data_ist.qx_ist(idx_new_seg_ist(i):end) ...
                                              data_ist.qy_ist(idx_new_seg_ist(i):end) ...
                                              data_ist.qz_ist(idx_new_seg_ist(i):end)]);
         else
-            % Middle segments
             segments_ist(i+1,:) = array2table([{segment_ids{i,:}} ...
                                              data_ist.qw_ist(idx_new_seg_ist(i):idx_new_seg_ist(i+1)-1) ...
                                              data_ist.qx_ist(idx_new_seg_ist(i):idx_new_seg_ist(i+1)-1) ...
@@ -173,7 +180,7 @@ elseif evaluate_velocity == false && evaluate_orientation == true
         end
     end
     
-    % First segment SOLL data
+    % Erstes Segment Soll
     segments_soll = array2table([{data_soll.segment_id(1)} ...
                                 data_soll.qw_soll(1:idx_new_seg_soll(1)-1) ...
                                 data_soll.qx_soll(1:idx_new_seg_soll(1)-1) ...
@@ -181,7 +188,7 @@ elseif evaluate_velocity == false && evaluate_orientation == true
                                 data_soll.qz_soll(1:idx_new_seg_soll(1)-1)], ...
                                 'VariableNames', {'segment_id', 'qw_soll', 'qx_soll', 'qy_soll', 'qz_soll'});
     
-    % Remaining SOLL segments
+    % Übrige Semgente Soll
     for i = 1:num_segments
         if i == length(idx_new_seg_soll)
             segments_soll(i+1,:) = array2table([{segment_ids{i,:}} ...
@@ -198,44 +205,45 @@ elseif evaluate_velocity == false && evaluate_orientation == true
         end
     end
     
-    % Initialize transformation results
+    % Initialisierung Quarternion Transformation
     segments_trafo = table();
     q_transformed_all = [];
     
-    % Transform each segment
+    % Segmentweise Schleife für Transformation
     for i = 1:num_segments+1
-        % Extract quaternions for current segment
+        % Extrahiere Quarternion für aktuelles Segment
         segment_ist = table2struct(segments_ist(i,:));
         segment_soll = table2struct(segments_soll(i,:));
         
-        % Create temporary tables with the segment data
+        % Temporäre Tabelle mit Quarternion Daten
         data_ist_seg = table(segment_ist.qw_ist, segment_ist.qx_ist, segment_ist.qy_ist, segment_ist.qz_ist, ...
                             'VariableNames', {'qw_ist', 'qx_ist', 'qy_ist', 'qz_ist'});
         data_soll_seg = table(segment_soll.qw_soll, segment_soll.qx_soll, segment_soll.qy_soll, segment_soll.qz_soll, ...
                              'VariableNames', {'qw_soll', 'qx_soll', 'qy_soll', 'qz_soll'});
         
-        % Transform using existing function
+        % Quarternion-Transformation für aktuelles Segment
         q_transformed = transformQuaternion(data_ist_seg, data_soll_seg, q_transform, trafo_rot);
 
-        % Add row to segments_trafo
+        % Transformationsdaten der Tabelle hinzufügen
         segments_trafo(i,:) = table({segments_ist.segment_id(i)}, ...
                                {q_transformed(:,1)}, {q_transformed(:,2)}, ...
                                {q_transformed(:,3)}, {q_transformed(:,4)}, ...
                                'VariableNames', {'segment_id', 'qw_trans', 'qx_trans', 'qy_trans', 'qz_trans'});
     
-        % Accumulate all transformed quaternions
+        % Hinzufügen der transformierten Quarternion
         q_transformed_all = [q_transformed_all; q_transformed];
     end
 
-    
-%%%%%%% Sonst automatisch Auswertung von Positionsdaten 
+%%%%%%%%%%%%%%%%    
+% Positionsdaten 
 else
 
     disp('Es wird die Position ausgewertet!')
 
-    % Speichern der einzelnen Semgente in Tabelle
+    % Erstes Segment Ist
     segments_ist = array2table([{data_ist.segment_id(1)} data_ist.x_ist(1:idx_new_seg_ist(1)-1) data_ist.y_ist(1:idx_new_seg_ist(1)-1) data_ist.z_ist(1:idx_new_seg_ist(1)-1)], "VariableNames",{'segment_id','x_ist','y_ist','z_ist'});
     
+    % Übrige Segmente Ist
     for i = 1:num_segments
         if i == length(idx_new_seg_ist)
             segments_ist(i+1,:) = array2table([{segment_ids{i,:}} data_ist.x_ist(idx_new_seg_ist(i):end) data_ist.y_ist(idx_new_seg_ist(i):end) data_ist.z_ist(idx_new_seg_ist(i):end)]);
@@ -244,11 +252,14 @@ else
         end
     end
     
+    % Erstes Segment Soll
     if idx_new_seg_soll(1) == 1
         segments_soll = array2table([{data_soll.segment_id(1)} data_soll.x_soll(1:idx_new_seg_soll(1)) data_soll.y_soll(1:idx_new_seg_soll(1)) data_soll.z_soll(1:idx_new_seg_soll(1))], "VariableNames",{'segment_id','x_soll','y_soll','z_soll'});
     else
         segments_soll = array2table([{data_soll.segment_id(1)} data_soll.x_soll(1:idx_new_seg_soll(1)-1) data_soll.y_soll(1:idx_new_seg_soll(1)-1) data_soll.z_soll(1:idx_new_seg_soll(1)-1)], "VariableNames",{'segment_id','x_soll','y_soll','z_soll'});
     end
+
+    % Übrige Segmente Soll
     for i = 1:num_segments
         if i == length(idx_new_seg_soll)
             segments_soll(i+1,:) = array2table([{segment_ids{i,:}} data_soll.x_soll(idx_new_seg_soll(i):end) data_soll.y_soll(idx_new_seg_soll(i):end) data_soll.z_soll(idx_new_seg_soll(i):end)]);
@@ -266,7 +277,7 @@ else
 
 end
 
-% Löschen des Segment 0: 
+% Löschen des Segment 0
 segments_soll = segments_soll(2:end,:);
 segments_ist = segments_ist(2:end,:);
 if evaluate_velocity == false
@@ -274,7 +285,7 @@ if evaluate_velocity == false
 end
 num_segments = num_segments -1;
 
-%% Laden in Workspace
+% Laden der Daten in Workspace
 assignin("base","num_segments",num_segments)
 assignin("base","segment_ids",segment_ids)
 assignin("base","data_ist",data_ist)

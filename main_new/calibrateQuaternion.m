@@ -14,6 +14,4 @@ q_mean_soll = q_mean_soll / norm(q_mean_soll);
 % Calculate transformation quaternion
 q_transform = quatmultiply(quatconj(q_mean_ist), q_mean_soll);
 
-% Save to workspace
-assignin('base', 'q_transform', q_transform);
 end

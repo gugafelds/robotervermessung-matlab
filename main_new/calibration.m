@@ -1,4 +1,5 @@
-function calibration(data_cal_ist, data_cal_soll, plots)
+function [trafo_rot, trafo_trans, error_metrics] = calibration(data_cal_ist, data_cal_soll, plots)
+
     ist_time = double(string(data_cal_ist.timestamp));
     ist = [data_cal_ist.x_ist data_cal_ist.y_ist data_cal_ist.z_ist];
     soll_time = double(string(data_cal_soll.timestamp));
@@ -174,7 +175,4 @@ function calibration(data_cal_ist, data_cal_soll, plots)
                 error_metrics.std_error);
     end
     
-    assignin("base", "trafo_rot", trafo_rot);
-    assignin("base", "trafo_trans", trafo_trans);
-    assignin("base", "error_metrics", error_metrics);
 end

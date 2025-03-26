@@ -8,6 +8,6 @@ function [transformed_data] = coord_transformation(data_ist, trafo_rot, trafo_tr
     elseif size(data_ist,2) == 3
         transformed_data = data_ist * trafo_rot + trafo_trans;
     else
-        error('Unerwartetes Datenformat');
+        error('Unerwartetes Datenformat für Koordinatentransformation');
     end
 end

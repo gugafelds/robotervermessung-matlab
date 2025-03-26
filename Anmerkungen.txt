@@ -14,3 +14,12 @@ Zeile 590: Bei evaluate_all wird nur das letzte Segment abgeschnitten! Soll auch
 
 %%% ALLGEMEIN
 Auswertung der Bahnen 1720794824 und 1720794822 löschen!
+
+
+
+Zeile 582 ff. : Die Segmente sind eigentlich schon sortiert ...
+
+
+%%% calculateMetrics.m und getSegments.m anpassen falls Geschwindigkeit ausgewertet werden soll !
+
+!!! Fehler wenn orientation_deviations hochgeladen werden sollen in batchUpload2PostgreSQL Zeile 35

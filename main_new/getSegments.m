@@ -1,5 +1,6 @@
 %% Auslesen der für die entsprechende Auswertung benötigten Daten
-function getSegments(conn, bahn_id, schema, evaluate_orientation, evaluate_velocity, trafo_rot, trafo_trans, q_transform)
+function [num_segments, segment_ids, data_ist, data_soll, segments_ist, segments_soll, segments_trafo, q_transformed] = ...
+    getSegments(conn, bahn_id, schema, evaluate_orientation, evaluate_velocity, trafo_rot, trafo_trans, q_transform)
 
 % Anzahl der Segmente der gesamten Messaufnahme bestimmen 
 query = ['SELECT * FROM robotervermessung.' schema '.bahn_info ' ...
@@ -28,12 +29,14 @@ if evaluate_velocity == false && evaluate_orientation == true
     euler_ist = rad2deg(euler_ist);
 
     position_ist = table2array(data_ist(:,5:7));
-       
+    
+    %%%%% Nur notwendig für plots 
     % Koordinatentransfromation
     coordTransformation(position_ist, trafo_rot, trafo_trans);
 
     % Winkeltransformation
     q_transformed = transformQuaternion(data_ist, data_soll, q_transform, trafo_rot);
+    %%%%%
 
 % Geschwindigkeitsdaten aus Positionsdaten
 elseif evaluate_velocity == true && evaluate_orientation == false 
@@ -271,8 +274,7 @@ else
     % Koordinatentransformation für alle Segemente
     segments_trafo = table();
     for i = 1:1:num_segments+1
-        coordTransformation(segments_ist(i,:),trafo_rot, trafo_trans)
-        segments_trafo(i,:) = pos_ist_trafo;
+        segments_trafo(i,:) = coordTransformation(segments_ist(i,:),trafo_rot, trafo_trans);
     end
 
 end
@@ -285,15 +287,10 @@ if evaluate_velocity == false
 end
 num_segments = num_segments -1;
 
-% Laden der Daten in Workspace
-assignin("base","num_segments",num_segments)
-assignin("base","segment_ids",segment_ids)
-assignin("base","data_ist",data_ist)
-assignin("base","data_soll",data_soll)
-assignin("base","segments_ist",segments_ist)
-assignin("base","segments_soll",segments_soll)
-assignin("base","segments_trafo",segments_trafo)
-if evaluate_orientation
-        assignin('base', 'q_transformed', q_transformed_all);
-end
 
+if evaluate_orientation == true
+    q_transformed = q_transformed_all;
+else
+    q_transformed = 0; % Wird dann sowieso nicht ausgegeben!
+end
+ 

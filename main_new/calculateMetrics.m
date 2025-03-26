@@ -4,7 +4,7 @@ function [table_euclidean_info, table_euclidean_deviation, ...
  table_sidtw_info, table_sidtw_deviation, ...
  table_dtw_info, table_dtw_deviation, ...
  table_dfd_info, table_dfd_deviation] = ...
- evaluationMetrics(bahn_id, segment_ids, num_segments, evaluate_velocity, evaluate_orientation, segments_soll, segments_ist, segments_trafo)
+ calculateMetrics(bahn_id, segment_ids, num_segments, evaluate_velocity, evaluate_orientation, segments_soll, segments_ist, segments_trafo)
 
 % Tabellen initialisieren
 table_sidtw_info = table();
@@ -15,15 +15,15 @@ table_dfd_info = table();
 table_dfd_deviation = cell(num_segments,1);
 
 % Wenn Geschwindigkeit ausgewertet werden soll sind die 1D-Metriken nicht durchfürbar
-if size(segments_soll,2) > 2
-    table_euclidean_info = table();
-    table_euclidean_deviation = cell(num_segments,1);
-    table_lcss_info = table();
-    table_lcss_deviation = cell(num_segments,1);
-end
+table_euclidean_info = table();
+table_euclidean_deviation = cell(num_segments,1);
+table_lcss_info = table();
+table_lcss_deviation = cell(num_segments,1);
 
 % Berechnung der Metriken für alle Segmente
 for i = 1:1:num_segments
+
+if istable(segments_soll) && istable(segments_trafo) && istable(segments_ist)
 
     if evaluate_velocity == false && evaluate_orientation == false 
         segment_trafo = [segments_trafo.x_ist{i}, segments_trafo.y_ist{i}, segments_trafo.z_ist{i}];
@@ -38,6 +38,12 @@ for i = 1:1:num_segments
         segment_trafo = fixGimbalLock(rad2deg(quat2eul(segment_trafo)));
         segment_soll = fixGimbalLock(rad2deg(quat2eul(segment_soll)));    
     end
+
+% Berechnung der Metriken für gesamte Bahn --> nur 1 Schleifendurchlauf, Daten liegen nicht als Tabelle vor
+else
+    segment_trafo = segments_trafo;
+    segment_soll = segments_soll;
+end
 
 % Anwendung der Methoden
     % Berechnung SIDTW

@@ -257,7 +257,6 @@ function [info_table, distances_table] = metric2postgresql(metric, distances, so
             distances_table = table(bahn_id, lcss_distances, ...
                 lcss_soll_x, lcss_soll_y, lcss_soll_z, lcss_ist_x, lcss_ist_y, lcss_ist_z);
         end
-    end
-    
+    end 
     % Die Tabellen werden jetzt zurückgegeben statt in den Workspace geladen
 end

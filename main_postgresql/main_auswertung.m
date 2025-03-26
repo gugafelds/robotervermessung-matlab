@@ -627,7 +627,7 @@ if evaluate_all == true && evaluate_velocity == false
     
     % Euklidischer Abstand
     tic
-    [euclidean_soll,euclidean_distances,~] = distance2curve(data_all_soll, data_ist_trafo, 'linear');
+    [euclidean_ist,euclidean_distances,~] = distance2curve(data_ist_trafo, data_all_soll, 'linear');
     toc
     disp('Euklidischer Abstand berechnet -->')
 

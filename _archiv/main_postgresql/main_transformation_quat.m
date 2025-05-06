@@ -6,8 +6,8 @@ bahn_id_ = '1739274902';% Orientierungsänderung ohne Kalibrierungsdatei
 %bahn_id_ = '1720784405';
 plots = false;              % Plotten der Daten 
 upload_all = false;        % Upload aller Bahnen
-upload_single = true;     % Nur eine einzelne Bahn
-transform_only = false;    % Nur Transformation und Plot, kein Upload
+upload_single = false;     % Nur eine einzelne Bahn
+transform_only = true;    % Nur Transformation und Plot, kein Upload
 
 schema = 'bewegungsdaten';
 

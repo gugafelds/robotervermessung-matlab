@@ -9,7 +9,7 @@ conn = connecting_to_postgres;
 
 bahn_id = '1719911918'; % Square mässig
 bahn_id = '1721048209'; % andere Routine
-bahn_id = '1739194248';
+bahn_id = '1748006774';
 
 query = sprintf('SELECT * FROM robotervermessung.bewegungsdaten.bahn_events WHERE bahn_id = ''%s''',bahn_id);
 bahn_events = fetch(conn, query);

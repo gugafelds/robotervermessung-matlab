@@ -11,7 +11,7 @@ clear;
 clc;
 
 % Bahn-ID definieren
-bahn_id_ = '1748435645';      % ID der zu verarbeitenden Bahn
+bahn_id_ = '1748618982';      % ID der zu verarbeitenden Bahn
 plots = true;                % Plotten der Daten 
 schema = 'bewegungsdaten';    % Datenbankschema
 

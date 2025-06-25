@@ -5,7 +5,7 @@ clear; tic
 mode = 'evaluation'; % Default Modus
 
 % Falls spezifische Bahn-ID ausgewertet werden soll (höchste Priorität)
-bahn_id = '1743779616';
+bahn_id = '1749134737';
 % Falls Daten aus einem bestimmten Zeitraum ausgewertet werden sollen
 record_date = '04.04.2025'; % Format: dd.mm.yyyy
 

@@ -29,7 +29,13 @@ function q_sa = LT2SAQuaternionDirect(q_lt_or_euler_lt)
             q_rotated = q_rotation * q_lt_matlab;
             
             % Extrahieren der Komponenten
-            [w, x, y, z] = parts(q_rotated);
+            q_array = double(q_rotated);
+            if length(q_array) == 4
+                w = q_array(1);
+                x = q_array(2);
+                y = q_array(3);
+                z = q_array(4);
+            end
             
             % Permutation und Vorzeichen anpassen
             q_sa = [-w, -y, -z, x];

@@ -237,8 +237,13 @@ function [num_segments, segment_ids, data_ist, data_soll, segments_ist, segments
         disp('Es wird die Position ausgewertet!')
 
         % Erstes Segment Ist
-        segments_ist = array2table([{data_ist.segment_id(1)} data_ist.x_ist(1:idx_new_seg_ist(1)-1) data_ist.y_ist(1:idx_new_seg_ist(1)-1) data_ist.z_ist(1:idx_new_seg_ist(1)-1)], "VariableNames",{'segment_id','x_ist','y_ist','z_ist'});
-        
+         if idx_new_seg_soll(1) == 1
+            segments_ist = array2table([{data_ist.segment_id(1)} data_ist.x_ist(1:idx_new_seg_ist(1)) data_ist.y_ist(1:idx_new_seg_ist(1)) data_ist.z_ist(1:idx_new_seg_ist(1))], "VariableNames",{'segment_id','x_ist','y_ist','z_ist'});
+        else
+            segments_ist = array2table([{data_ist.segment_id(1)} data_ist.x_ist(1:idx_new_seg_ist(1)-1) data_ist.y_ist(1:idx_new_seg_ist(1)-1) data_ist.z_ist(1:idx_new_seg_ist(1)-1)], "VariableNames",{'segment_id','x_ist','y_ist','z_ist'});
+        end
+
+
         % Übrige Segmente Ist
         for i = 1:num_segments
             if i == length(idx_new_seg_ist)
@@ -298,7 +303,6 @@ function [num_segments, segment_ids, data_ist, data_soll, segments_ist, segments
     if evaluate_velocity == false
         segments_trafo = segments_trafo(2:end,:);
     end
-    num_segments = num_segments - 1;
 
     if evaluate_orientation == true
         q_transformed = q_transformed_all;

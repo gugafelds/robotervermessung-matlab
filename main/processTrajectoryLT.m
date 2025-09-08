@@ -2,7 +2,8 @@ function [table_euclidean_info, table_sidtw_info, table_dtw_info, table_dfd_info
           table_euclidean_deviation, table_sidtw_deviation, table_dtw_deviation, ...
           table_dfd_deviation, table_lcss_deviation, segment_ids, calibration_id] = ...
               processTrajectoryLT(conn, bahn_id, evaluate_velocity, ...
-                                      evaluate_orientation, plots)
+                                      evaluate_orientation, plots, ...
+                                      use_euclidean, use_sidtw, use_dtw, use_dfd, use_lcss)
         
     % Collection aus der die Daten extrahiert werden (evtl. übergeben)
     schema = 'bewegungsdaten';
@@ -187,7 +188,8 @@ function [table_euclidean_info, table_sidtw_info, table_dtw_info, table_dfd_info
      table_sidtw_info, table_sidtw_deviation, ...
      table_dtw_info, table_dtw_deviation, ...
      table_dfd_info, table_dfd_deviation] = ...
-     calculateMetrics(bahn_id, segment_ids, num_segments, evaluate_velocity, evaluate_orientation, segments_soll, segments_ist, segments_trafo);
+     calculateMetrics(bahn_id, segment_ids, num_segments, evaluate_velocity, evaluate_orientation, segments_soll, segments_ist, segments_trafo, ...
+                      use_euclidean, use_sidtw, use_dtw, use_dfd, use_lcss);
     
     % Prüfen, ob Kalibrierungsbahn (kommt von Vicon/MoCap)
     is_calibration_run = false;
@@ -217,20 +219,30 @@ function [table_euclidean_info, table_sidtw_info, table_dtw_info, table_dfd_info
          table_sidtw_all_info, table_sidtw_all_deviation, ...
          table_dtw_all_info, table_dtw_all_deviation, ...
          table_dfd_all_info, table_dfd_all_deviation] = ...
-         calculateMetrics(bahn_id, table(string(bahn_id)), 1, evaluate_velocity, evaluate_orientation, data_all_soll, segments_ist, data_all_ist_trafo);
+         calculateMetrics(bahn_id, table(string(bahn_id)), 1, evaluate_velocity, evaluate_orientation, data_all_soll, segments_ist, data_all_ist_trafo, ...
+                          use_euclidean, use_sidtw, use_dtw, use_dfd, use_lcss);
 
-        % Info und Deviation Tabellen der Gesamtauswertung anhängen
-        table_euclidean_info = [table_euclidean_all_info; table_euclidean_info];
-        table_sidtw_info = [table_sidtw_all_info; table_sidtw_info];
-        table_dtw_info = [table_dtw_all_info; table_dtw_info];
-        table_dfd_info = [table_dfd_all_info; table_dfd_info];
-        table_lcss_info = [table_lcss_all_info; table_lcss_info];
-        
-        table_sidtw_deviation = [table_sidtw_all_deviation; table_sidtw_deviation];
-        table_dtw_deviation = [table_dtw_all_deviation; table_dtw_deviation];
-        table_dfd_deviation = [table_dfd_all_deviation; table_dfd_deviation];
-        table_euclidean_deviation = [table_euclidean_all_deviation; table_euclidean_deviation];
-        table_lcss_deviation = [table_lcss_all_deviation; table_lcss_deviation];
+        % Info und Deviation Tabellen der Gesamtauswertung anhängen - NUR bei aktivierten Methoden
+        if use_euclidean
+            table_euclidean_info = [table_euclidean_all_info; table_euclidean_info];
+            table_euclidean_deviation = [table_euclidean_all_deviation; table_euclidean_deviation];
+        end
+        if use_sidtw
+            table_sidtw_info = [table_sidtw_all_info; table_sidtw_info];
+            table_sidtw_deviation = [table_sidtw_all_deviation; table_sidtw_deviation];
+        end
+        if use_dtw
+            table_dtw_info = [table_dtw_all_info; table_dtw_info];
+            table_dtw_deviation = [table_dtw_all_deviation; table_dtw_deviation];
+        end
+        if use_dfd
+            table_dfd_info = [table_dfd_all_info; table_dfd_info];
+            table_dfd_deviation = [table_dfd_all_deviation; table_dfd_deviation];
+        end
+        if use_lcss
+            table_lcss_info = [table_lcss_all_info; table_lcss_info];
+            table_lcss_deviation = [table_lcss_all_deviation; table_lcss_deviation];
+        end
 
         % Bestimme den Evaluationstyp basierend auf den Funktionsparametern
         if evaluate_velocity == false && evaluate_orientation == false
@@ -241,24 +253,20 @@ function [table_euclidean_info, table_sidtw_info, table_dtw_info, table_dfd_info
             evaluation_type = 'speed';
         end
 
-        % Füge die evaluation-Spalte zu allen Info-Tabellen hinzu
-        if ~isempty(table_euclidean_info)
+        % Füge die evaluation-Spalte zu allen Info-Tabellen hinzu - NUR bei aktivierten Methoden
+        if use_euclidean && ~isempty(table_euclidean_info)
             table_euclidean_info = addvars(table_euclidean_info, repelem({evaluation_type}, height(table_euclidean_info), 1), 'NewVariableNames', 'evaluation');
         end
-        
-        if ~isempty(table_sidtw_info)
+        if use_sidtw && ~isempty(table_sidtw_info)
             table_sidtw_info = addvars(table_sidtw_info, repelem({evaluation_type}, height(table_sidtw_info), 1), 'NewVariableNames', 'evaluation');
         end
-        
-        if ~isempty(table_dtw_info)
+        if use_dtw && ~isempty(table_dtw_info)
             table_dtw_info = addvars(table_dtw_info, repelem({evaluation_type}, height(table_dtw_info), 1), 'NewVariableNames', 'evaluation');
         end
-        
-        if ~isempty(table_dfd_info)
+        if use_dfd && ~isempty(table_dfd_info)
             table_dfd_info = addvars(table_dfd_info, repelem({evaluation_type}, height(table_dfd_info), 1), 'NewVariableNames', 'evaluation');
         end
-        
-        if ~isempty(table_lcss_info)
+        if use_lcss && ~isempty(table_lcss_info)
             table_lcss_info = addvars(table_lcss_info, repelem({evaluation_type}, height(table_lcss_info), 1), 'NewVariableNames', 'evaluation');
         end
 

@@ -5,16 +5,23 @@ clear; tic
 mode = 'evaluation'; % Default Modus
 
 % Falls spezifische Bahn-ID ausgewertet werden soll (höchste Priorität)
-bahn_id = '1749134737';
+bahn_id = '';
 % Falls Daten aus einem bestimmten Zeitraum ausgewertet werden sollen
-record_date = '04.04.2025'; % Format: dd.mm.yyyy
+record_date = '04.09.2025'; % Format: dd.mm.yyyy
 
 % Falls mehrere Daten ausgewertet werden sollen
 loop_record_date = 1; % (Priorität vor loop_all)
 loop_all = 0;
 
 % Falls Daten gelöscht und überschrieben werden sollen (Auswertung wird neu berechnet)
-overwrite = 1;
+overwrite = 0;
+
+% === NEU: Methodenauswahl ===
+use_euclidean = 1;    % Euklidische Distanz
+use_sidtw = 1;        % Scale Invariant Dynamic Time Warping
+use_dtw = 0;          % Dynamic Time Warping
+use_dfd = 0;          % Discrete Fréchet Distance
+use_lcss = 0;         % Longest Common Subsequence
 
 % === Falls keine Eingabe erfolgt, wird die Position ausgewertet ===
 evaluate_velocity = 0;
@@ -371,26 +378,42 @@ elseif strcmpi(mode, 'evaluation')
             % Verarbeite den Batch (nur Berechnungen, kein Upload)
             [batch_processed_ids, batch_euclidean_info, batch_sidtw_info, batch_dtw_info, batch_dfd_info, batch_lcss_info, ...
              batch_euclidean_deviations, batch_sidtw_deviations, batch_dtw_deviations, batch_dfd_deviations, batch_lcss_deviations] = ...
-                processBatch(conn, current_batch_ids, evaluate_velocity, evaluate_orientation, plots);
+                processBatch(conn, current_batch_ids, evaluate_velocity, evaluate_orientation, plots, ...
+                 use_euclidean, use_sidtw, use_dtw, use_dfd, use_lcss);
             
             all_processed_ids = [all_processed_ids; batch_processed_ids];
             all_processed_ids_str = string(all_processed_ids);
     
-            % Strukts anlegen für Übersicht
-            batch_info = struct( ...
-                'sidtw', batch_sidtw_info, ...
-                'dtw', batch_dtw_info, ...
-                'dfd', batch_dfd_info, ...
-                'euclidean', batch_euclidean_info, ...
-                'lcss', batch_lcss_info);
-        
-            batch_deviations = struct( ...
-                'sidtw', batch_sidtw_deviations, ...
-                'dtw', batch_dtw_deviations, ...
-                'dfd', batch_dfd_deviations, ...
-                'euclidean', batch_euclidean_deviations, ...
-                'lcss', batch_lcss_deviations);
+            % Structs einzeln aufbauen
+            batch_info = struct();
+            batch_deviations = struct();
             
+            % Nur aktivierte Methoden hinzufügen
+            if use_sidtw
+                batch_info.sidtw = batch_sidtw_info;
+                batch_deviations.sidtw = batch_sidtw_deviations;
+            end
+            
+            if use_dtw
+                batch_info.dtw = batch_dtw_info;
+                batch_deviations.dtw = batch_dtw_deviations;
+            end
+            
+            if use_dfd
+                batch_info.dfd = batch_dfd_info;
+                batch_deviations.dfd = batch_dfd_deviations;
+            end
+            
+            if use_euclidean
+                batch_info.euclidean = batch_euclidean_info;
+                batch_deviations.euclidean = batch_euclidean_deviations;
+            end
+            
+            if use_lcss
+                batch_info.lcss = batch_lcss_info;
+                batch_deviations.lcss = batch_lcss_deviations;
+            end
+                        
             % Upload der aktuellen Batch-Daten
             if (upload_deviations || upload_info) && ~isempty(batch_processed_ids)
         
@@ -399,9 +422,10 @@ elseif strcmpi(mode, 'evaluation')
         
                 % Upload der Daten 
                 uploadBatchData(conn, batch_processed_ids, evaluation_type, ...
-                    evaluate_velocity, evaluate_orientation, ...
-                    upload_info, upload_deviations, ...
-                    batch_info, batch_deviations);
+                evaluate_velocity, evaluate_orientation, ...
+                upload_info, upload_deviations, ...
+                batch_info, batch_deviations, ...
+                use_euclidean, use_sidtw, use_dtw, use_dfd, use_lcss);
         
         
                 upload_end_time = datetime('now');

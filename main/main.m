@@ -1,13 +1,18 @@
 %% Manuelle Eingaben
 clear; tic
 
+addpath(genpath('lasertracker'))
+addpath(genpath('main'))
+addpath(genpath('methods'))
+
+
 % Mode selection: 'evaluation' oder 'transformation'
 mode = 'evaluation'; % Default Modus
 
 % Falls spezifische Bahn-ID ausgewertet werden soll (höchste Priorität)
 bahn_id = '';
 % Falls Daten aus einem bestimmten Zeitraum ausgewertet werden sollen
-record_date = '04.09.2025'; % Format: dd.mm.yyyy
+record_date = '22.10.2025'; % Format: dd.mm.yyyy
 
 % Falls mehrere Daten ausgewertet werden sollen
 loop_record_date = 1; % (Priorität vor loop_all)

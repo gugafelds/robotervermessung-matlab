@@ -75,7 +75,7 @@ for i = 1:1:num_segments
 
     % Anwendung der Methoden - NUR wenn aktiviert
     if use_sidtw
-        [sidtw_distances, ~, ~, ~, sidtw_soll, sidtw_ist, ~, ~, ~] = fkt_selintdtw3d(segment_soll,segment_trafo,false);
+        [sidtw_distances, ~, ~, ~, sidtw_soll, sidtw_ist, ~, ~, ~] = fkt_selintdtw3d_opt(segment_soll,segment_trafo,false);
     end
     
     if use_dtw

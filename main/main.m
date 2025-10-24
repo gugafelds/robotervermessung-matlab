@@ -6,8 +6,8 @@ addpath(genpath('main'))
 addpath(genpath('methods'))
 
 
-% Mode selection: 'evaluation' oder 'transformation'
-mode = 'evaluation'; % Default Modus
+% Mode selection: 'evaluation' oder 'transformation' oder 'auto-evaluation'
+mode = 'auto-evaluation'; % Default Modus
 
 % Falls spezifische Bahn-ID ausgewertet werden soll (höchste Priorität)
 bahn_id = '';
@@ -36,7 +36,7 @@ evaluate_orientation = 0;
 upload_info = 1;        % Info-Tabellen hochladen
 upload_deviations = 1;  % Abweichungs-Tabellen hochladen
 
-batch_size = 3;         % Stapelgröße für Upload
+batch_size = 10;         % Stapelgröße für Upload
 
 % Plotten -> Muss noch vernünftig eingebunden werden (erstmal keine Funktion)
 plots = 0; 
@@ -459,6 +459,131 @@ elseif strcmpi(mode, 'evaluation')
         warning("Es wurden keine Daten für die Auswertung ausgewählt !")
     end
     
+elseif strcmpi(mode, 'auto-evaluation')
+    disp('Ausführung im automatischen Auswertungsmodus (alle noch nicht ausgewerteten Bahnen)');
+
+    % === Hole alle Bahnen, die noch nicht ausgewertet wurden ===
+    query_missing = strjoin([
+        "SELECT bahn_id " ...
+        "FROM robotervermessung.bewegungsdaten.bahn_info " ...
+        "WHERE calibration_run = false " ...
+        "AND bahn_id NOT IN (" ...
+        "  SELECT DISTINCT bahn_id FROM robotervermessung.auswertung.info_sidtw" ...
+        ");"
+    ], " ");
+
+    bahn_ids_missing = fetch(conn, query_missing);
+    bahn_ids_missing = sort(double(bahn_ids_missing.bahn_id), 'ascend');
+    n_missing = numel(bahn_ids_missing);
+
+    fprintf('\nEs gibt %d Bahnen, die noch ausgewertet werden müssen.\n', n_missing);
+
+    if n_missing == 0
+        disp('Keine Bahnen mehr zum Auswerten ✅');
+        return;
+    end
+
+    % === Sicherheitsabfrage ===
+    user_confirm = input('Willst du wirklich mit der Auswertung fortfahren? (j/n): ', 's');
+    if ~strcmpi(user_confirm, 'j')
+        disp('Vorgang abgebrochen ❌');
+        return;
+    end
+
+    fprintf('\nStarte Auswertung von %d Bahnen ...\n', n_missing);
+    
+    all_processed_ids = [];
+    evaluation_type = 'position';
+
+    % === Batch-Verarbeitung wie im Evaluation-Modus ===
+    num_batches = ceil(length(bahn_ids_missing) / batch_size);
+    for batch_num = 1:num_batches
+
+        % Zeiterfassung
+        batch_start_time = datetime('now');
+        % Anfang und Ende des Stapels bestimmen
+        batch_start_idx = (batch_num-1) * batch_size + 1;
+        batch_end_idx = min(batch_num * batch_size, length(bahn_ids_missing));
+        
+        % Bahn-Ids im aktuellen Stapel
+        current_batch_ids = bahn_ids_missing(batch_start_idx:batch_end_idx);
+    
+        disp(['Verarbeite Batch ', num2str(batch_num), ' von ', num2str(num_batches), ...
+              ' (Bahnen ', num2str(batch_start_idx), '-', num2str(batch_end_idx), ' von ', ...
+              num2str(length(bahn_ids_missing)), ')']);
+        
+        % Verarbeite den Batch (nur Berechnungen, kein Upload)
+        [batch_processed_ids, batch_euclidean_info, batch_sidtw_info, batch_dtw_info, batch_dfd_info, batch_lcss_info, ...
+         batch_euclidean_deviations, batch_sidtw_deviations, batch_dtw_deviations, batch_dfd_deviations, batch_lcss_deviations] = ...
+            processBatch(conn, current_batch_ids, evaluate_velocity, evaluate_orientation, plots, ...
+             use_euclidean, use_sidtw, use_dtw, use_dfd, use_lcss);
+        
+        all_processed_ids = [all_processed_ids; batch_processed_ids];
+        all_processed_ids_str = string(all_processed_ids);
+
+        % Structs einzeln aufbauen
+        batch_info = struct();
+        batch_deviations = struct();
+        
+        % Nur aktivierte Methoden hinzufügen
+        if use_sidtw
+            batch_info.sidtw = batch_sidtw_info;
+            batch_deviations.sidtw = batch_sidtw_deviations;
+        end
+        
+        if use_dtw
+            batch_info.dtw = batch_dtw_info;
+            batch_deviations.dtw = batch_dtw_deviations;
+        end
+        
+        if use_dfd
+            batch_info.dfd = batch_dfd_info;
+            batch_deviations.dfd = batch_dfd_deviations;
+        end
+        
+        if use_euclidean
+            batch_info.euclidean = batch_euclidean_info;
+            batch_deviations.euclidean = batch_euclidean_deviations;
+        end
+        
+        if use_lcss
+            batch_info.lcss = batch_lcss_info;
+            batch_deviations.lcss = batch_lcss_deviations;
+        end
+                    
+        % Upload der aktuellen Batch-Daten
+        if (upload_deviations || upload_info) && ~isempty(batch_processed_ids)
+    
+            upload_start_time = datetime('now');
+            disp(['Starte Upload für Batch ', num2str(batch_num), ' mit ', num2str(length(batch_processed_ids)), ' Bahnen...']);
+    
+            % Upload der Daten 
+            uploadBatchData(conn, batch_processed_ids, evaluation_type, ...
+            evaluate_velocity, evaluate_orientation, ...
+            upload_info, upload_deviations, ...
+            batch_info, batch_deviations, ...
+            use_euclidean, use_sidtw, use_dtw, use_dfd, use_lcss);
+    
+            upload_end_time = datetime('now');
+            upload_duration = seconds(upload_end_time - upload_start_time);
+            disp(['Batch-Upload abgeschlossen in ', num2str(upload_duration), ' Sekunden!']);
+        end
+        
+        % Speicher freigeben
+        clear batch_euclidean_info batch_sidtw_info batch_dtw_info batch_dfd_info batch_lcss_info;
+        clear batch_euclidean_deviations batch_sidtw_deviations batch_dtw_deviations batch_dfd_deviations batch_lcss_deviations;
+        
+        batch_end_time = datetime('now');
+        batch_duration = seconds(batch_end_time - batch_start_time);
+        disp(['Batch ', num2str(batch_num), ' abgeschlossen in ', num2str(batch_duration), ' Sekunden']);
+    end
+    
+    total_duration = toc;
+    disp(['Gesamte Verarbeitung abgeschlossen in ', num2str(total_duration), ' Sekunden']);
+    disp(['Durchschnittliche Zeit pro Bahn: ', num2str(total_duration/length(all_processed_ids)), ' Sekunden']);
+
+    clear batch_end_time batch_end_idx batch_duration batch_start_idx batch_start_time batch_num batch_processed_ids ...
+        num_batches query current_batch_ids 
 else
     error(['Ungültiger Modus: ' mode '. Wählen Sie entweder ''evaluation'' oder ''transformation''.']);
 end

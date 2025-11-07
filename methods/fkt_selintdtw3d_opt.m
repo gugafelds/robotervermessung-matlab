@@ -1,25 +1,24 @@
-function [distances, maxDistance, averageDistance, AccumulatedDistance, dtw_X, dtw_Y, MappingIndexes, ix, iy] = fkt_selintdtw3d_opt(X,Y,pflag)
-%FKT_SELINTDTW3D_OPT Optimierte Version mit Vectorisierung
-%   Selective Interpolation DTW für 3D Bahnen mit Performance-Optimierungen
-%   - Vectorisierte Distanzberechnung
-%   - Reduzierte Schleifeniterationen
-%   - Effizientere Matrix-Operationen
+function [distances, maxDistance, averageDistance, AccumulatedDistance, dtw_X, dtw_Y, MappingIndexes, ix, iy, segment_ids_out] = fkt_selintdtw3d_opt(X, Y, segment_ids_X, segment_ids_Y, pflag)
+%FKT_SELINTDTW3D_OPT Optimierte Version mit segment_id Support
 %
-%   OPTIMIERUNGEN:
-%   1. Vectorisierte Berechnung aller X-Kanten Distanzen auf einmal
-%   2. Vectorisierte Berechnung aller Y-Kanten Distanzen auf einmal
-%   3. Vorberechnung statt wiederholte Berechnungen in Schleifen
-%   4. Effizientere Speicherverwaltung
+%   INPUT:
+%   X, Y: [N x 3] Arrays mit [x, y, z] Koordinaten (double)
+%   segment_ids_X, segment_ids_Y: [N x 1] cell arrays mit segment_id strings
+%   pflag: Visualisierung (optional)
 %
-%   Erwarteter Speedup: 5-10x gegenüber Original
+%   OUTPUT:
+%   segment_ids_out: segment_id für jeden interpolierten Punkt
 
-if nargin < 3 
-    pflag = false; 
+if nargin < 5
+    pflag = false;
 end
 
-% Initialisierung der Variablen
-M = length(X);
-N = length(Y);
+% Check ob segment_ids vorhanden
+has_segment_id = nargin >= 4 && ~isempty(segment_ids_X) && ~isempty(segment_ids_Y);
+
+% Initialisierung
+M = size(X, 1);
+N = size(Y, 1);
 AccumulatedDistance = zeros(M,N);
 AccumulatedDistanceX = zeros(M,N);
 AccumulatedDistanceY = zeros(M,N);
@@ -29,9 +28,12 @@ minParams = cell(M,N);
 minParamsX = cell(M,N);
 minParamsY = cell(M,N);
 
+if has_segment_id
+    fprintf('segment_id wird durch DTW propagiert\n');
+end
 fprintf('Initialisiere Matrizen: %d x %d\n', M, N);
 
-% Initialisierung der Anfangsbedingungen
+% Anfangsbedingungen
 AccumulatedDistance(1,1) = fkt_euclDist(1,1,X,Y);
 AccumulatedDistanceX(1,1) = Inf;
 AccumulatedDistanceY(1,1) = Inf;
@@ -41,10 +43,9 @@ minParams{1,1} = [NaN, NaN];
 minParamsX{1,1} = [NaN, NaN];
 minParamsY{1,1} = [NaN, NaN];
 
-%% OPTIMIERUNG 1: Vectorisierte Startwerte X
+%% Vectorisierte Startwerte X
 fprintf('Berechne Startwerte X (vectorisiert)...\n');
 if M > 1
-    % Vectorisierte Berechnung für alle X-Startwerte auf einmal
     [mindists_X, params_X] = fkt_minDistParam_vectorized_edge(X(1:M-1,:), X(2:M,:), repmat(Y(1,:), M-1, 1));
     
     for i = 2:M
@@ -63,10 +64,9 @@ if M > 1
     end
 end
 
-%% OPTIMIERUNG 2: Vectorisierte Startwerte Y
+%% Vectorisierte Startwerte Y
 fprintf('Berechne Startwerte Y (vectorisiert)...\n');
 if N > 1
-    % Vectorisierte Berechnung für alle Y-Startwerte auf einmal
     [mindists_Y, params_Y] = fkt_minDistParam_vectorized_edge(Y(1:N-1,:), Y(2:N,:), repmat(X(1,:), N-1, 1));
     
     for j = 2:N
@@ -85,15 +85,13 @@ if N > 1
     end
 end
 
-%% OPTIMIERUNG 3: Vectorisierte Hauptberechnung
-% Vorberechnung aller X-Kanten Distanzen und Parameter
+%% Vectorisierte Hauptberechnung
 fprintf('Berechne alle X-Kanten Distanzen (vectorisiert)...\n');
 [all_mindist_X, all_param_X] = compute_all_edge_distances(X, Y, 'X');
 
 fprintf('Berechne alle Y-Kanten Distanzen (vectorisiert)...\n');
 [all_mindist_Y, all_param_Y] = compute_all_edge_distances(Y, X, 'Y');
 
-% Hauptschleife - kann nicht vollständig vectorisiert werden wegen Abhängigkeiten
 fprintf('Erstellung der akkumulierten Kostenmatrix (%d x %d)...\n', M, N);
 tic;
 for i = 2:M
@@ -102,7 +100,6 @@ for i = 2:M
     end
     
     for j = 2:N
-        % Nutze vorberechnete Werte
         mindist_X = all_mindist_X(i-1, j);
         param_X = all_param_X(i-1, j);
         AccumulatedDistanceX(i,j) = mindist_X; 
@@ -188,43 +185,58 @@ end
 elapsed = toc;
 fprintf('Kostenmatrix erstellt in %.3f Sekunden\n', elapsed);
 
+%% Backtracking mit segment_id
 fprintf('Backtracking...\n');
-%% Backtracking/ dynamische Programmierung (unverändert)
 i = M;
 j = N;
 
-MappingIndexes = [i j];        
+MappingIndexes = [i j];
 result = [X(i,:) Y(j,:)];
+
+if has_segment_id
+    segment_ids_result = {segment_ids_X{i}};
+end
 
 lastParam = [0 0];
 
 while i > 1 || j > 1
-    % Eckpunkt
     if (lastParam(1) == 0 && lastParam(2) == 0) || (lastParam(1) == 0 && lastParam(2) == 1) || (lastParam(1) == 1 && lastParam(2) == 0)
         lastParam = minParams{i,j};
-    % Interpolationspunkt X-Kante
     elseif (lastParam(1) > 0 && lastParam(2) == 0) || (lastParam(1) > 0 && lastParam(2) == 1)
         lastParam = minParamsX{i,j};
-    % Interpolationspunkt Y-Kante
     elseif (lastParam(1) == 0 && lastParam(2) > 0) || (lastParam(1) == 1 && lastParam(2) > 0) 
         lastParam = minParamsY{i,j};
     else
         error('Ungültiger Zustand.');
     end
 
+    % Interpolation
     if i == 1
-        result = [X(1,:), fkt_interpolate(Y(j - 1,:), Y(j,:), lastParam(2)); result];
-
+        new_row = [X(1,:), fkt_interpolate(Y(j-1,:), Y(j,:), lastParam(2))];
+        if has_segment_id
+            current_seg_id = segment_ids_Y{j};
+        end
     elseif j == 1
-        result = [fkt_interpolate(X(i - 1,:), X(i,:), lastParam(1)), Y(1,:); result];
+        new_row = [fkt_interpolate(X(i-1,:), X(i,:), lastParam(1)), Y(1,:)];
+        if has_segment_id
+            current_seg_id = segment_ids_X{i};
+        end
     else
-        result = [fkt_interpolate(X(i - 1,:), X(i,:), lastParam(1)), fkt_interpolate(Y(j - 1,:), Y(j,:), lastParam(2)); result];
+        new_row = [fkt_interpolate(X(i-1,:), X(i,:), lastParam(1)), ...
+                   fkt_interpolate(Y(j-1,:), Y(j,:), lastParam(2))];
+        if has_segment_id
+            current_seg_id = segment_ids_X{i};
+        end
+    end
+    
+    result = [new_row; result];
+    
+    if has_segment_id
+        segment_ids_result = [current_seg_id; segment_ids_result];
     end
     
     MappingIndexes = [i - 1 + lastParam(1), j - 1 + lastParam(2); MappingIndexes];
-    assert(i - 1 + lastParam(1) >= 0);
-    assert(j - 1 + lastParam(2) >= 0);
-
+    
     if lastParam(1) == 0
         i = i - 1;
     end
@@ -233,153 +245,105 @@ while i > 1 || j > 1
     end
 end
 
-% Indizes der interpolierten Bahnpunkte
 ix = MappingIndexes(:,1);       
 iy = MappingIndexes(:,2);
 
-if size(result,2) == 6         % Orientierungen und Positionen 
-    dtw_X = result(:,[1 2 3]);
-    dtw_Y = result(:, [4 5 6]);
-elseif size(result,2) == 2     % Geschwindigkeiten 
-    dtw_X = result(:,1);
-    dtw_Y = result(:,2);
-elseif size(result,2) == 4     % Geschwindigkeiten mit Zeitstempel
-    dtw_X = result(:,[1 2]);
-    dtw_Y = result(:, [3 4]);
-elseif size(result,2) == 8     % Orientierungen und Positionen mit Zeitstempel
-    dtw_X = result(:,[1 2 3 4]);
-    dtw_Y = result(:, [5 6 7 8]);
+% Output
+dtw_X = result(:, 1:3);
+dtw_Y = result(:, 4:6);
+
+if has_segment_id
+    segment_ids_out = segment_ids_result;
+    fprintf('✅ segment_id propagiert für %d Punkte\n', length(segment_ids_out));
+else
+    segment_ids_out = {};
 end
 
-% Distanzen zwischen den interpolierten Bahnen
+% Distanzen
 distances = zeros(length(dtw_X),1);
 for i = 1:length(dtw_X)
-    dist = fkt_euclDist(i,i,dtw_X,dtw_Y);
-    distances(i,1) = dist;
+    distances(i) = fkt_euclDist(i,i,dtw_X,dtw_Y);
 end
 
-% maximale und mittlere Distanz 
 maxDistance = max(distances);
 averageDistance = mean(distances);
 minDistance = min(distances);
 
 fprintf('✅ Fertig! Max: %.3f mm, Avg: %.3f mm, Min: %.3f mm\n', maxDistance, averageDistance, minDistance);
 
-%% Visualisierung (unverändert)
+%% Visualisierung
 if pflag
     fprintf('Erstelle Visualisierungen...\n');
     
-    % Farben
     blau = [0 0.4470 0.7410];
     rot = [0.78 0 0];
-    c1 = [0 0.4470 0.7410];
 
-    % 2D Visualisierung der akkumulierten Kosten samt Mapping 
-    figure('Name','SelectiveInterpolationDTW OPT - Kostenkarte und optimaler Pfad','NumberTitle','off');
-    hold on
+    figure('Name','SIDTW - Kostenkarte','NumberTitle','off');
     imagesc(AccumulatedDistance)
     colormap("turbo");
-    colorb = colorbar;
-    colorb.Label.String = 'Akkumulierte Kosten';
-    plot(iy, ix,"-w","LineWidth",1)
-    xlabel('Pfad Y [Index]');
-    ylabel('Pfad X [Index]');
-    axis([min(iy) max(iy) 1 max(ix)]);
-    set(gca,'FontSize',10,'YDir', 'normal');
-
-    % Plot der beiden Bahnen und Zuordnung
-    figure('Color','white','Name','SelectiveInterpolationDTW OPT - Zuordnung der Bahnpunkte','NumberTitle','off')
+    colorbar;
     hold on;
-    grid on;
-    box on;
-    plot3(dtw_X(:,1),dtw_X(:,2),dtw_X(:,3),Color= rot,LineWidth=1.5,Marker = "square",MarkerFaceColor=rot,MarkerSize=4);
-    plot3(dtw_Y(:,1),dtw_Y(:,2),dtw_Y(:,3),Color= c1,LineWidth=1.5,Marker = "o",MarkerFaceColor= c1,MarkerSize=4);
+    plot(iy, ix,"-w","LineWidth",1)
+    xlabel('Y-Index');
+    ylabel('X-Index');
+    set(gca,'YDir', 'normal');
+
+    figure('Name','SIDTW - Zuordnung','NumberTitle','off')
+    plot3(dtw_X(:,1),dtw_X(:,2),dtw_X(:,3),'Color',rot,'LineWidth',1.5,'Marker',"square",'MarkerSize',4);
+    hold on;
+    plot3(dtw_Y(:,1),dtw_Y(:,2),dtw_Y(:,3),'Color',blau,'LineWidth',1.5,'Marker',"o",'MarkerSize',4);
     for i = 1:length(dtw_X)
         line([dtw_Y(i,1),dtw_X(i,1)],[dtw_Y(i,2),dtw_X(i,2)],[dtw_Y(i,3),dtw_X(i,3)],'Color','black')
     end
-    view(300, 40)
-    legend({'Sollbahn','Istbahn','Abweichung'},'Location','northeast',"FontWeight", "bold")
-    xlabel("x [mm]","FontWeight","bold")
-    ylabel("y [mm]","FontWeight","bold")
-    zlabel("z [mm]","FontWeight","bold")
-    hold off
-    axis padded
+    view(300, 40);
+    legend({'Soll','Ist','Abweichung'});
+    xlabel("x [mm]");
+    ylabel("y [mm]");
+    zlabel("z [mm]");
+    grid on;
 end
 
 end
 
-%% ============================================================================
-%% HILFSFUNKTIONEN - VECTORISIERT
-%% ============================================================================
-
-function [mindist_matrix, param_matrix] = compute_all_edge_distances(Path1, Path2, edge_type)
-    % Berechnet alle Kanten-zu-Punkt Distanzen auf einmal (vectorisiert)
-    % Path1: Pfad dessen Kanten betrachtet werden [M x 3]
-    % Path2: Pfad dessen Punkte gegen Kanten geprüft werden [N x 3]
-    % edge_type: 'X' oder 'Y' (für Debugging)
-    
+%% Hilfsfunktionen
+function [mindist_matrix, param_matrix] = compute_all_edge_distances(Path1, Path2, ~)
     M = size(Path1, 1);
     N = size(Path2, 1);
     
     mindist_matrix = zeros(M-1, N);
     param_matrix = zeros(M-1, N);
     
-    % Für jede Kante in Path1
     for i = 1:(M-1)
-        seg_start = Path1(i, :);      % [1 x 3]
-        seg_end = Path1(i+1, :);      % [1 x 3]
+        seg_start_rep = repmat(Path1(i,:), N, 1);
+        seg_end_rep = repmat(Path1(i+1,:), N, 1);
         
-        % Vectorisiert über alle Punkte in Path2
-        % Repliziere seg_start und seg_end für alle Path2-Punkte
-        seg_start_rep = repmat(seg_start, N, 1);  % [N x 3]
-        seg_end_rep = repmat(seg_end, N, 1);      % [N x 3]
+        v = seg_end_rep - seg_start_rep;
+        w = Path2 - seg_start_rep;
         
-        % Richtungsvektor der Kante
-        v = seg_end_rep - seg_start_rep;          % [N x 3]
-        
-        % Vektoren von Kantenstart zu allen Path2-Punkten
-        w = Path2 - seg_start_rep;                % [N x 3]
-        
-        % Projektionsparameter t (vectorisiert)
-        c1 = sum(w .* v, 2);                      % [N x 1]
-        c2 = sum(v .* v, 2);                      % [N x 1]
-        
-        % Verhindere Division durch 0
+        c1 = sum(w .* v, 2);
+        c2 = sum(v .* v, 2);
         c2(c2 < eps) = eps;
         
-        % Parameter zwischen 0 und 1 clippen
-        t = max(0, min(1, c1 ./ c2));             % [N x 1]
+        t = max(0, min(1, c1 ./ c2));
         
-        % Projizierte Punkte auf Kante
-        proj_points = seg_start_rep + t .* v;     % [N x 3]
+        proj_points = seg_start_rep + t .* v;
+        dists = vecnorm(Path2 - proj_points, 2, 2);
         
-        % Distanzen von Path2-Punkten zu projizierten Punkten
-        dists = vecnorm(Path2 - proj_points, 2, 2);  % [N x 1]
-        
-        % Speichere Ergebnisse
         mindist_matrix(i, :) = dists';
         param_matrix(i, :) = t';
     end
 end
 
 function [mindists, params] = fkt_minDistParam_vectorized_edge(seg_starts, seg_ends, points)
-    % Vectorisierte Version für mehrere Kanten zu einem Punkt
-    % seg_starts: [K x 3] Startpunkte der Kanten
-    % seg_ends: [K x 3] Endpunkte der Kanten  
-    % points: [K x 3] Testpunkte (einer pro Kante)
+    v = seg_ends - seg_starts;
+    w = points - seg_starts;
     
-    K = size(seg_starts, 1);
-    
-    v = seg_ends - seg_starts;                % [K x 3]
-    w = points - seg_starts;                  % [K x 3]
-    
-    c1 = sum(w .* v, 2);                      % [K x 1]
-    c2 = sum(v .* v, 2);                      % [K x 1]
-    
+    c1 = sum(w .* v, 2);
+    c2 = sum(v .* v, 2);
     c2(c2 < eps) = eps;
     
-    params = max(0, min(1, c1 ./ c2));       % [K x 1]
+    params = max(0, min(1, c1 ./ c2));
     
-    proj_points = seg_starts + params .* v;   % [K x 3]
-    mindists = vecnorm(points - proj_points, 2, 2);  % [K x 1]
+    proj_points = seg_starts + params .* v;
+    mindists = vecnorm(points - proj_points, 2, 2);
 end

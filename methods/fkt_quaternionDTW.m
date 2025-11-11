@@ -1,6 +1,8 @@
 function [distances, segment_ids_out, qdtw_soll, qdtw_ist] = fkt_quaternionDTW(q_soll, q_ist, segment_ids_X, pflag)
     % QDTW mit geodätischer Distanz
     if nargin < 3, pflag = false; end
+
+    q_soll = removeGimbalLockArtifacts(q_soll);
     
     M = size(q_soll, 1);
     N = size(q_ist, 1);
@@ -47,7 +49,7 @@ function [distances, segment_ids_out, qdtw_soll, qdtw_ist] = fkt_quaternionDTW(q
 
     qdtw_soll = q_soll(ix,:);
     qdtw_ist = q_ist(iy,:);
-    segment_ids_out = segment_ids_X(ix);
+    segment_ids_out = segment_ids_X(iy);
 end
 
 function [ix, iy] = backtrack(AccDist)

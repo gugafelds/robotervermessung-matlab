@@ -1,5 +1,7 @@
 function [qad_soll, qad_distances] = fkt_quaternionAD(q_soll, q_ist)
     % Normalisierung
+    q_soll = removeGimbalLockArtifacts(q_soll);
+
     q_soll = q_soll ./ sqrt(sum(q_soll.^2, 2));
     q_ist = q_ist ./ sqrt(sum(q_ist.^2, 2));
     

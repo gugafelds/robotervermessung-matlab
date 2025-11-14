@@ -13,18 +13,18 @@ bahn_id = '';
 record_date = '31.10.2025'; % Format: dd.mm.yyyy
 loop_record_date = 1;
 loop_all = 0;
-overwrite = 1;
+overwrite = 0;
 
 % Methodenauswahl
-use_euclidean = 0;
-use_sidtw = 0;
+use_euclidean = 1;
+use_sidtw = 1;
 use_dtw = 0;
 use_dfd = 0;
 use_lcss = 0;
-use_qad = 1;
-use_qdtw = 1;
+use_qad = 0;
+use_qdtw = 0;
 
-evaluate_orientation = 1;
+evaluate_orientation = 0;
 
 % Upload-Einstellungen
 upload_info = 1;
@@ -101,7 +101,7 @@ elseif strcmpi(mode, 'automatic')
     query_missing = sprintf(strjoin([
         "SELECT bahn_id"
         "FROM robotervermessung.bewegungsdaten.bahn_info"
-        "WHERE calibration_run = false AND source_data_ist = 'leica_at960'"
+        "WHERE source_data_ist = 'leica_at960'"
         "AND bahn_id NOT IN ("
         "  SELECT DISTINCT bahn_id FROM robotervermessung.auswertung.%s"
         ");"

@@ -18,6 +18,16 @@
 
 clear; clc;
 
+% Add current directory and subdirectories
+addpath(genpath(pwd));
+
+% Or add specific folders:
+addpath(genpath('../main'));
+addpath(genpath('../lasertracker'));
+addpath(genpath('../methods'));
+
+fprintf('✓ Paths added successfully\n\n');
+
 fprintf('========================================\n');
 fprintf('EXPERIMENT: EMBEDDING ARCHITECTURE VALIDATION\n');
 fprintf('========================================\n');

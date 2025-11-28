@@ -2,7 +2,7 @@ function plotIncrementalContribution(csv_file)
     % PLOTINCREMENTALCONTRIBUTION - Plot incremental modality benefits from CSV
     %
     % Usage:
-    %   plotIncrementalContribution('similarity/results/multimodality_ablation_2024-11-27T153045.csv')
+    %   plotIncrementalContribution('similarity/results/embedding_validation_2025-11-28.csv')
     %
     % Input:
     %   csv_file - Path to CSV file with experiment results
@@ -13,14 +13,11 @@ function plotIncrementalContribution(csv_file)
     fprintf('=== Creating Incremental Contribution Plot ===\n');
     fprintf('Reading: %s\n', csv_file);
     
-    % Read CSV
-    results_table = readtable(csv_file, 'ReadRowNames', true);
+    % Read CSV (NEW: no row names)
+    results_table = readtable(csv_file);
     
     % Extract output directory
     [output_dir, ~, ~] = fileparts(csv_file);
-    
-    % Get all row names
-    all_names = results_table.Properties.RowNames;
     
     % === Define Color Scheme ===
     % Joint = Blue shades, Position = Orange shades
@@ -36,12 +33,12 @@ function plotIncrementalContribution(csv_file)
     
     % === SUBPLOT 1: Joint-based (both levels) ===
     subplot(1, 2, 1);
-    plotIncrementalSubplot(results_table, all_names, 'joint_states', colors, ...
+    plotIncrementalSubplot(results_table, 'joint_states', colors, ...
         'Joint-Space: Incremental Modality Addition');
     
     % === SUBPLOT 2: Position-based (both levels) ===
     subplot(1, 2, 2);
-    plotIncrementalSubplot(results_table, all_names, 'position', colors, ...
+    plotIncrementalSubplot(results_table, 'position', colors, ...
         'Cartesian-Space: Incremental Modality Addition');
     
     sgtitle('Incremental Benefit of Additional Modalities', ...
@@ -58,13 +55,12 @@ function plotIncrementalContribution(csv_file)
     fprintf('✓ Saved: %s\n', output_file_pdf);
 end
 
-function plotIncrementalSubplot(results_table, all_names, dtw_mode, colors, title_str)
+function plotIncrementalSubplot(results_table, dtw_mode, colors, title_str)
     % Helper function to create one incremental subplot with both levels
     
     % Filter by DTW mode
     is_mode = strcmp(results_table.DTW_Mode, dtw_mode);
     mode_table = results_table(is_mode, :);
-    mode_names = all_names(is_mode);
     
     if height(mode_table) == 0
         text(0.5, 0.5, 'No data', 'HorizontalAlignment', 'center');
@@ -72,16 +68,15 @@ function plotIncrementalSubplot(results_table, all_names, dtw_mode, colors, titl
         return;
     end
     
-    % Define expected order based on DTW mode
+    % Define expected weight configurations based on DTW mode
+    % NEW: Using Weight_Mode column instead of row names
     if strcmp(dtw_mode, 'joint_states')
         % Joint + Orient/Meta combinations
-        base_names = {'Joint only', 'Joint + Metadata', ...
-                      'Joint + Orientation', 'Joint + Orient + Meta'};
+        weight_modes = {'Joint only', 'Joint + Metadata', 'Joint + Orientation', 'Joint + Orient + Meta'};
         x_labels = {'Joint', '+Meta', '+Orient', '+Both'};
     else  % position
         % Position + Velocity/Meta combinations
-        base_names = {'Position only', 'Pos + Metadata', ...
-                      'Pos + Velocity', 'Pos + Vel + Meta'};
+        weight_modes = {'Position only', 'Pos + Metadata', 'Pos + Velocity', 'Pos + Vel + Meta'};
         x_labels = {'Position', '+Meta', '+Velocity', '+Both'};
     end
     
@@ -90,27 +85,27 @@ function plotIncrementalSubplot(results_table, all_names, dtw_mode, colors, titl
     is_seg = strcmp(mode_table.Level, 'Segment');
     
     traj_table = mode_table(is_traj, :);
-    traj_names = mode_names(is_traj);
-    
     seg_table = mode_table(is_seg, :);
-    seg_names = mode_names(is_seg);
     
-    % === Extract Trajectory values ===
+    % === Extract Trajectory values (average over all queries & embeddings) ===
     traj_values = nan(1, 4);
-    for i = 1:length(base_names)
-        match_idx = find(contains(traj_names, base_names{i}), 1);
-        if ~isempty(match_idx)
-            traj_values(i) = traj_table.Spearman(match_idx);
+    for i = 1:length(weight_modes)
+        wm = weight_modes{i};
+        match_idx = strcmp(traj_table.Weight_Mode, wm);
+        if any(match_idx)
+            % Average over all queries and embeddings with this weight mode
+            traj_values(i) = mean(traj_table.Spearman(match_idx), 'omitnan');
         end
     end
     
-    % === Extract Segment values ===
+    % === Extract Segment values (average over all queries & embeddings) ===
     seg_values = nan(1, 4);
-    for i = 1:length(base_names)
-        % Handle _seg suffix
-        match_idx = find(contains(seg_names, base_names{i}), 1);
-        if ~isempty(match_idx)
-            seg_values(i) = seg_table.Spearman(match_idx);
+    for i = 1:length(weight_modes)
+        wm = weight_modes{i};
+        match_idx = strcmp(seg_table.Weight_Mode, wm);
+        if any(match_idx)
+            % Average over all queries and embeddings with this weight mode
+            seg_values(i) = mean(seg_table.Spearman(match_idx), 'omitnan');
         end
     end
     

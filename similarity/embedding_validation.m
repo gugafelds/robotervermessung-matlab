@@ -34,25 +34,25 @@ fprintf('========================================\n');
 
 % === Base Configuration ===
 base_config = struct();
-base_config.database_sample_size = 2500;  % Fixed for fair comparison
+base_config.database_sample_size = 1500;  % Fixed for fair comparison
 base_config.random_seed = 42;
-base_config.top_k_trajectories = 250;     % Fixed
+base_config.top_k_trajectories = 500;     % Fixed
 
 % === DIMENSION 1: Embedding Architectures ===
 embedding_configs = {
     % Name,                  n_coarse, n_fine, use_multi_scale
-    'Single-Fine-75',        0,        75,     false;
-    'Multi-Balanced-100',    25,       75,     true;
-    'Single-Fine-150',       0,        150,    false;
-    'Multi-Dense-200',       50,       150,    true;
+    'Single-Fine-100',        0,        100,     false;
+    'Multi-Balanced-150',    50,       100,     true;
+    'Single-Fine-300',       0,        300,    false;
+    'Multi-Dense-350',       50,       300,    true;
 };
 
 % === DIMENSION 2: Query Trajectories ===
 query_ids = {
-    '1763740056';   % Baseline (currently used in other experiments)
-    '1764170981';   % First in original list
-    '1764169991';   % Middle of list
-    '1763734919';   % Last in original list
+    '1764336135';   % Baseline (currently used in other experiments)
+    %'1764336030';   % First in original list
+    %'1764169991';   % Middle of list
+    %'1764334766';   % Last in original list
 };
 
 % === DIMENSION 3: DTW Mode + Weight Combinations ===
@@ -141,7 +141,7 @@ fprintf('╚══════════════════════�
 
 preload_tic = tic;
 
-chunk_size = 100;  % For batch loading
+chunk_size = 50;  % For batch loading
 
 data_cache = loadDataExperiment(conn, schema, candidate_ids, query_ids, chunk_size);
 
@@ -169,10 +169,10 @@ dtw_tic = tic;
 % Prepare config for DTW pre-computation
 dtw_config = struct();
 dtw_config.top_k_trajectories = base_config.top_k_trajectories;
-dtw_config.lb_kim_keep_ratio = 0.40;
-dtw_config.lb_keogh_candidates = 100;
-dtw_config.cdtw_window = 0.10;
-dtw_config.normalize_dtw = false;
+dtw_config.lb_kim_keep_ratio = 0.8;
+dtw_config.lb_keogh_candidates = 500;
+dtw_config.cdtw_window = 0.15;
+dtw_config.normalize_dtw = true;
 dtw_config.use_rotation_alignment = false;
 
 dtw_cache = precomputeDTW(data_cache, query_ids, dtw_config);
@@ -473,174 +473,3 @@ fprintf('Total Experiments: %d\n', total_experiments);
 fprintf('Average time per experiment: %.2f minutes (embeddings only!)\n', total_time/60/total_experiments);
 fprintf('Results file: %s\n\n', output_file);
 
-fprintf('========================================\n');
-fprintf('PERFORMANCE ANALYSIS\n');
-fprintf('========================================\n\n');
-
-%% --- ANALYSIS 1: Best per Embedding Config (averaged over all queries & weight-modes) ---
-fprintf('--- ANALYSIS 1: Performance by Embedding Architecture ---\n\n');
-
-unique_embeddings = unique(embedding_names);
-for e = 1:length(unique_embeddings)
-    emb_name = unique_embeddings{e};
-    emb_idx = strcmp(embedding_names, emb_name);
-    
-    % Trajectory level
-    avg_spearman_traj = mean(traj_results_matrix(emb_idx, 1));
-    avg_p10_traj = mean(traj_results_matrix(emb_idx, 3));
-    avg_p1_traj = mean(traj_results_matrix(emb_idx, 6));
-    
-    % Segment level
-    avg_spearman_seg = mean(seg_results_matrix(emb_idx, 1), 'omitnan');
-    avg_p10_seg = mean(seg_results_matrix(emb_idx, 3), 'omitnan');
-    avg_p1_seg = mean(seg_results_matrix(emb_idx, 6), 'omitnan');
-    
-    % Get dims
-    dims = unique(total_dims_arr(emb_idx));
-    
-    fprintf('%s (Total Dims: %d):\n', emb_name, dims);
-    fprintf('  Trajectory: ρ=%.4f, P@10=%.3f, P@1=%.3f\n', ...
-        avg_spearman_traj, avg_p10_traj, avg_p1_traj);
-    fprintf('  Segment:    ρ=%.4f, P@10=%.3f, P@1=%.3f\n\n', ...
-        avg_spearman_seg, avg_p10_seg, avg_p1_seg);
-end
-
-%% --- ANALYSIS 2: Best per Query (averaged over all embeddings & weight-modes) ---
-fprintf('--- ANALYSIS 2: Performance by Query Trajectory ---\n\n');
-
-unique_queries = unique(query_bahn_ids);
-for q = 1:length(unique_queries)
-    query_id = unique_queries{q};
-    query_idx = strcmp(query_bahn_ids, query_id);
-    
-    % Trajectory level
-    avg_spearman_traj = mean(traj_results_matrix(query_idx, 1));
-    avg_p10_traj = mean(traj_results_matrix(query_idx, 3));
-    avg_p1_traj = mean(traj_results_matrix(query_idx, 6));
-    
-    % Segment level
-    avg_spearman_seg = mean(seg_results_matrix(query_idx, 1), 'omitnan');
-    avg_p10_seg = mean(seg_results_matrix(query_idx, 3), 'omitnan');
-    avg_p1_seg = mean(seg_results_matrix(query_idx, 6), 'omitnan');
-    
-    fprintf('Query %s:\n', query_id);
-    fprintf('  Trajectory: ρ=%.4f, P@10=%.3f, P@1=%.3f\n', ...
-        avg_spearman_traj, avg_p10_traj, avg_p1_traj);
-    fprintf('  Segment:    ρ=%.4f, P@10=%.3f, P@1=%.3f\n\n', ...
-        avg_spearman_seg, avg_p10_seg, avg_p1_seg);
-end
-
-%% --- ANALYSIS 3: Best per Weight-Mode (averaged over all embeddings & queries) ---
-fprintf('--- ANALYSIS 3: Performance by Weight-Mode Configuration ---\n\n');
-
-unique_weight_modes = unique(weight_modes);
-
-% Separate into Joint-based and Position-based
-joint_modes = unique_weight_modes(contains(unique_weight_modes, 'Joint'));
-pos_modes = unique_weight_modes(contains(unique_weight_modes, {'Position', 'Pos'}));
-
-fprintf('JOINT-BASED CONFIGURATIONS:\n');
-for w = 1:length(joint_modes)
-    wm_name = joint_modes{w};
-    wm_idx = strcmp(weight_modes, wm_name);
-    
-    avg_spearman_traj = mean(traj_results_matrix(wm_idx, 1));
-    avg_p10_traj = mean(traj_results_matrix(wm_idx, 3));
-    
-    fprintf('  %s: ρ=%.4f, P@10=%.3f\n', wm_name, avg_spearman_traj, avg_p10_traj);
-end
-
-fprintf('\nPOSITION-BASED CONFIGURATIONS:\n');
-for w = 1:length(pos_modes)
-    wm_name = pos_modes{w};
-    wm_idx = strcmp(weight_modes, wm_name);
-    
-    avg_spearman_traj = mean(traj_results_matrix(wm_idx, 1));
-    avg_p10_traj = mean(traj_results_matrix(wm_idx, 3));
-    
-    fprintf('  %s: ρ=%.4f, P@10=%.3f\n', wm_name, avg_spearman_traj, avg_p10_traj);
-end
-
-%% --- ANALYSIS 4: Overall Best Configuration ---
-fprintf('\n--- ANALYSIS 4: Top 5 Overall Configurations ---\n\n');
-
-% Trajectory level
-[sorted_spearman_traj, sort_idx_traj] = sort(traj_results_matrix(:, 1), 'descend');
-
-fprintf('TRAJECTORY LEVEL (by Spearman ρ):\n');
-for i = 1:min(5, total_experiments)
-    idx = sort_idx_traj(i);
-    fprintf('%d. ρ=%.4f | %s | Query_%s | %s\n', ...
-        i, sorted_spearman_traj(i), ...
-        embedding_names{idx}, query_bahn_ids{idx}, weight_modes{idx});
-end
-
-% Segment level
-valid_seg_idx = ~isnan(seg_results_matrix(:, 1));
-valid_seg_spearman = seg_results_matrix(valid_seg_idx, 1);
-valid_seg_indices = find(valid_seg_idx);
-[sorted_spearman_seg, sort_idx_seg_rel] = sort(valid_seg_spearman, 'descend');
-sort_idx_seg = valid_seg_indices(sort_idx_seg_rel);
-
-fprintf('\nSEGMENT LEVEL (by Spearman ρ):\n');
-for i = 1:min(5, length(sort_idx_seg))
-    idx = sort_idx_seg(i);
-    fprintf('%d. ρ=%.4f | %s | Query_%s | %s\n', ...
-        i, sorted_spearman_seg(i), ...
-        embedding_names{idx}, query_bahn_ids{idx}, weight_modes{idx});
-end
-
-%% --- ANALYSIS 5: Performance vs Dimensionality Trade-off ---
-fprintf('\n--- ANALYSIS 5: Performance vs. Dimensionality Trade-off ---\n\n');
-
-unique_dims = unique(total_dims_arr);
-unique_dims = sort(unique_dims);
-
-fprintf('Average Performance by Total Dimensions (Trajectory Level):\n');
-for d = 1:length(unique_dims)
-    dims = unique_dims(d);
-    dims_idx = (total_dims_arr == dims);
-    
-    avg_spearman = mean(traj_results_matrix(dims_idx, 1));
-    avg_p10 = mean(traj_results_matrix(dims_idx, 3));
-    
-    % Find embedding config with these dims
-    emb_config = unique(embedding_names(dims_idx));
-    
-    fprintf('  %d dims (%s): ρ=%.4f, P@10=%.3f\n', ...
-        dims, emb_config{1}, avg_spearman, avg_p10);
-end
-
-%% --- FINAL RECOMMENDATIONS ---
-fprintf('\n========================================\n');
-fprintf('KEY RECOMMENDATIONS\n');
-fprintf('========================================\n\n');
-
-% Best embedding overall
-emb_avg_spearman = zeros(length(unique_embeddings), 1);
-for e = 1:length(unique_embeddings)
-    emb_idx = strcmp(embedding_names, unique_embeddings{e});
-    emb_avg_spearman(e) = mean(traj_results_matrix(emb_idx, 1));
-end
-[best_emb_spearman, best_emb_idx] = max(emb_avg_spearman);
-best_embedding = unique_embeddings{best_emb_idx};
-
-fprintf('1. BEST EMBEDDING ARCHITECTURE (averaged across all scenarios):\n');
-fprintf('   %s - Average ρ=%.4f\n\n', best_embedding, best_emb_spearman);
-
-% Best single configuration
-[best_single_spearman, best_single_idx] = max(traj_results_matrix(:, 1));
-fprintf('2. BEST SINGLE CONFIGURATION:\n');
-fprintf('   %s | Query_%s | %s\n', ...
-    embedding_names{best_single_idx}, query_bahn_ids{best_single_idx}, ...
-    weight_modes{best_single_idx});
-fprintf('   Trajectory: ρ=%.4f, P@10=%.3f, P@1=%.3f\n\n', ...
-    best_single_spearman, traj_results_matrix(best_single_idx, 3), ...
-    traj_results_matrix(best_single_idx, 6));
-
-% Performance-efficiency trade-off
-fprintf('3. PERFORMANCE-EFFICIENCY RECOMMENDATION:\n');
-fprintf('   For best performance: Use highest dimensionality (%d dims)\n', max(unique_dims));
-fprintf('   For efficiency: Check if lower dims achieve similar performance\n\n');
-
-fprintf('========================================\n\n');

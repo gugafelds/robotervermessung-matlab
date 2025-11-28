@@ -1,5 +1,9 @@
 function results = runExperiment(config)
     % RUNEXPERIMENT - Universal wrapper for dtw_baseline.m
+    % 
+    % Now supports pre-loaded data cache for massive performance improvement!
+    % If config.data_cache is provided, no database queries will be made.
+    
     fprintf('\n>>> Running Experiment: %s <<<\n', config.exp_name);
 
     % ====================================================================
@@ -54,6 +58,24 @@ function results = runExperiment(config)
     schema = 'bewegungsdaten';
     db_name = 'robotervermessung';
     
+    % ⭐ Data Cache (if provided - for pre-loaded experiments)
+    if isfield(config, 'data_cache')
+        data_cache = config.data_cache;
+        use_data_cache = true;
+        fprintf('  Using pre-loaded data cache: YES\n');
+    else
+        use_data_cache = false;
+        fprintf('  Using pre-loaded data cache: NO (will load from database)\n');
+    end
+    
+    % ⭐ DTW Cache (if provided - for pre-computed DTW)
+    if isfield(config, 'dtw_cache')
+        dtw_cache = config.dtw_cache;
+        fprintf('  Using pre-computed DTW cache: YES\n');
+    else
+        fprintf('  Using pre-computed DTW cache: NO (will compute DTW)\n');
+    end
+    
     % ====================================================================
     % STEP 2: Run main pipeline
     % ====================================================================
@@ -63,7 +85,7 @@ function results = runExperiment(config)
         weights(1), weights(2), weights(3), weights(4), weights(5), ...
         n_coarse, n_fine);
     
-    % Run dtw_baseline.m
+    % Run dtw_baseline.m (which will check for data_cache in workspace)
     run('dtw_baseline.m');
     
     % ====================================================================

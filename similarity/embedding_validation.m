@@ -12,7 +12,7 @@
 %  - 8 Weight-Mode Combinations (4 joint-based + 4 position-based)
 %  = 128 Total Experiments
 %
-%  Runtime: ~8.5 hours (128 experiments × 4 min)
+%  Runtime: ~4-5 hours (15-20 min preload + 128 experiments × 2 min)
 %  Output: results/embedding_validation_YYYY-MM-DD.csv
 %  ========================================================================
 
@@ -34,9 +34,9 @@ fprintf('========================================\n');
 
 % === Base Configuration ===
 base_config = struct();
-base_config.database_sample_size = 500;  % Fixed for fair comparison
+base_config.database_sample_size = 2500;  % Fixed for fair comparison
 base_config.random_seed = 42;
-base_config.top_k_trajectories = 100;     % Fixed
+base_config.top_k_trajectories = 250;     % Fixed
 
 % === DIMENSION 1: Embedding Architectures ===
 embedding_configs = {
@@ -83,7 +83,121 @@ fprintf('Total experiments: %d\n', total_experiments);
 fprintf('  - Embedding configs: %d\n', num_embeddings);
 fprintf('  - Query trajectories: %d\n', num_queries);
 fprintf('  - Weight-mode combinations: %d\n', num_weight_modes);
-fprintf('Estimated runtime: %.1f hours\n\n', total_experiments * 4 / 60);
+fprintf('Estimated runtime WITH pre-loading: %.1f hours\n', (20/60) + (total_experiments * 2 / 60));
+fprintf('  (15-20 min preload + 128 × ~2 min compute)\n\n');
+
+%% ========================================================================
+%  DATABASE CONNECTION & SAMPLING
+%  ========================================================================
+
+fprintf('=== Connecting to Database ===\n');
+
+conn = connectingToPostgres;
+
+if isopen(conn)
+    fprintf('✓ Database connection successful\n\n');
+else
+    error('✗ Database connection failed');
+end
+
+% === Database Sampling ===
+fprintf('=== Database Sampling ===\n');
+
+schema = 'bewegungsdaten';
+
+% Load full database metadata
+full_db_query = sprintf(...
+    ['SELECT bahn_id FROM robotervermessung.%s.bahn_metadata ' ...
+     'WHERE bahn_id = segment_id'], schema);
+
+full_db_metadata = fetch(conn, full_db_query);
+num_total_trajectories = height(full_db_metadata);
+
+fprintf('  Total trajectories in database: %d\n', num_total_trajectories);
+fprintf('  Target sample size: %d (%.1f%%)\n', ...
+    base_config.database_sample_size, ...
+    100 * base_config.database_sample_size / num_total_trajectories);
+fprintf('  Random seed: %d\n', base_config.random_seed);
+
+% Set random seed
+rng(base_config.random_seed);
+
+% Random sample
+sample_indices = randperm(num_total_trajectories, base_config.database_sample_size);
+sampled_metadata = full_db_metadata(sample_indices, :);
+candidate_ids = sampled_metadata.bahn_id;
+
+fprintf('  ✓ Sampled %d trajectories\n\n', length(candidate_ids));
+
+%% ========================================================================
+%  PRE-LOAD ALL DATA (ONE-TIME COST)
+%  ========================================================================
+
+fprintf('╔════════════════════════════════════════════════════════════════╗\n');
+fprintf('║  PRE-LOADING ALL EXPERIMENT DATA                               ║\n');
+fprintf('║  This loads all data ONCE before running experiments          ║\n');
+fprintf('║  Estimated time: 15-20 minutes                                 ║\n');
+fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
+
+preload_tic = tic;
+
+chunk_size = 100;  % For batch loading
+
+data_cache = loadDataExperiment(conn, schema, candidate_ids, query_ids, chunk_size);
+
+preload_time = toc(preload_tic);
+
+fprintf('╔════════════════════════════════════════════════════════════════╗\n');
+fprintf('║  DATA PRE-LOADING COMPLETED                                    ║\n');
+fprintf('║  Time: %.1f minutes                                            ║\n', preload_time/60);
+fprintf('║  Memory: %.1f MB                                               ║\n', whos('data_cache').bytes / 1e6);
+fprintf('║  Ready to run %d experiments!                                  ║\n', total_experiments);
+fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
+
+%% ========================================================================
+%  PRE-COMPUTE ALL DTW (ONE-TIME COST)
+%  ========================================================================
+
+fprintf('╔════════════════════════════════════════════════════════════════╗\n');
+fprintf('║  PRE-COMPUTING DTW FOR ALL QUERIES & MODES                    ║\n');
+fprintf('║  This computes DTW ONCE for reuse in all experiments          ║\n');
+fprintf('║  Estimated time: 10-15 minutes                                 ║\n');
+fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
+
+dtw_tic = tic;
+
+% Prepare config for DTW pre-computation
+dtw_config = struct();
+dtw_config.top_k_trajectories = base_config.top_k_trajectories;
+dtw_config.lb_kim_keep_ratio = 0.40;
+dtw_config.lb_keogh_candidates = 100;
+dtw_config.cdtw_window = 0.10;
+dtw_config.normalize_dtw = false;
+dtw_config.use_rotation_alignment = false;
+
+dtw_cache = precomputeDTW(data_cache, query_ids, dtw_config);
+
+dtw_time = toc(dtw_tic);
+
+fprintf('╔════════════════════════════════════════════════════════════════╗\n');
+fprintf('║  DTW PRE-COMPUTATION COMPLETED                                 ║\n');
+fprintf('║  Time: %.1f minutes                                            ║\n', dtw_time/60);
+fprintf('║  Memory: %.1f MB                                               ║\n', whos('dtw_cache').bytes / 1e6);
+fprintf('║  All experiments will skip DTW and only compute embeddings!    ║\n');
+fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
+
+% Close database connection (no longer needed!)
+close(conn);
+fprintf('✓ Database connection closed (no longer needed)\n\n');
+
+%% ========================================================================
+%  RUN EXPERIMENTS (USING PRE-LOADED DATA)
+%  ========================================================================
+
+fprintf('╔════════════════════════════════════════════════════════════════╗\n');
+fprintf('║  STARTING EXPERIMENTS WITH PRE-LOADED DATA                     ║\n');
+fprintf('║  No database queries will be made during experiments!          ║\n');
+fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
 
 % === Storage ===
 all_results = cell(total_experiments, 1);
@@ -133,9 +247,15 @@ for emb_idx = 1:num_embeddings
             config.embedding_config_name = embedding_configs{emb_idx, 1};
             config.weight_mode_name = weight_mode_configs{wm_idx, 1};
             
+            % ⭐ CRITICAL: Pass pre-loaded caches
+            config.data_cache = data_cache;
+            config.dtw_cache = dtw_cache;
+            
             fprintf('Config: n_coarse=%d, n_fine=%d, multi_scale=%d, mode=%s\n', ...
                 config.n_coarse, config.n_fine, config.use_multi_scale, config.dtw_mode);
             fprintf('Weights: [%.1f, %.1f, %.1f, %.1f, %.1f]\n', config.weights);
+            fprintf('Using pre-loaded data cache: YES\n');
+            fprintf('Using pre-computed DTW cache: YES\n');
             
             % Run experiment
             exp_tic = tic;
@@ -345,8 +465,12 @@ fprintf('✓ Results saved to: %s\n\n', output_file);
 fprintf('========================================\n');
 fprintf('EXPERIMENT COMPLETED\n');
 fprintf('========================================\n');
-fprintf('Total Runtime: %.2f hours (%.1f minutes)\n', total_time/3600, total_time/60);
+fprintf('Pre-loading time: %.1f minutes\n', preload_time/60);
+fprintf('DTW pre-computation time: %.1f minutes\n', dtw_time/60);
+fprintf('Experiments runtime: %.2f hours (%.1f minutes)\n', total_time/3600, total_time/60);
+fprintf('Total runtime: %.2f hours\n', (preload_time + dtw_time + total_time)/3600);
 fprintf('Total Experiments: %d\n', total_experiments);
+fprintf('Average time per experiment: %.2f minutes (embeddings only!)\n', total_time/60/total_experiments);
 fprintf('Results file: %s\n\n', output_file);
 
 fprintf('========================================\n');

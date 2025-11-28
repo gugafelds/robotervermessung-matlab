@@ -36,23 +36,23 @@ fprintf('========================================\n');
 base_config = struct();
 base_config.database_sample_size = 1500;  % Fixed for fair comparison
 base_config.random_seed = 42;
-base_config.top_k_trajectories = 500;     % Fixed
+base_config.top_k_trajectories = 100;     % Fixed
 
 % === DIMENSION 1: Embedding Architectures ===
 embedding_configs = {
     % Name,                  n_coarse, n_fine, use_multi_scale
-    'Single-Fine-100',        0,        100,     false;
-    'Multi-Balanced-150',    50,       100,     true;
-    'Single-Fine-300',       0,        300,    false;
-    'Multi-Dense-350',       50,       300,    true;
+    'Single-Fine-100',        0,        400,     false;
+    'Multi-Balanced-150',    50,       400,     true;
+    'Single-Fine-300',       0,        600,    false;
+    'Multi-Dense-350',       50,       600,    true;
 };
 
 % === DIMENSION 2: Query Trajectories ===
 query_ids = {
-    '1764336135';   % Baseline (currently used in other experiments)
+    %'1764336135';   % Baseline (currently used in other experiments)
     %'1764336030';   % First in original list
     %'1764169991';   % Middle of list
-    %'1764334766';   % Last in original list
+    '1764334766';   % Last in original list
 };
 
 % === DIMENSION 3: DTW Mode + Weight Combinations ===
@@ -61,15 +61,17 @@ weight_mode_configs = {
     % Name,                      DTW_Mode,        [Pos, Joint, Orient, Vel, Meta]
     % Joint-based DTW experiments
     'Joint only',                'joint_states',  [0,   1,     0,      0,   0];
-    'Joint + Orientation',       'joint_states',  [0,   1,     1,      0,   0];
-    'Joint + Metadata',          'joint_states',  [0,   1,     0,      0,   1];
-    'Joint + Orient + Meta',     'joint_states',  [0,   1,     1,      0,   1];
+    %'Joint + Orientation',       'joint_states',  [0,   1,     1,      0,   0];
+    %'Joint + Metadata',          'joint_states',  [0,   1,     0,      0,   1];
+    %'Joint + Orient + Meta',     'joint_states',  [0,   1,     1,      0,   1];
+    'Meta',                      'joint_states',   [0,   0,     0,      0,   1];
     
     % Position-based DTW experiments
     'Position only',             'position',      [1,   0,     0,      0,   0];
-    'Pos + Velocity',            'position',      [1,   0,     0,      1,   0];
-    'Pos + Metadata',            'position',      [1,   0,     0,      0,   1];
-    'Pos + Vel + Meta',          'position',      [1,   0,     0,      1,   1];
+    %'Pos + Velocity',            'position',      [1,   0,     0,      1,   0];
+    %'Pos + Metadata',            'position',      [1,   0,     0,      0,   1];
+    %'Pos + Vel + Meta',          'position',      [1,   0,     0,      1,   1];
+    'Meta',                      'position',      [0,   0,     0,      0,   1];
 };
 
 % === Calculate Total Experiments ===
@@ -129,8 +131,8 @@ candidate_ids = sampled_metadata.bahn_id;
 
 fprintf('  ✓ Sampled %d trajectories\n\n', length(candidate_ids));
 
-%% ========================================================================
-%  PRE-LOAD ALL DATA (ONE-TIME COST)
+% ========================================================================
+%%  PRE-LOAD ALL DATA (ONE-TIME COST)
 %  ========================================================================
 
 fprintf('╔════════════════════════════════════════════════════════════════╗\n');
@@ -154,8 +156,8 @@ fprintf('║  Memory: %.1f MB                                               ║\
 fprintf('║  Ready to run %d experiments!                                  ║\n', total_experiments);
 fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
 
-%% ========================================================================
-%  PRE-COMPUTE ALL DTW (ONE-TIME COST)
+% ========================================================================
+%%  PRE-COMPUTE ALL DTW (ONE-TIME COST)
 %  ========================================================================
 
 fprintf('╔════════════════════════════════════════════════════════════════╗\n');
@@ -169,8 +171,8 @@ dtw_tic = tic;
 % Prepare config for DTW pre-computation
 dtw_config = struct();
 dtw_config.top_k_trajectories = base_config.top_k_trajectories;
-dtw_config.lb_kim_keep_ratio = 0.8;
-dtw_config.lb_keogh_candidates = 500;
+dtw_config.lb_kim_keep_ratio = 0.6;
+dtw_config.lb_keogh_candidates = 250;
 dtw_config.cdtw_window = 0.15;
 dtw_config.normalize_dtw = true;
 dtw_config.use_rotation_alignment = false;
@@ -190,8 +192,8 @@ fprintf('╚══════════════════════�
 close(conn);
 fprintf('✓ Database connection closed (no longer needed)\n\n');
 
-%% ========================================================================
-%  RUN EXPERIMENTS (USING PRE-LOADED DATA)
+% ========================================================================
+%%  RUN EXPERIMENTS (USING PRE-LOADED DATA)
 %  ========================================================================
 
 fprintf('╔════════════════════════════════════════════════════════════════╗\n');
@@ -287,8 +289,8 @@ end
 
 total_time = toc(experiment_start);
 
-%% ========================================================================
-%  CREATE RESULTS TABLES (TRAJECTORY + SEGMENT LEVEL)
+% ========================================================================
+%%  CREATE RESULTS TABLES (TRAJECTORY + SEGMENT LEVEL)
 %  ========================================================================
 
 fprintf('\n=== Creating Results Tables ===\n');
@@ -351,8 +353,8 @@ for i = 1:total_experiments
     ];
 end
 
-%% ========================================================================
-%  BUILD TRAJECTORY-LEVEL TABLE
+% ========================================================================
+%%  BUILD TRAJECTORY-LEVEL TABLE
 %  ========================================================================
 
 traj_table = array2table(traj_results_matrix, ...
@@ -437,14 +439,14 @@ level_seg = repmat({'Segment'}, total_experiments, 1);
 seg_table = addvars(seg_table, level_seg, 'Before', 'Embedding_Config', ...
     'NewVariableNames', 'Level');
 
-%% ========================================================================
-%  COMBINE TABLES
+% ========================================================================
+%%  COMBINE TABLES
 %  ========================================================================
 
 combined_table = [traj_table; seg_table];
 
-%% ========================================================================
-%  SAVE RESULTS
+% ========================================================================
+%%  SAVE RESULTS
 %  ========================================================================
 
 output_dir = 'similarity/results';
@@ -458,8 +460,8 @@ writetable(combined_table, output_file, 'WriteRowNames', false);
 
 fprintf('✓ Results saved to: %s\n\n', output_file);
 
-%% ========================================================================
-%  ANALYSIS & SUMMARY
+% ========================================================================
+%%  ANALYSIS & SUMMARY
 %  ========================================================================
 
 fprintf('========================================\n');
@@ -472,4 +474,65 @@ fprintf('Total runtime: %.2f hours\n', (preload_time + dtw_time + total_time)/36
 fprintf('Total Experiments: %d\n', total_experiments);
 fprintf('Average time per experiment: %.2f minutes (embeddings only!)\n', total_time/60/total_experiments);
 fprintf('Results file: %s\n\n', output_file);
+
+% ========================================================================
+%%  SAVE METADATA (CONFIGURATION PARAMETERS)
+%  ========================================================================
+
+fprintf('=== Saving Experiment Metadata ===\n');
+
+% Build metadata struct
+metadata = struct();
+
+% General Configuration
+metadata.timestamp = timestamp;
+metadata.total_experiments = total_experiments;
+metadata.database_sample_size = base_config.database_sample_size;
+metadata.random_seed = base_config.random_seed;
+metadata.top_k_trajectories = base_config.top_k_trajectories;
+
+% DTW Configuration
+metadata.lb_kim_keep_ratio = dtw_config.lb_kim_keep_ratio;
+metadata.lb_keogh_candidates = dtw_config.lb_keogh_candidates;
+metadata.cdtw_window = dtw_config.cdtw_window;
+metadata.normalize_dtw = dtw_config.normalize_dtw;
+metadata.use_rotation_alignment = dtw_config.use_rotation_alignment;
+
+% Data Loading Configuration
+metadata.chunk_size = chunk_size;
+metadata.schema = schema;
+
+% Timing
+metadata.preload_time_minutes = preload_time / 60;
+metadata.dtw_precompute_time_minutes = dtw_time / 60;
+metadata.experiments_time_minutes = total_time / 60;
+metadata.total_runtime_hours = (preload_time + dtw_time + total_time) / 3600;
+metadata.avg_time_per_experiment_minutes = (total_time / 60) / total_experiments;
+
+% Dimensions
+metadata.num_embedding_configs = num_embeddings;
+metadata.num_queries = num_queries;
+metadata.num_weight_modes = num_weight_modes;
+
+% Embedding Configurations (as comma-separated strings)
+metadata.embedding_configs = strjoin(embedding_configs(:,1), '; ');
+
+% Query IDs (as comma-separated string)
+metadata.query_ids = strjoin(query_ids, '; ');
+
+% Weight Modes (as comma-separated string)
+metadata.weight_mode_names = strjoin(weight_mode_configs(:,1), '; ');
+
+% Memory Usage
+metadata.data_cache_size_MB = whos('data_cache').bytes / 1e6;
+metadata.dtw_cache_size_MB = whos('dtw_cache').bytes / 1e6;
+
+% Convert struct to table (transpose for vertical layout)
+metadata_table = struct2table(metadata);
+
+% Save as CSV
+metadata_file = strrep(output_file, '.csv', '_metadata.csv');
+writetable(metadata_table, metadata_file, 'WriteRowNames', false);
+
+fprintf('✓ Metadata saved to: %s\n\n', metadata_file);
 

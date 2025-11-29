@@ -34,25 +34,26 @@ fprintf('========================================\n');
 
 % === Base Configuration ===
 base_config = struct();
-base_config.database_sample_size = 1500;  % Fixed for fair comparison
+base_config.database_sample_size = 2341*2;  % Fixed for fair comparison
 base_config.random_seed = 42;
-base_config.top_k_trajectories = 100;     % Fixed
+base_config.top_k_trajectories = 200;     % Fixed
 
 % === DIMENSION 1: Embedding Architectures ===
 embedding_configs = {
     % Name,                  n_coarse, n_fine, use_multi_scale
-    'Single-Fine-100',        0,        400,     false;
-    'Multi-Balanced-150',    50,       400,     true;
-    'Single-Fine-300',       0,        600,    false;
-    'Multi-Dense-350',       50,       600,    true;
+    'Single-Fine-75',        0,        75,     false;
+    'Multi-Balanced-100',    25,       75,     true;
+    'Single-Fine-150',       0,        150,    false;
+    'Multi-Dense-200',       50,       150,    true;
 };
 
 % === DIMENSION 2: Query Trajectories ===
 query_ids = {
-    %'1764336135';   % Baseline (currently used in other experiments)
-    %'1764336030';   % First in original list
-    %'1764169991';   % Middle of list
+    '1764336135';   % Baseline (currently used in other experiments)
+    '1764336030';   % First in original list
+    '1764169991';   % Middle of list
     '1764334766';   % Last in original list
+    '1764334645';
 };
 
 % === DIMENSION 3: DTW Mode + Weight Combinations ===
@@ -61,16 +62,18 @@ weight_mode_configs = {
     % Name,                      DTW_Mode,        [Pos, Joint, Orient, Vel, Meta]
     % Joint-based DTW experiments
     'Joint only',                'joint_states',  [0,   1,     0,      0,   0];
-    %'Joint + Orientation',       'joint_states',  [0,   1,     1,      0,   0];
-    %'Joint + Metadata',          'joint_states',  [0,   1,     0,      0,   1];
-    %'Joint + Orient + Meta',     'joint_states',  [0,   1,     1,      0,   1];
+    'Joint + Orientation',       'joint_states',  [0,   1,     1,      0,   0];
+    'Joint + Metadata',          'joint_states',  [0,   1,     0,      0,   1];
+    'Joint + Orient + Meta',     'joint_states',  [0,   1,     1,      0,   1];
+    'Joint + Position',          'joint_states',  [1,   0,     0,      0,   0];
     'Meta',                      'joint_states',   [0,   0,     0,      0,   1];
     
     % Position-based DTW experiments
     'Position only',             'position',      [1,   0,     0,      0,   0];
-    %'Pos + Velocity',            'position',      [1,   0,     0,      1,   0];
-    %'Pos + Metadata',            'position',      [1,   0,     0,      0,   1];
-    %'Pos + Vel + Meta',          'position',      [1,   0,     0,      1,   1];
+    'Pos + Velocity',            'position',      [1,   0,     0,      1,   0];
+    'Pos + Metadata',            'position',      [1,   0,     0,      0,   1];
+    'Pos + Vel + Meta',          'position',      [1,   0,     0,      1,   1];
+    'Postion + Joint',           'position',      [1,   0,     0,      0,   0];
     'Meta',                      'position',      [0,   0,     0,      0,   1];
 };
 
@@ -172,8 +175,8 @@ dtw_tic = tic;
 dtw_config = struct();
 dtw_config.top_k_trajectories = base_config.top_k_trajectories;
 dtw_config.lb_kim_keep_ratio = 0.6;
-dtw_config.lb_keogh_candidates = 250;
-dtw_config.cdtw_window = 0.15;
+dtw_config.lb_keogh_candidates = 200;
+dtw_config.cdtw_window = 0.10;
 dtw_config.normalize_dtw = true;
 dtw_config.use_rotation_alignment = false;
 

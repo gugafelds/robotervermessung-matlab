@@ -37,9 +37,9 @@ use_ground_truth = true;  % Set to false to disable
 
 % === Base Configuration ===
 base_config = struct();
-base_config.database_sample_size = 200;  % Fixed for fair comparison
+base_config.database_sample_size = 50;  % Fixed for fair comparison
 base_config.random_seed = 42;
-base_config.top_k_trajectories = 15;     % Fixed
+base_config.top_k_trajectories = 11;     % Fixed
 
 % === DIMENSION 1: Embedding Architectures ===
 embedding_configs = {
@@ -52,13 +52,13 @@ embedding_configs = {
 
 % === DIMENSION 2: Query Trajectories ===
 query_ids = {
-    '1763740042';   % gt = 10
-    '1763739510';   % gt = 16
-    '1763739994';   % gt = 10
-    '1763739813';   % gt = 6
-    '1763739893';   % gt = 8
-    '1764161926';   % gt = 5
-    '1764161696';   % gt = 4
+    '1763740042';   % gt = 9
+    '1763739510';   % gt = 15
+    '1763739994';   % gt = 9
+    '1763739813';   % gt = 5
+    '1763739893';   % gt = 7
+    '1764161926';   % gt = 4
+    '1764161696';   % gt = 3
 };
 
 % === DIMENSION 3: DTW Mode + Weight Combinations ===
@@ -70,7 +70,7 @@ weight_mode_configs = {
     'Joint + Orientation',       'joint_states',  [0,   1,     1,      0,   0];
     'Joint + Metadata',          'joint_states',  [0,   1,     0,      0,   1];
     'Joint + Orient + Meta',     'joint_states',  [0,   1,     1,      0,   1];
-    'Joint + Position',          'joint_states',  [1,   0,     0,      0,   0];
+    'Joint + Position',          'joint_states',  [1,   1,     0,      0,   0];
     'Meta',                      'joint_states',   [0,   0,     0,      0,   1];
     
     % Position-based DTW experiments
@@ -78,7 +78,7 @@ weight_mode_configs = {
     'Pos + Velocity',            'position',      [1,   0,     0,      1,   0];
     'Pos + Metadata',            'position',      [1,   0,     0,      0,   1];
     'Pos + Vel + Meta',          'position',      [1,   0,     0,      1,   1];
-    'Postion + Joint',           'position',      [1,   0,     0,      0,   0];
+    'Postion + Joint',           'position',      [1,   1,     0,      0,   0];
     'Meta',                      'position',      [0,   0,     0,      0,   1];
 };
 
@@ -486,6 +486,49 @@ seg_table = addvars(seg_table, level_seg, 'Before', 'Embedding_Config', ...
 
 combined_table = [traj_table; seg_table];
 
+
+% ========================================================================
+%%  ADD CONFIGURATION COLUMNS
+%  ========================================================================
+timestamp = char(datetime('now', 'Format', 'yyyy-MM-dd''T''HHmmss'));
+
+fprintf('=== Adding Configuration Columns ===\n');
+
+% Create config arrays (same for all 256 rows)
+num_total_rows = height(combined_table);
+
+timestamp_arr = repmat({timestamp}, num_total_rows, 1);
+database_size_arr = repmat(base_config.database_sample_size, num_total_rows, 1);
+top_k_arr = repmat(base_config.top_k_trajectories, num_total_rows, 1);
+lb_kim_ratio_arr = repmat(dtw_config.lb_kim_keep_ratio, num_total_rows, 1);
+lb_keogh_candidates_arr = repmat(dtw_config.lb_keogh_candidates, num_total_rows, 1);
+dtw_window_arr = repmat(dtw_config.cdtw_window, num_total_rows, 1);
+dtw_normalization_arr = repmat(dtw_config.normalize_dtw, num_total_rows, 1);
+dtw_rotation_align_arr = repmat(dtw_config.use_rotation_alignment, num_total_rows, 1);
+ground_truth_arr = repmat(base_config.has_ground_truth, num_total_rows, 1);
+
+% Add columns at the BEGINNING (before 'Level')
+combined_table = addvars(combined_table, ground_truth_arr, 'Before', 'Level', ...
+    'NewVariableNames', 'Ground_Truth');
+combined_table = addvars(combined_table, dtw_rotation_align_arr, 'Before', 'Ground_Truth', ...
+    'NewVariableNames', 'DTW_RotationAlign');
+combined_table = addvars(combined_table, dtw_normalization_arr, 'Before', 'DTW_RotationAlign', ...
+    'NewVariableNames', 'DTW_Normalization');
+combined_table = addvars(combined_table, dtw_window_arr, 'Before', 'DTW_Normalization', ...
+    'NewVariableNames', 'DTW_Window');
+combined_table = addvars(combined_table, lb_keogh_candidates_arr, 'Before', 'DTW_Window', ...
+    'NewVariableNames', 'LB_Keogh_Candidates');
+combined_table = addvars(combined_table, lb_kim_ratio_arr, 'Before', 'LB_Keogh_Candidates', ...
+    'NewVariableNames', 'LB_Kim_Ratio');
+combined_table = addvars(combined_table, top_k_arr, 'Before', 'LB_Kim_Ratio', ...
+    'NewVariableNames', 'Top_K');
+combined_table = addvars(combined_table, database_size_arr, 'Before', 'Top_K', ...
+    'NewVariableNames', 'Database_Size');
+combined_table = addvars(combined_table, timestamp_arr, 'Before', 'Database_Size', ...
+    'NewVariableNames', 'Timestamp');
+
+fprintf('✓ Added 9 configuration columns\n\n');
+
 % ========================================================================
 %%  SAVE RESULTS
 %  ========================================================================
@@ -495,7 +538,6 @@ if ~exist(output_dir, 'dir')
     mkdir(output_dir);
 end
 
-timestamp = char(datetime('now', 'Format', 'yyyy-MM-dd''T''HHmmss'));
 output_file = fullfile(output_dir, sprintf('embedding_validation_%s.csv', timestamp));
 writetable(combined_table, output_file, 'WriteRowNames', false);
 

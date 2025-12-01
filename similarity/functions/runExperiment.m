@@ -26,7 +26,7 @@ function results = runExperiment(config)
     end
     
     % DTW Config
-    normalize_dtw = true;
+    normalize_dtw = false;
     use_rotation_alignment = false;
     cdtw_window = 0.10;
     

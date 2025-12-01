@@ -1,5 +1,6 @@
 # Autosave files
 *.asv
+*.csv
 *.m~
 *.autosave
 *.slx.r*

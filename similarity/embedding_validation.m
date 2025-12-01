@@ -25,6 +25,7 @@ addpath(genpath(pwd));
 addpath(genpath('../main'));
 addpath(genpath('../lasertracker'));
 addpath(genpath('../methods'));
+addpath(genpath('results'));
 
 fprintf('✓ Paths added successfully\n\n');
 
@@ -32,11 +33,13 @@ fprintf('========================================\n');
 fprintf('EXPERIMENT: EMBEDDING ARCHITECTURE VALIDATION\n');
 fprintf('========================================\n');
 
+use_ground_truth = true;  % Set to false to disable
+
 % === Base Configuration ===
 base_config = struct();
-base_config.database_sample_size = 2341*2;  % Fixed for fair comparison
+base_config.database_sample_size = 200;  % Fixed for fair comparison
 base_config.random_seed = 42;
-base_config.top_k_trajectories = 200;     % Fixed
+base_config.top_k_trajectories = 15;     % Fixed
 
 % === DIMENSION 1: Embedding Architectures ===
 embedding_configs = {
@@ -49,11 +52,13 @@ embedding_configs = {
 
 % === DIMENSION 2: Query Trajectories ===
 query_ids = {
-    '1764336135';   % Baseline (currently used in other experiments)
-    '1764336030';   % First in original list
-    '1764169991';   % Middle of list
-    '1764334766';   % Last in original list
-    '1764334645';
+    '1763740042';   % gt = 10
+    '1763739510';   % gt = 16
+    '1763739994';   % gt = 10
+    '1763739813';   % gt = 6
+    '1763739893';   % gt = 8
+    '1764161926';   % gt = 5
+    '1764161696';   % gt = 4
 };
 
 % === DIMENSION 3: DTW Mode + Weight Combinations ===
@@ -133,6 +138,39 @@ sampled_metadata = full_db_metadata(sample_indices, :);
 candidate_ids = sampled_metadata.bahn_id;
 
 fprintf('  ✓ Sampled %d trajectories\n\n', length(candidate_ids));
+
+% ========================================================================
+%%  GROUND TRUTH ADDITION (OPTIONAL)
+%  ========================================================================
+
+if use_ground_truth
+    % Get ground truth trajectories from same recordings as queries
+    [ground_truth_ids, ground_truth_map] = getGroundTruthCandidates(conn, schema, query_ids);
+    
+    if ~isempty(ground_truth_ids)
+        % Remove ground truth from random sample to avoid duplicates
+        candidate_ids = setdiff(candidate_ids, ground_truth_ids);
+        
+        % Add ground truth to candidates
+        candidate_ids = [candidate_ids; ground_truth_ids];
+        
+        fprintf('=== Updated Candidate Pool ===\n');
+        fprintf('  Random candidates: %d\n', length(candidate_ids) - length(ground_truth_ids));
+        fprintf('  Ground truth: %d\n', length(ground_truth_ids));
+        fprintf('  Total candidates: %d\n\n', length(candidate_ids));
+        
+        % Store ground truth info for later analysis
+        base_config.ground_truth_map = ground_truth_map;
+        base_config.has_ground_truth = true;
+    else
+        fprintf('⚠ No ground truth found - continuing with random sample only\n\n');
+        base_config.has_ground_truth = false;
+    end
+else
+    fprintf('=== Ground Truth Disabled ===\n');
+    fprintf('  Using only random sample: %d trajectories\n\n', length(candidate_ids));
+    base_config.has_ground_truth = false;
+end
 
 % ========================================================================
 %%  PRE-LOAD ALL DATA (ONE-TIME COST)
@@ -452,7 +490,7 @@ combined_table = [traj_table; seg_table];
 %%  SAVE RESULTS
 %  ========================================================================
 
-output_dir = 'similarity/results';
+output_dir = fullfile(pwd, 'results');
 if ~exist(output_dir, 'dir')
     mkdir(output_dir);
 end

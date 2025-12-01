@@ -33,32 +33,9 @@ function plotModalityRadar(csv_file)
     colors.pos_traj = [0.8, 0.4, 0.2];        % Dark Orange (solid)
     colors.pos_seg = [0.9, 0.6, 0.4];         % Light Orange (dashed)
     
-    % === Metrics to show (DYNAMIC: detect P@k automatically) ===
-    
-    % Always include these base metrics
-    metric_cols = {'Spearman', 'P_10', 'P_5', 'P_3', 'P_1'};
-    metric_labels = {'\rho', 'P@10', 'P@5', 'P@3', 'P@1'};
-    
-    % Find P@k column dynamically (e.g., P_50, P_100, P_250, etc.)
-    all_cols = results_table.Properties.VariableNames;
-    p_k_pattern = '^P_\d+$';  % Matches P_50, P_100, P_250, etc.
-    
-    for i = 1:length(all_cols)
-        col_name = all_cols{i};
-        if ~isempty(regexp(col_name, p_k_pattern, 'once'))
-            % Extract the k value (e.g., "P_50" -> 50)
-            k_value = str2double(strrep(col_name, 'P_', ''));
-            
-            % Only add if it's NOT already in the list (not P_10, P_5, etc.)
-            if k_value > 10 && ~ismember(col_name, metric_cols)
-                % Insert at position 2 (after Spearman, before P@10)
-                metric_cols = [metric_cols(1), {col_name}, metric_cols(2:end)];
-                metric_labels = [metric_labels(1), {sprintf('P@%d', k_value)}, metric_labels(2:end)];
-                fprintf('Detected dynamic P@k metric: %s\n', col_name);
-                break;  % Only use the first one found
-            end
-        end
-    end
+    % === Metrics to show (NEW column names) ===
+    metric_cols = {'Spearman', 'P_50', 'P_10', 'P_5', 'P_3', 'P_1'};
+    metric_labels = {'\rho', 'P@50', 'P@10', 'P@5', 'P@3', 'P@1'};
     
     % Check which columns exist
     available_metrics = {};
@@ -79,122 +56,118 @@ function plotModalityRadar(csv_file)
     
     angles = linspace(0, 2*pi, length(available_metrics)+1);
     
-    % === Get unique embedding configs ===
+    % === Create Figure ===
+    figure('Position', [100, 100, 1200, 900]);
+    ax = polaraxes;
+    hold on;
+    
+    % === Group rows by configuration (NEW: based on Embedding_Config + Weight_Mode) ===
+    % We'll plot one line per unique combination
+    
     unique_configs = unique(results_table.Embedding_Config);
-    num_configs = length(unique_configs);
+    unique_weights = unique(results_table.Weight_Mode);
     
-    fprintf('Found %d embedding configs\n', num_configs);
+    fprintf('Unique embedding configs: %d\n', length(unique_configs));
+    fprintf('Unique weight modes: %d\n', length(unique_weights));
     
-    % === Create Figure with Subplots ===
-    figure('Position', [100, 100, 1400, 1000]);
+    % === Plot strategy: One line per (Embedding_Config × Weight_Mode × Level) ===
     
-    % Determine subplot layout
-    if num_configs <= 2
-        rows = 1;
-        cols = num_configs;
-    elseif num_configs <= 4
-        rows = 2;
-        cols = 2;
-    elseif num_configs <= 6
-        rows = 2;
-        cols = 3;
-    else
-        rows = ceil(num_configs / 3);
-        cols = 3;
-    end
+    plotted_count = 0;
     
-    % === Plot each embedding config in its own subplot ===
-    for emb_idx = 1:num_configs
+    for emb_idx = 1:length(unique_configs)
         emb_config = unique_configs{emb_idx};
         
-        % Create subplot
-        subplot(rows, cols, emb_idx, polaraxes);
-        ax = gca;
-        hold on;
-        
-        fprintf('\nProcessing subplot %d: %s\n', emb_idx, emb_config);
-        
-        % === Plot 4 lines: Joint-Traj, Joint-Seg, Pos-Traj, Pos-Seg ===
-        % (Averaged over all weight modes)
-        
-        combinations = {
-            'joint_states', 'Trajectory', colors.joint_traj, '-', 'o', 'Joint (Traj)';
-            'joint_states', 'Segment',    colors.joint_seg,  '--', 'o', 'Joint (Seg)';
-            'position',     'Trajectory', colors.pos_traj,   '-', 's', 'Position (Traj)';
-            'position',     'Segment',    colors.pos_seg,    '--', 's', 'Position (Seg)'
-        };
-        
-        for comb_idx = 1:size(combinations, 1)
-            dtw_mode = combinations{comb_idx, 1};
-            level = combinations{comb_idx, 2};
-            color = combinations{comb_idx, 3};
-            line_style = combinations{comb_idx, 4};
-            marker = combinations{comb_idx, 5};
-            display_name = combinations{comb_idx, 6};
+        for wm_idx = 1:length(unique_weights)
+            weight_mode = unique_weights{wm_idx};
             
-            % Find all matching rows (this emb_config + this mode + this level)
-            % Average over ALL weight modes
-            mask = strcmp(results_table.Embedding_Config, emb_config) & ...
-                   strcmp(results_table.DTW_Mode, dtw_mode) & ...
-                   strcmp(results_table.Level, level);
-            
-            if ~any(mask)
-                fprintf('  No data for %s\n', display_name);
-                continue;
-            end
-            
-            matching_rows = results_table(mask, :);
-            fprintf('  %s: %d rows (avg over weight modes & queries)\n', ...
-                display_name, height(matching_rows));
-            
-            % Average metrics across all matching rows
-            data = zeros(1, length(available_metrics));
-            for j = 1:length(available_metrics)
-                vals = matching_rows.(available_metrics{j});
-                vals = vals(~isnan(vals));
-                if ~isempty(vals)
-                    data(j) = mean(vals);
+            % For each level (Trajectory, Segment)
+            for level_idx = 1:2
+                if level_idx == 1
+                    level = 'Trajectory';
                 else
-                    data(j) = 0;
+                    level = 'Segment';
                 end
+                
+                % Find matching rows (average over all queries for this config)
+                mask = strcmp(results_table.Level, level) & ...
+                       strcmp(results_table.Embedding_Config, emb_config) & ...
+                       strcmp(results_table.Weight_Mode, weight_mode);
+                
+                if ~any(mask)
+                    continue;
+                end
+                
+                % Get DTW mode from first matching row
+                matching_rows = results_table(mask, :);
+                dtw_mode = matching_rows.DTW_Mode{1};
+                
+                % Average metrics across all matching rows (different queries)
+                data = zeros(1, length(available_metrics));
+                for j = 1:length(available_metrics)
+                    vals = matching_rows.(available_metrics{j});
+                    % Remove NaN values
+                    vals = vals(~isnan(vals));
+                    if ~isempty(vals)
+                        data(j) = mean(vals);
+                    else
+                        data(j) = 0;
+                    end
+                end
+                
+                % Determine color and line style
+                if strcmp(dtw_mode, 'joint_states') && strcmp(level, 'Trajectory')
+                    color = colors.joint_traj;
+                    line_style = '-';
+                    marker = 'o';
+                elseif strcmp(dtw_mode, 'joint_states') && strcmp(level, 'Segment')
+                    color = colors.joint_seg;
+                    line_style = '--';
+                    marker = 'o';
+                elseif strcmp(dtw_mode, 'position') && strcmp(level, 'Trajectory')
+                    color = colors.pos_traj;
+                    line_style = '-';
+                    marker = 's';
+                else  % position + segment
+                    color = colors.pos_seg;
+                    line_style = '--';
+                    marker = 's';
+                end
+                
+                % Close the loop
+                data = [data, data(1)];
+                
+                % Create display name
+                if strcmp(level, 'Segment')
+                    display_name = sprintf('%s | %s (Seg)', emb_config, weight_mode);
+                else
+                    display_name = sprintf('%s | %s', emb_config, weight_mode);
+                end
+                
+                % Plot
+                polarplot(angles, data, [line_style marker], 'LineWidth', 1.5, ...
+                    'MarkerSize', 6, 'Color', color, ...
+                    'DisplayName', display_name);
+                
+                plotted_count = plotted_count + 1;
             end
-            
-            % Close the loop
-            data = [data, data(1)];
-            
-            % Plot
-            polarplot(angles, data, [line_style marker], 'LineWidth', 2, ...
-                'MarkerSize', 8, 'Color', color, ...
-                'DisplayName', display_name);
         end
-        
-        % === Configure subplot axes ===
-        ax.ThetaTick = rad2deg(angles(1:end-1));
-        ax.ThetaTickLabel = available_labels;
-        ax.RLim = [0, 1];
-        ax.FontSize = 9;
-        
-        % === Subplot Title ===
-        title(emb_config, 'FontSize', 11, 'FontWeight', 'bold');
-        
-        % === Legend for this subplot ===
-        legend('Location', 'southoutside', 'Orientation', 'horizontal', ...
-            'FontSize', 8);
     end
     
-    % === Main Title ===
-    sgtitle('Embedding Validation: Performance by Architecture', ...
+    fprintf('Plotted %d lines\n', plotted_count);
+    
+    % === Configure axes ===
+    ax.ThetaTick = rad2deg(angles(1:end-1));
+    ax.ThetaTickLabel = available_labels;
+    ax.RLim = [0, 1];
+    ax.FontSize = 10;
+    
+    % === Title and Legend ===
+    title('Embedding Validation: Modality Performance', ...
         'FontSize', 14, 'FontWeight', 'bold');
     
-    % === Save ===
-    %output_file_png = fullfile(output_dir, 'radar_embedding_validation.png');
-    %output_file_pdf = fullfile(output_dir, 'radar_embedding_validation.pdf');
+    % Create custom legend with grouping
+    lgd = legend('Location', 'southoutside', 'Orientation', 'vertical', ...
+        'FontSize', 8, 'NumColumns', 3);
+    lgd.Title.String = 'Config | Weights (Solid=Traj, Dashed=Seg | Circle=Joint, Square=Pos)';
     
-    %saveas(gcf, output_file_png);
-    %saveas(gcf, output_file_pdf);
-    
-    %fprintf('✓ Saved: %s\n', output_file_png);
-    %fprintf('✓ Saved: %s\n', output_file_pdf);
-    
-    fprintf('=== Radar Chart Complete ===\n');
 end

@@ -119,9 +119,82 @@ end
 % - data_cache, dtw_cache, embeddings_cache
 % - top_k_trajectories, rrf_k, norm_strategy, cdtw_window, etc.
 
-% Suppress output from dtw_baseline.m (we only want results)
-% Use evalc to capture output but not display it
-evalc('dtw_baseline');
+dtw_baseline;
+
+% ========================================================================
+% 🔍 DEBUG: GT COVERAGE RESULTS FROM WORKSPACE
+% ========================================================================
+
+fprintf('\n╔════════════════════════════════════════════════════════════════╗\n');
+fprintf('║ 🔍 DEBUG: GT Coverage in Workspace (Query: %s)\n', query_bahn_id);
+fprintf('╚════════════════════════════════════════════════════════════════╝\n');
+
+% Check trajectory-level GT coverage
+if exist('gt_coverage_traj', 'var')
+    fprintf('✓ gt_coverage_traj EXISTS\n');
+    if ~isempty(gt_coverage_traj)
+        fprintf('  Fields: %s\n', strjoin(fieldnames(gt_coverage_traj), ', '));
+        fprintf('  num_gt: %d\n', gt_coverage_traj.num_gt);
+        fprintf('  num_gt_found: %d\n', gt_coverage_traj.num_gt_found);
+        fprintf('  gt_ranks: [%s]\n', num2str(gt_coverage_traj.gt_ranks'));
+        fprintf('  recall_at_k: [%s]\n', num2str(gt_coverage_traj.recall_at_k'));
+        fprintf('  expansion_ratios: [%s]\n', num2str(gt_coverage_traj.expansion_ratios'));
+        fprintf('  coverage_points: [%s]\n', num2str(gt_coverage_traj.coverage_points'));
+        fprintf('  mean_gt_rank: %.2f\n', gt_coverage_traj.mean_gt_rank);
+    else
+        fprintf('⚠️ gt_coverage_traj is EMPTY\n');
+    end
+else
+    fprintf('✗ gt_coverage_traj DOES NOT EXIST\n');
+end
+
+% Check segment-level GT coverage
+if exist('gt_coverage_seg_avg', 'var')
+    fprintf('\n✓ gt_coverage_seg_avg EXISTS\n');
+    if ~isempty(gt_coverage_seg_avg)
+        fprintf('  Fields: %s\n', strjoin(fieldnames(gt_coverage_seg_avg), ', '));
+        fprintf('  recall_at_k: [%s]\n', num2str(gt_coverage_seg_avg.recall_at_k'));
+        fprintf('  expansion_ratios: [%s]\n', num2str(gt_coverage_seg_avg.expansion_ratios'));
+    else
+        fprintf('⚠️ gt_coverage_seg_avg is EMPTY\n');
+    end
+else
+    fprintf('✗ gt_coverage_seg_avg DOES NOT EXIST\n');
+end
+
+% Check ground_truth_map
+if exist('config', 'var') && isfield(config, 'ground_truth_map')
+    fprintf('\n✓ config.ground_truth_map EXISTS\n');
+    query_field = ['q_' strrep(query_bahn_id, '-', '_')];
+    if isfield(config.ground_truth_map, query_field)
+        gt_data = config.ground_truth_map.(query_field);
+        fprintf('  Query field: %s\n', query_field);
+        if isfield(gt_data, 'trajectories')
+            fprintf('  GT Trajectories (%d):\n', length(gt_data.trajectories));
+            for i = 1:min(3, length(gt_data.trajectories))
+                fprintf('    %d: %s\n', i, gt_data.trajectories{i});
+            end
+        end
+    else
+        fprintf('⚠️ Query field "%s" NOT FOUND in ground_truth_map\n', query_field);
+        fprintf('  Available fields: %s\n', strjoin(fieldnames(config.ground_truth_map), ', '));
+    end
+else
+    fprintf('✗ config.ground_truth_map DOES NOT EXIST\n');
+end
+
+% Check embedding_table
+if exist('embedding_table', 'var')
+    fprintf('\n✓ embedding_table EXISTS (%d rows)\n', height(embedding_table));
+    fprintf('  First 5 bahn_ids:\n');
+    for i = 1:min(5, height(embedding_table))
+        fprintf('    %d: %s\n', i, embedding_table.bahn_id{i});
+    end
+else
+    fprintf('✗ embedding_table DOES NOT EXIST\n');
+end
+
+fprintf('════════════════════════════════════════════════════════════════\n\n');
 
 %% ========================================================================
 %  EXTRACT RESULTS
@@ -224,7 +297,7 @@ results.num_candidates = num_candidates;
 results.num_query_segments = num_query_segments;
 
 % ========================================================================
-% Coverage Metrics (Trajectory Level)
+% Coverage Metrics (Trajectory Level) - EXISTING, keeping as is
 % ========================================================================
 
 if exist('coverage_traj', 'var') && ~isempty(coverage_traj)
@@ -262,7 +335,7 @@ else
 end
 
 % ========================================================================
-% Coverage Metrics (Segment Level)
+% Coverage Metrics (Segment Level) - EXISTING, keeping as is
 % ========================================================================
 
 if exist('coverage_seg_avg', 'var') && ~isempty(coverage_seg_avg)
@@ -297,6 +370,106 @@ else
     results.seg_coverage_at_50 = NaN;
     results.seg_expansion_ratio_50 = NaN;
     results.seg_recall_at_50 = NaN;
+end
+
+% ========================================================================
+% GT Coverage Metrics (Trajectory Level) - NEW!
+% ========================================================================
+
+if exist('gt_coverage_traj', 'var') && ~isempty(gt_coverage_traj)
+    % Find indices for K=10 and K=50
+    idx_10 = find(gt_coverage_traj.k_values == 10, 1);
+    idx_50 = find(gt_coverage_traj.k_values == 50, 1);
+    
+    if ~isempty(idx_10)
+        results.gt_recall_at_10 = gt_coverage_traj.recall_at_k(idx_10);
+        results.gt_expansion_ratio_10 = gt_coverage_traj.expansion_ratios(idx_10);
+        results.gt_coverage_at_10 = gt_coverage_traj.coverage_points(idx_10);
+    else
+        results.gt_recall_at_10 = NaN;
+        results.gt_expansion_ratio_10 = NaN;
+        results.gt_coverage_at_10 = NaN;
+    end
+    
+    if ~isempty(idx_50)
+        results.gt_recall_at_50 = gt_coverage_traj.recall_at_k(idx_50);
+        results.gt_expansion_ratio_50 = gt_coverage_traj.expansion_ratios(idx_50);
+        results.gt_coverage_at_50 = gt_coverage_traj.coverage_points(idx_50);
+    else
+        results.gt_recall_at_50 = NaN;
+        results.gt_expansion_ratio_50 = NaN;
+        results.gt_coverage_at_50 = NaN;
+    end
+    
+    % Additional GT statistics
+    results.num_gt = gt_coverage_traj.num_gt;
+    results.num_gt_found = gt_coverage_traj.num_gt_found;
+    results.mean_gt_rank = gt_coverage_traj.mean_gt_rank;
+    results.overall_gt_coverage = gt_coverage_traj.overall_coverage_point;
+    results.overall_gt_expansion = gt_coverage_traj.overall_expansion_ratio;
+else
+    % No GT coverage data available
+    results.gt_recall_at_10 = NaN;
+    results.gt_expansion_ratio_10 = NaN;
+    results.gt_coverage_at_10 = NaN;
+    results.gt_recall_at_50 = NaN;
+    results.gt_expansion_ratio_50 = NaN;
+    results.gt_coverage_at_50 = NaN;
+    
+    % Additional GT statistics
+    results.num_gt = NaN;
+    results.num_gt_found = NaN;
+    results.mean_gt_rank = NaN;
+    results.overall_gt_coverage = NaN;
+    results.overall_gt_expansion = NaN;
+end
+
+% ========================================================================
+% GT Coverage Metrics (Segment Level) - NEW!
+% ========================================================================
+
+if exist('gt_coverage_seg_avg', 'var') && ~isempty(gt_coverage_seg_avg)
+    % Find indices for K=10 and K=50
+    idx_10 = find(gt_coverage_seg_avg.k_values == 10, 1);
+    idx_50 = find(gt_coverage_seg_avg.k_values == 50, 1);
+    
+    if ~isempty(idx_10)
+        results.seg_gt_recall_at_10 = gt_coverage_seg_avg.recall_at_k(idx_10);
+        results.seg_gt_expansion_ratio_10 = gt_coverage_seg_avg.expansion_ratios(idx_10);
+        results.seg_gt_coverage_at_10 = gt_coverage_seg_avg.coverage_points(idx_10);
+    else
+        results.seg_gt_recall_at_10 = NaN;
+        results.seg_gt_expansion_ratio_10 = NaN;
+        results.seg_gt_coverage_at_10 = NaN;
+    end
+    
+    if ~isempty(idx_50)
+        results.seg_gt_recall_at_50 = gt_coverage_seg_avg.recall_at_k(idx_50);
+        results.seg_gt_expansion_ratio_50 = gt_coverage_seg_avg.expansion_ratios(idx_50);
+        results.seg_gt_coverage_at_50 = gt_coverage_seg_avg.coverage_points(idx_50);
+    else
+        results.seg_gt_recall_at_50 = NaN;
+        results.seg_gt_expansion_ratio_50 = NaN;
+        results.seg_gt_coverage_at_50 = NaN;
+    end
+    
+    % Additional segment GT statistics
+    results.seg_mean_gt_rank = gt_coverage_seg_avg.mean_gt_rank;
+    results.seg_overall_gt_coverage = gt_coverage_seg_avg.overall_coverage_point;
+    results.seg_overall_gt_expansion = gt_coverage_seg_avg.overall_expansion_ratio;
+else
+    % No segment GT coverage data available
+    results.seg_gt_recall_at_10 = NaN;
+    results.seg_gt_expansion_ratio_10 = NaN;
+    results.seg_gt_coverage_at_10 = NaN;
+    results.seg_gt_recall_at_50 = NaN;
+    results.seg_gt_expansion_ratio_50 = NaN;
+    results.seg_gt_coverage_at_50 = NaN;
+    
+    % Additional segment GT statistics
+    results.seg_mean_gt_rank = NaN;
+    results.seg_overall_gt_coverage = NaN;
+    results.seg_overall_gt_expansion = NaN;
 end
 
 end

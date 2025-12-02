@@ -1308,8 +1308,8 @@ if isempty(k_values_valid)
         min(k_values_to_analyze));
     coverage_traj = [];
 else
-    % Trajectory-level coverage analysis
-    fprintf('--- Trajectory Level ---\n');
+    % Trajectory-level coverage analysis (DTW vs Embedding)
+    fprintf('--- Trajectory Level (DTW vs Embedding) ---\n');
     coverage_traj = calculateCoverage(trajectory_table, embedding_table, k_values_valid, 'bahn_id');
     
     for i = 1:length(k_values_valid)
@@ -1321,9 +1321,184 @@ else
     end
 end
 
-% Segment-level coverage analysis
+% ========================================================================
+% GROUND TRUTH COVERAGE ANALYSIS - SIMPLIFIED FOR DEBUGGING
+% ========================================================================
+
+fprintf('\n=== Ground Truth Coverage Analysis ===\n');
+
+% Initialize to empty
+gt_coverage_traj = [];
+gt_coverage_seg_avg = [];
+
+% ⭐ DEFINE K VALUES FIRST (needed for both trajectory and segment level)
+k_values_gt = [10, 50];
+
+% Check if GT is enabled
+if ~exist('config', 'var')
+    fprintf('⚠ config does not exist\n');
+elseif ~isfield(config, 'has_ground_truth')
+    fprintf('⚠ config.has_ground_truth field missing\n');
+elseif ~config.has_ground_truth
+    fprintf('⚠ Ground truth disabled\n');
+elseif ~isfield(config, 'ground_truth_map')
+    fprintf('⚠ config.ground_truth_map missing\n');
+else
+    % GT is enabled and ground_truth_map exists
+    query_field = ['q_' strrep(query_bahn_id, '-', '_')];
+    
+    if ~isfield(config.ground_truth_map, query_field)
+        fprintf('⚠ No GT for query %s\n', query_bahn_id);
+    else
+        query_gt_data = config.ground_truth_map.(query_field);
+        
+        % ================================================================
+        % TRAJECTORY-LEVEL GT COVERAGE
+        % ================================================================
+        
+        fprintf('\n--- Trajectory-Level GT Coverage ---\n');
+        
+        % Check 1: trajectories field exists?
+        if ~isfield(query_gt_data, 'trajectories')
+            fprintf('❌ CHECK 1 FAILED: No trajectories field\n');
+        else
+            fprintf('✓ CHECK 1: trajectories field exists\n');
+            
+            query_gt_trajectories = query_gt_data.trajectories;
+            
+            % Check 2: Is it a cell?
+            if ~iscell(query_gt_trajectories)
+                fprintf('❌ CHECK 2 FAILED: Not a cell array (type: %s)\n', ...
+                    class(query_gt_trajectories));
+            else
+                fprintf('✓ CHECK 2: Is cell array\n');
+                
+                % Check 3: Is it empty?
+                if isempty(query_gt_trajectories)
+                    fprintf('❌ CHECK 3 FAILED: Cell array is empty\n');
+                else
+                    fprintf('✓ CHECK 3: Not empty (%d items)\n', length(query_gt_trajectories));
+                    
+                    % Show the GT IDs
+                    fprintf('  GT Trajectory IDs:\n');
+                    for i = 1:min(5, length(query_gt_trajectories))
+                        fprintf('    %d: %s (class: %s)\n', i, ...
+                            query_gt_trajectories{i}, class(query_gt_trajectories{i}));
+                    end
+                    
+                    % Check embedding_table
+                    fprintf('  Embedding table:\n');
+                    fprintf('    Size: %d rows\n', height(embedding_table));
+                    fprintf('    Column "bahn_id" exists: %d\n', ...
+                        ismember('bahn_id', embedding_table.Properties.VariableNames));
+                    
+                    if ismember('bahn_id', embedding_table.Properties.VariableNames)
+                        fprintf('    First 5 bahn_ids in embedding_table:\n');
+                        for i = 1:min(5, height(embedding_table))
+                            fprintf('      %d: %s (class: %s)\n', i, ...
+                                embedding_table.bahn_id{i}, class(embedding_table.bahn_id{i}));
+                        end
+                        
+                        % Check if ANY GT is in embedding_table
+                        gt_found_count = 0;
+                        for i = 1:length(query_gt_trajectories)
+                            if any(strcmp(embedding_table.bahn_id, query_gt_trajectories{i}))
+                                gt_found_count = gt_found_count + 1;
+                            end
+                        end
+                        fprintf('    GTs found in embedding_table: %d/%d\n', ...
+                            gt_found_count, length(query_gt_trajectories));
+                    end
+                    
+                    % NOW TRY TO CALCULATE
+                    fprintf('\n  🎯 Calling calculateGTCoverage()...\n');
+                    
+                    try
+                        gt_coverage_traj = calculateGTCoverage(embedding_table, ...
+                            query_gt_trajectories, k_values_gt, 'bahn_id');
+                        
+                        fprintf('  ✓ SUCCESS! GT Coverage calculated\n');
+                        
+                        if ~isempty(gt_coverage_traj)
+                            fprintf('    R@10=%.2f, ER@10=%.1fx\n', ...
+                                gt_coverage_traj.recall_at_k(1), ...
+                                gt_coverage_traj.expansion_ratios(1));
+                        else
+                            fprintf('    ⚠ But result is empty!\n');
+                        end
+                        
+                    catch ME
+                        fprintf('  ❌ FAILED with error: %s\n', ME.message);
+                        gt_coverage_traj = [];
+                    end
+                end
+            end
+        end
+        
+        % ================================================================
+        % SEGMENT-LEVEL GT COVERAGE
+        % ================================================================
+        
+        if num_query_segments > 0 && ...
+           isfield(query_gt_data, 'segments') && ...
+           ~isempty(fieldnames(query_gt_data.segments))
+            
+            segments_struct = query_gt_data.segments;
+            gt_coverage_segments = cell(num_query_segments, 1);
+            
+            fprintf('Calculating GT coverage for %d segments...\n', num_query_segments);
+            
+            for seg_idx = 1:num_query_segments
+                seg_field = sprintf('seg_%d', seg_idx);
+                
+                if isfield(segments_struct, seg_field)
+                    segment_gt_ids = segments_struct.(seg_field);
+                    
+                    if iscell(segment_gt_ids) && ~isempty(segment_gt_ids) && ...
+                       ~isempty(segment_embedding_results{seg_idx})
+                        
+                        % k_values_gt is already defined at the top!
+                        gt_coverage_segments{seg_idx} = calculateGTCoverage(...
+                            segment_embedding_results{seg_idx}, ...
+                            segment_gt_ids, k_values_gt, 'segment_id');
+                        
+                        fprintf('  Segment %d: ✓\n', seg_idx);
+                    else
+                        fprintf('  Segment %d: ⚠ Invalid GT or no embedding results\n', seg_idx);
+                    end
+                else
+                    fprintf('  Segment %d: ⚠ No GT field "%s"\n', seg_idx, seg_field);
+                end
+            end
+            
+            % Average
+            gt_coverage_seg_avg = averageGTCoverage(gt_coverage_segments);
+            
+            if ~isempty(gt_coverage_seg_avg)
+                fprintf('✓ Segment GT Coverage averaged:\n');
+                fprintf('  R@10=%.2f, ER@10=%.1fx\n', ...
+                    gt_coverage_seg_avg.recall_at_k(1), ...
+                    gt_coverage_seg_avg.expansion_ratios(1));
+            else
+                fprintf('⚠ Segment GT Coverage averaging returned empty\n');
+            end
+        else
+            fprintf('⚠ No segments to analyze\n');
+        end
+    end
+end
+
+fprintf('✓ GT Coverage analysis completed\n');
+fprintf('  gt_coverage_traj is empty: %d\n', isempty(gt_coverage_traj));
+fprintf('  gt_coverage_seg_avg is empty: %d\n', isempty(gt_coverage_seg_avg));
+fprintf('========================================\n\n');
+
+% ========================================================================
+% DTW vs EMBEDDING COVERAGE FOR SEGMENTS (EXISTING CODE)
+% ========================================================================
+
 if num_query_segments > 0 && ~isempty(segment_embedding_results)
-    fprintf('\n--- Segment Level ---\n');
+    fprintf('\n--- Segment Level (DTW vs Embedding) ---\n');
     
     segment_coverage_all = cell(num_query_segments, 1);
     valid_segment_count = 0;
@@ -1352,7 +1527,7 @@ if num_query_segments > 0 && ~isempty(segment_embedding_results)
         valid_segment_count = valid_segment_count + 1;
     end
     
-    % Average segment coverage
+    % Average segment coverage (DTW vs Embedding)
     if valid_segment_count > 0
         % Initialize arrays for averaging
         avg_coverage_points = zeros(length(k_values_to_analyze), 1);

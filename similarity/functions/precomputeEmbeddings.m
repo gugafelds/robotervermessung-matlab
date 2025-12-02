@@ -206,9 +206,8 @@ for q_idx = 1:num_queries
         for cand_idx = 1:num_candidates
             % Position
             cand_position = data_cache.candidates.position{cand_idx};
-            cand_position_norm = cand_position - cand_position(1, :);
             candidate_embeddings.position(cand_idx, :) = computePositionEmbedding(...
-                cand_position_norm, n_coarse, n_fine);
+                cand_position, n_coarse, n_fine);
             
             % Joint
             cand_joint = data_cache.candidates.joint{cand_idx};
@@ -222,7 +221,7 @@ for q_idx = 1:num_queries
             
             % Velocity
             candidate_embeddings.velocity(cand_idx, :) = computeVelocityEmbedding(...
-                cand_position_norm, n_coarse, n_fine);
+                cand_position, n_coarse, n_fine);
             
             % Metadata
             cand_metadata_struct = struct();

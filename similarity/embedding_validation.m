@@ -42,17 +42,17 @@ use_ground_truth = true;  % Set to false to disable
 
 % === Base Configuration ===
 base_config = struct();
-base_config.database_sample_size = 50;  % Fixed for fair comparison
+base_config.database_sample_size = 1170;  % Fixed for fair comparison
 base_config.random_seed = 42;
-base_config.top_k_trajectories = 20;     % Fixed
+base_config.top_k_trajectories = 100;     % Fixed
 
 % === DIMENSION 1: Embedding Architectures ===
 embedding_configs = {
     % Name,                  n_coarse, n_fine, use_multi_scale
     'Single-Fine-75',        0,        75,     false;
-    'Multi-Balanced-100',    25,       75,     true;
-    'Single-Fine-150',       0,        150,    false;
-    'Multi-Dense-200',       50,       150,    true;
+    %'Multi-Balanced-100',    25,       75,     true;
+    %'Single-Fine-150',       0,        150,    false;
+    %'Multi-Dense-200',       50,       150,    true;
 };
 
 % === DIMENSION 2: Query Trajectories ===
@@ -150,13 +150,13 @@ fprintf('  ✓ Sampled %d trajectories\n\n', length(candidate_ids));
 
 if use_ground_truth
     % Get ground truth trajectories from same recordings as queries
-    [ground_truth_ids, ground_truth_map] = getGroundTruthCandidates(conn, schema, query_ids);
+    [ground_truth_ids, ground_truth_map] = getGTCandidates(conn, schema, query_ids);
     
     if ~isempty(ground_truth_ids)
         % Remove ground truth from random sample to avoid duplicates
         candidate_ids = setdiff(candidate_ids, ground_truth_ids);
         
-        % Add ground truth to candidates
+        % ⭐ ADD GROUND TRUTH TO CANDIDATES - THIS LINE WAS MISSING!
         candidate_ids = [candidate_ids; ground_truth_ids];
         
         fprintf('=== Updated Candidate Pool ===\n');
@@ -393,7 +393,9 @@ w_orient = zeros(total_experiments, 1);
 w_vel = zeros(total_experiments, 1);
 w_meta = zeros(total_experiments, 1);
 
-% Coverage metrics arrays (trajectory level)
+% ========================================================================
+% DTW vs Embedding Coverage metrics arrays (trajectory level) - EXISTING
+% ========================================================================
 coverage_10 = zeros(total_experiments, 1);
 coverage_50 = zeros(total_experiments, 1);
 expansion_10 = zeros(total_experiments, 1);
@@ -401,13 +403,31 @@ expansion_50 = zeros(total_experiments, 1);
 recall_cov_10 = zeros(total_experiments, 1);
 recall_cov_50 = zeros(total_experiments, 1);
 
-% Coverage metrics arrays (segment level)
+% DTW vs Embedding Coverage metrics arrays (segment level) - EXISTING
 seg_coverage_10 = zeros(total_experiments, 1);
 seg_coverage_50 = zeros(total_experiments, 1);
 seg_expansion_10 = zeros(total_experiments, 1);
 seg_expansion_50 = zeros(total_experiments, 1);
 seg_recall_cov_10 = zeros(total_experiments, 1);
 seg_recall_cov_50 = zeros(total_experiments, 1);
+
+% ========================================================================
+% GT Coverage metrics arrays (trajectory level) - NEW!
+% ========================================================================
+gt_recall_10 = zeros(total_experiments, 1);
+gt_recall_50 = zeros(total_experiments, 1);
+gt_expansion_10 = zeros(total_experiments, 1);
+gt_expansion_50 = zeros(total_experiments, 1);
+
+% GT Coverage metrics arrays (segment level) - NEW!
+seg_gt_recall_10 = zeros(total_experiments, 1);
+seg_gt_recall_50 = zeros(total_experiments, 1);
+seg_gt_expansion_10 = zeros(total_experiments, 1);
+seg_gt_expansion_50 = zeros(total_experiments, 1);
+
+% Additional GT statistics arrays - NEW!
+num_gt_arr = zeros(total_experiments, 1);
+mean_gt_rank_arr = zeros(total_experiments, 1);
 
 for i = 1:total_experiments
     r = all_results{i};
@@ -444,7 +464,9 @@ for i = 1:total_experiments
         r.seg_p_at_5, r.seg_p_at_3, r.seg_p_at_1
     ];
     
-    % Coverage metrics (trajectory level)
+    % ====================================================================
+    % DTW vs Embedding Coverage metrics (trajectory level) - EXISTING
+    % ====================================================================
     if isfield(r, 'coverage_at_10')
         coverage_10(i) = r.coverage_at_10;
         expansion_10(i) = r.expansion_ratio_10;
@@ -465,7 +487,9 @@ for i = 1:total_experiments
         recall_cov_50(i) = NaN;
     end
     
-    % Coverage metrics (segment level)
+    % ====================================================================
+    % DTW vs Embedding Coverage metrics (segment level) - EXISTING
+    % ====================================================================
     if isfield(r, 'seg_coverage_at_10')
         seg_coverage_10(i) = r.seg_coverage_at_10;
         seg_expansion_10(i) = r.seg_expansion_ratio_10;
@@ -485,6 +509,59 @@ for i = 1:total_experiments
         seg_expansion_50(i) = NaN;
         seg_recall_cov_50(i) = NaN;
     end
+    
+    % ====================================================================
+    % GT Coverage metrics (trajectory level) - NEW!
+    % ====================================================================
+    if isfield(r, 'gt_recall_at_10')
+        gt_recall_10(i) = r.gt_recall_at_10;
+        gt_expansion_10(i) = r.gt_expansion_ratio_10;
+    else
+        gt_recall_10(i) = NaN;
+        gt_expansion_10(i) = NaN;
+    end
+    
+    if isfield(r, 'gt_recall_at_50')
+        gt_recall_50(i) = r.gt_recall_at_50;
+        gt_expansion_50(i) = r.gt_expansion_ratio_50;
+    else
+        gt_recall_50(i) = NaN;
+        gt_expansion_50(i) = NaN;
+    end
+    
+    % ====================================================================
+    % GT Coverage metrics (segment level) - NEW!
+    % ====================================================================
+    if isfield(r, 'seg_gt_recall_at_10')
+        seg_gt_recall_10(i) = r.seg_gt_recall_at_10;
+        seg_gt_expansion_10(i) = r.seg_gt_expansion_ratio_10;
+    else
+        seg_gt_recall_10(i) = NaN;
+        seg_gt_expansion_10(i) = NaN;
+    end
+    
+    if isfield(r, 'seg_gt_recall_at_50')
+        seg_gt_recall_50(i) = r.seg_gt_recall_at_50;
+        seg_gt_expansion_50(i) = r.seg_gt_expansion_ratio_50;
+    else
+        seg_gt_recall_50(i) = NaN;
+        seg_gt_expansion_50(i) = NaN;
+    end
+    
+    % ====================================================================
+    % Additional GT statistics - NEW!
+    % ====================================================================
+    if isfield(r, 'num_gt')
+        num_gt_arr(i) = r.num_gt;
+    else
+        num_gt_arr(i) = NaN;
+    end
+    
+    if isfield(r, 'mean_gt_rank')
+        mean_gt_rank_arr(i) = r.mean_gt_rank;
+    else
+        mean_gt_rank_arr(i) = NaN;
+    end
 end
 
 % ========================================================================
@@ -495,23 +572,41 @@ traj_table = array2table(traj_results_matrix, ...
     'VariableNames', {'Spearman', sprintf('P@%d', base_config.top_k_trajectories), ...
                       'P@10', 'P@5', 'P@3', 'P@1'});
 
-% Add coverage metrics (AFTER precision metrics, BEFORE runtime)
-traj_table = addvars(traj_table, recall_cov_50, 'After', 'P@1', ...
-    'NewVariableNames', 'Recall_Cov_50');
-traj_table = addvars(traj_table, expansion_50, 'After', 'P@1', ...
-    'NewVariableNames', 'ExpansionRatio_50');
-traj_table = addvars(traj_table, coverage_50, 'After', 'P@1', ...
-    'NewVariableNames', 'Coverage_at_50');
-traj_table = addvars(traj_table, recall_cov_10, 'After', 'P@1', ...
-    'NewVariableNames', 'Recall_Cov_10');
-traj_table = addvars(traj_table, expansion_10, 'After', 'P@1', ...
-    'NewVariableNames', 'ExpansionRatio_10');
-traj_table = addvars(traj_table, coverage_10, 'After', 'P@1', ...
-    'NewVariableNames', 'Coverage_at_10');
+% Runtime (rightmost column)
+traj_table = addvars(traj_table, runtimes, 'After', 'P@1', ...
+    'NewVariableNames', 'Runtime_min');
+
+% GT Statistics
+traj_table = addvars(traj_table, mean_gt_rank_arr, 'Before', 'Runtime_min', ...
+    'NewVariableNames', 'Mean_GT_Rank');
+traj_table = addvars(traj_table, num_gt_arr, 'Before', 'Mean_GT_Rank', ...
+    'NewVariableNames', 'Num_GT');
+
+% GT Coverage - K=50 metrics (before Num_GT)
+traj_table = addvars(traj_table, gt_expansion_50, 'Before', 'Num_GT', ...
+    'NewVariableNames', 'ER@50_GT');
+traj_table = addvars(traj_table, gt_recall_50, 'Before', 'ER@50_GT', ...
+    'NewVariableNames', 'R@50_GT');
+
+% GT Coverage - K=10 metrics (before R@50_GT)
+traj_table = addvars(traj_table, gt_expansion_10, 'Before', 'R@50_GT', ...
+    'NewVariableNames', 'ER@10_GT');
+traj_table = addvars(traj_table, gt_recall_10, 'Before', 'ER@10_GT', ...
+    'NewVariableNames', 'R@10_GT');
+
+% DTW vs Embedding Coverage - K=50 metrics (before R@10_GT)
+traj_table = addvars(traj_table, expansion_50, 'Before', 'R@10_GT', ...
+    'NewVariableNames', 'ER@50_all');
+traj_table = addvars(traj_table, recall_cov_50, 'Before', 'ER@50_all', ...
+    'NewVariableNames', 'R@50_all');
+
+% DTW vs Embedding Coverage - K=10 metrics (before R@50_all)
+traj_table = addvars(traj_table, expansion_10, 'Before', 'R@50_all', ...
+    'NewVariableNames', 'ER@10_all');
+traj_table = addvars(traj_table, recall_cov_10, 'Before', 'ER@10_all', ...
+    'NewVariableNames', 'R@10_all');
 
 % Add configuration columns (from right to left to maintain order)
-traj_table = addvars(traj_table, runtimes, 'Before', 'Spearman', ...
-    'NewVariableNames', 'Runtime_min');
 traj_table = addvars(traj_table, w_meta, 'Before', 'Runtime_min', ...
     'NewVariableNames', 'W_Meta');
 traj_table = addvars(traj_table, w_vel, 'Before', 'W_Meta', ...
@@ -552,24 +647,47 @@ seg_table = array2table(seg_results_matrix, ...
     'VariableNames', {'Spearman', sprintf('P@%d', base_config.top_k_trajectories), ...
                       'P@10', 'P@5', 'P@3', 'P@1'});
 
-% Add coverage metrics (AFTER precision metrics, BEFORE runtime)
-seg_table = addvars(seg_table, seg_recall_cov_50, 'After', 'P@1', ...
-    'NewVariableNames', 'Recall_Cov_50');
-seg_table = addvars(seg_table, seg_expansion_50, 'After', 'P@1', ...
-    'NewVariableNames', 'ExpansionRatio_50');
-seg_table = addvars(seg_table, seg_coverage_50, 'After', 'P@1', ...
-    'NewVariableNames', 'Coverage_at_50');
-seg_table = addvars(seg_table, seg_recall_cov_10, 'After', 'P@1', ...
-    'NewVariableNames', 'Recall_Cov_10');
-seg_table = addvars(seg_table, seg_expansion_10, 'After', 'P@1', ...
-    'NewVariableNames', 'ExpansionRatio_10');
-seg_table = addvars(seg_table, seg_coverage_10, 'After', 'P@1', ...
-    'NewVariableNames', 'Coverage_at_10');
+% ========================================================================
+% Add columns in SAME ORDER as trajectory table
+% Use segment data but SAME column names (Level distinguishes!)
+% ========================================================================
 
-% Add configuration columns (same structure as trajectory table)
-seg_table = addvars(seg_table, runtimes, 'Before', 'Spearman', ...
+% Runtime
+seg_table = addvars(seg_table, runtimes, 'After', 'P@1', ...
     'NewVariableNames', 'Runtime_min');
-seg_table = addvars(seg_table, w_meta, 'Before', 'Runtime_min', ...
+
+% GT Statistics (use segment GT stats where available, otherwise use traj stats)
+seg_table = addvars(seg_table, mean_gt_rank_arr, 'Before', 'Runtime_min', ...
+    'NewVariableNames', 'Mean_GT_Rank');
+seg_table = addvars(seg_table, num_gt_arr, 'Before', 'Mean_GT_Rank', ...
+    'NewVariableNames', 'Num_GT');
+
+% GT Coverage - K=50 metrics (SEGMENT DATA, SAME COLUMN NAMES!)
+seg_table = addvars(seg_table, seg_gt_expansion_50, 'Before', 'Num_GT', ...
+    'NewVariableNames', 'ER@50_GT');
+seg_table = addvars(seg_table, seg_gt_recall_50, 'Before', 'ER@50_GT', ...
+    'NewVariableNames', 'R@50_GT');
+
+% GT Coverage - K=10 metrics (SEGMENT DATA, SAME COLUMN NAMES!)
+seg_table = addvars(seg_table, seg_gt_expansion_10, 'Before', 'R@50_GT', ...
+    'NewVariableNames', 'ER@10_GT');
+seg_table = addvars(seg_table, seg_gt_recall_10, 'Before', 'ER@10_GT', ...
+    'NewVariableNames', 'R@10_GT');
+
+% DTW vs Embedding Coverage - K=50 metrics (SEGMENT DATA, SAME COLUMN NAMES!)
+seg_table = addvars(seg_table, seg_expansion_50, 'Before', 'R@10_GT', ...
+    'NewVariableNames', 'ER@50_all');
+seg_table = addvars(seg_table, seg_recall_cov_50, 'Before', 'ER@50_all', ...
+    'NewVariableNames', 'R@50_all');
+
+% DTW vs Embedding Coverage - K=10 metrics (SEGMENT DATA, SAME COLUMN NAMES!)
+seg_table = addvars(seg_table, seg_expansion_10, 'Before', 'R@50_all', ...
+    'NewVariableNames', 'ER@10_all');
+seg_table = addvars(seg_table, seg_recall_cov_10, 'Before', 'ER@10_all', ...
+    'NewVariableNames', 'R@10_all');
+
+% Configuration columns (identical to trajectory table)
+seg_table = addvars(seg_table, w_meta, 'Before', 'R@10_all', ...
     'NewVariableNames', 'W_Meta');
 seg_table = addvars(seg_table, w_vel, 'Before', 'W_Meta', ...
     'NewVariableNames', 'W_Vel');
@@ -596,7 +714,7 @@ seg_table = addvars(seg_table, query_bahn_ids, 'Before', 'Weight_Mode', ...
 seg_table = addvars(seg_table, embedding_names, 'Before', 'Query_Bahn_ID', ...
     'NewVariableNames', 'Embedding_Config');
 
-% Add level identifier
+% Level identifier
 level_seg = repmat({'Segment'}, total_experiments, 1);
 seg_table = addvars(seg_table, level_seg, 'Before', 'Embedding_Config', ...
     'NewVariableNames', 'Level');
@@ -606,7 +724,6 @@ seg_table = addvars(seg_table, level_seg, 'Before', 'Embedding_Config', ...
 %  ========================================================================
 
 combined_table = [traj_table; seg_table];
-
 
 % ========================================================================
 %%  ADD CONFIGURATION COLUMNS

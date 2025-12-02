@@ -1,10 +1,9 @@
-%% ========================================================================
 %  DTW BASELINE - TRAJECTORY SIMILARITY SEARCH (CACHE-OPTIMIZED)
 %  ========================================================================
 %  Hierarchical similarity search using Dynamic Time Warping (DTW)
 %  
-%  ⭐ This version works with pre-loaded data_cache, dtw_cache, embeddings_cache
-%  ⭐ No database loading - all data must be in cache!
+%  This version works with pre-loaded data_cache, dtw_cache, embeddings_cache
+%  No database loading - all data must be in cache!
 %  
 %  Author: Gustavo Barros
 %  Date: 02.12.2025 (Embeddings cache support added)
@@ -15,14 +14,14 @@
 %  ========================================================================
 
 if ~exist('data_cache', 'var')
-    error(['❌ data_cache not found in workspace!\n', ...
+    error(['data_cache not found in workspace!\n', ...
            'This version of dtw_baseline.m requires pre-loaded data.\n', ...
            'Please use loadDataExperiment.m first or pass data_cache via config.']);
 end
 
 fprintf('\n✓ Using pre-loaded data cache (no database queries will be made)\n');
 
-% ⭐ Check for DTW cache
+% Check for DTW cache
 if exist('dtw_cache', 'var') && ~isempty(dtw_cache)
     use_precomputed_dtw = true;
     fprintf('✓ Using pre-computed DTW cache (SKIPPING DTW computation)\n');
@@ -31,7 +30,7 @@ else
     fprintf('⚠ No DTW cache found - will compute DTW\n');
 end
 
-% ⭐ Check for Embeddings cache
+% Check for Embeddings cache
 if exist('embeddings_cache', 'var') && ~isempty(embeddings_cache)
     use_precomputed_embeddings = true;
     fprintf('✓ Using pre-computed Embeddings cache (SKIPPING Embedding computation)\n');
@@ -103,7 +102,7 @@ if ~exist('rrf_k', 'var')
     rrf_k = 60;
 end
 
-% === Weights (⭐ CRITICAL FOR EXPERIMENTS) ===
+% === Weights (CRITICAL FOR EXPERIMENTS) ===
 if ~exist('weights', 'var')
     weights = struct();
     weights.position = 1.0;

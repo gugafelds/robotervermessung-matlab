@@ -1,12 +1,10 @@
-%% ========================================================================
-%  EXPERIMENT 1C: EMBEDDING ARCHITECTURE VALIDATION (FULLY OPTIMIZED)
+%  EMBEDDING VALIDATION
 %  ========================================================================
 %  Goal: Validate optimal embedding configuration across multiple queries
 %  
 %  Tests different embedding architectures (single-scale vs multi-scale)
 %  with all weight-mode combinations from multimodality ablation
 %
-%  ⭐ NOW WITH EMBEDDINGS PRE-COMPUTATION!
 %  - Pre-loads data ONCE (15-20 min)
 %  - Pre-computes DTW ONCE (10-15 min)
 %  - Pre-computes EMBEDDINGS ONCE (10-15 min)
@@ -44,9 +42,9 @@ use_ground_truth = true;  % Set to false to disable
 
 % === Base Configuration ===
 base_config = struct();
-base_config.database_sample_size = 1170;  % Fixed for fair comparison
+base_config.database_sample_size = 50;  % Fixed for fair comparison
 base_config.random_seed = 42;
-base_config.top_k_trajectories = 100;     % Fixed
+base_config.top_k_trajectories = 20;     % Fixed
 
 % === DIMENSION 1: Embedding Architectures ===
 embedding_configs = {
@@ -59,13 +57,10 @@ embedding_configs = {
 
 % === DIMENSION 2: Query Trajectories ===
 query_ids = {
-    '1763740042';   % gt = 9
-    '1763739510';   % gt = 15
-    '1763739994';   % gt = 9
-    '1763739813';   % gt = 5
-    '1763739893';   % gt = 7
-    '1764161926';   % gt = 4
-    '1764161696';   % gt = 3
+    '1763567277';   % gt = 9
+    '1763567148';   % gt = 9
+    '1763567026';   % gt = 9
+
 };
 
 % === DIMENSION 3: DTW Mode + Weight Combinations ===
@@ -106,8 +101,8 @@ fprintf('  Embeddings pre-compute: ~15 min\n');
 fprintf('  Experiments: ~%.0f min (%d × 5 sec)\n', total_experiments * 5 / 60, total_experiments);
 fprintf('  TOTAL: ~%.1f hours\n\n', (20 + 15 + 15 + (total_experiments * 5 / 60)) / 60);
 
-%% ========================================================================
-%  DATABASE CONNECTION & SAMPLING
+% ========================================================================
+%%  DATABASE CONNECTION & SAMPLING
 %  ========================================================================
 
 fprintf('=== Connecting to Database ===\n');
@@ -549,8 +544,8 @@ level_traj = repmat({'Trajectory'}, total_experiments, 1);
 traj_table = addvars(traj_table, level_traj, 'Before', 'Embedding_Config', ...
     'NewVariableNames', 'Level');
 
-%% ========================================================================
-%  BUILD SEGMENT-LEVEL TABLE
+% ========================================================================
+%%  BUILD SEGMENT-LEVEL TABLE
 %  ========================================================================
 
 seg_table = array2table(seg_results_matrix, ...

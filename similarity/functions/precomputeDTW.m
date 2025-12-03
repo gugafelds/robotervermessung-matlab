@@ -72,6 +72,13 @@ else
     use_rotation_alignment = false;
 end
 
+if isfield(config, 'ground_truth_map')
+    ground_truth_map = config.ground_truth_map;
+    has_ground_truth = true;
+else
+    has_ground_truth = false;
+end
+
 % DTW modes to compute
 dtw_modes = {'position', 'joint_states'};
 
@@ -135,21 +142,19 @@ for q_idx = 1:num_queries
         
         if strcmp(dtw_mode, 'position')
             query_data = query_cache.position;
-            query_start = query_data(1, :);
-            query_data = query_data - query_start;
         elseif strcmp(dtw_mode, 'joint_states')
             query_data = query_cache.joint;
         end
         
         fprintf('  Query data: %d points\n', size(query_data, 1));
-        
+       
         % Load query segments
         if strcmp(dtw_mode, 'position')
             query_segments = query_cache.segments.position;
         elseif strcmp(dtw_mode, 'joint_states')
             query_segments = query_cache.segments.joint;
         end
-        
+                
         % ================================================================
         % STEP 2: Get Candidate Data from Cache
         % ================================================================
@@ -164,6 +169,66 @@ for q_idx = 1:num_queries
         end
         
         fprintf('  Candidates: %d trajectories\n', num_candidates);
+
+        % ================================================================
+        % 🔍 DEBUG STEP 3: Direct DTW to GT (BEFORE any filtering!)
+        % ================================================================
+        query_field = ['q_' strrep(query_id, '-', '_')];
+        
+        if has_ground_truth && isfield(ground_truth_map, query_field)
+            gt_ids = ground_truth_map.(query_field).trajectories;
+            
+            if ~isempty(gt_ids) && length(gt_ids) > 0
+                fprintf('\n  🔍 DEBUG: Direct DTW to GT (before filtering)...\n');
+                
+                gt_id = gt_ids{1};  % First GT
+                
+                % Find GT in ORIGINAL candidates (before any filtering!)
+                gt_candidate_idx = find(strcmp(candidate_metadata.bahn_id, gt_id));
+                
+                if ~isempty(gt_candidate_idx)
+                    gt_data = candidate_trajectories{gt_candidate_idx};
+                    
+                    % Compute DTW directly
+                    tic;
+                    direct_dtw = cDTW(query_data, gt_data, dtw_mode, cdtw_window, ...
+                        inf, use_rotation_alignment, normalize_dtw);
+                    t = toc;
+                    
+                    fprintf('    GT 1 (%s):\n', gt_id);
+                    fprintf('      Direct DTW distance: %.2f (%.3f sec)\n', direct_dtw, t);
+                    fprintf('      Query length: %d, GT length: %d\n', ...
+                        size(query_data, 1), size(gt_data, 1));
+                    
+                    % Compare to random
+                    random_idx = randi(num_candidates);
+                    random_id = candidate_metadata.bahn_id{random_idx};
+                    random_data = candidate_trajectories{random_idx};
+                    
+                    random_dtw = cDTW(query_data, random_data, dtw_mode, cdtw_window, ...
+                        inf, use_rotation_alignment, normalize_dtw);
+                    
+                    fprintf('      Random (%s): DTW = %.2f\n', random_id, random_dtw);
+                    
+                    if direct_dtw > 0
+                        ratio = random_dtw / direct_dtw;
+                        fprintf('      Ratio (Random/GT): %.2fx ', ratio);
+                        
+                        if ratio >= 5.0
+                            fprintf('✅\n');
+                        elseif ratio >= 2.0
+                            fprintf('⚠️\n');
+                        else
+                            fprintf('❌\n');
+                        end
+                    end
+                    
+                    fprintf('\n');
+                else
+                    fprintf('    ✗ GT not in candidate pool!\n\n');
+                end
+            end
+        end
         
         % ================================================================
         % STEP 3: TRAJECTORY-LEVEL DTW
@@ -211,32 +276,37 @@ for q_idx = 1:num_queries
         
         fprintf('    LB_Keogh: %d → %d\n', kim_keep_count, keogh_keep_count);
         
-        % DTW computation
-        dtw_limit = min(top_k_trajectories, keogh_keep_count);
+        % DTW computation on ALL candidates after Keogh
+        dtw_limit = keogh_keep_count;
+        
         dtw_traj_results = struct();
-        dtw_traj_results.bahn_id = cell(dtw_limit, 1);
+        dtw_traj_results.bahn_id = candidates_after_keogh.bahn_id;
         dtw_traj_results.dtw_distance = inf(dtw_limit, 1);
-        dtw_traj_results.length = zeros(dtw_limit, 1);
-        dtw_traj_results.duration = zeros(dtw_limit, 1);
+        dtw_traj_results.length = candidates_after_keogh.length;
+        dtw_traj_results.duration = candidates_after_keogh.duration;
         
         for i = 1:dtw_limit
-            candidate_id = candidates_after_keogh.bahn_id{i};
             candidate_data = candidate_trajectories_after_keogh{i};
             
             if i <= top_k_trajectories
                 best_so_far = inf;
             else
                 sorted_dists = sort(dtw_traj_results.dtw_distance(1:i-1));
-                best_so_far = sorted_dists(top_k_trajectories);
+                if length(sorted_dists) >= top_k_trajectories
+                    best_so_far = sorted_dists(top_k_trajectories);
+                else
+                    best_so_far = inf;
+                end
             end
             
             dist = cDTW(query_data, candidate_data, dtw_mode, cdtw_window, ...
                 best_so_far, use_rotation_alignment, normalize_dtw);
             
-            dtw_traj_results.bahn_id{i} = candidate_id;
             dtw_traj_results.dtw_distance(i) = dist;
-            dtw_traj_results.length(i) = candidates_after_keogh.length(i);
-            dtw_traj_results.duration(i) = candidates_after_keogh.duration(i);
+            
+            if mod(i, 100) == 0
+                fprintf('      Progress: %d/%d (%.1f%%)\n', i, dtw_limit, 100*i/dtw_limit);
+            end
         end
         
         trajectory_table = struct2table(dtw_traj_results);
@@ -244,7 +314,31 @@ for q_idx = 1:num_queries
         
         traj_dtw_time = toc(traj_dtw_tic);
         
-        fprintf('    ✓ Trajectory DTW: %.2fs\n', traj_dtw_time);
+        fprintf('    ✓ Trajectory DTW: %.2fs (%d candidates)\n', traj_dtw_time, dtw_limit);
+
+        % ================================================================
+        % 🔍 DEBUG: Check GT in final DTW results
+        % ================================================================
+        
+        if has_ground_truth && isfield(ground_truth_map, query_field)
+            gt_ids = ground_truth_map.(query_field).trajectories;
+            
+            fprintf('\n  🔍 DEBUG: GT in final DTW results...\n');
+            
+            for i = 1:min(3, length(gt_ids))
+                gt_id = gt_ids{i};
+                gt_idx = find(strcmp(trajectory_table.bahn_id, gt_id));
+                
+                if ~isempty(gt_idx)
+                    fprintf('    ✓ GT %d (%s): Rank %d, DTW %.2f\n', ...
+                        i, gt_id, gt_idx, trajectory_table.dtw_distance(gt_idx));
+                else
+                    fprintf('    ✗ GT %d (%s): NOT FOUND\n', i, gt_id);
+                end
+            end
+            
+            fprintf('\n');
+        end
         
         % ================================================================
         % STEP 4: SEGMENT-LEVEL DTW
@@ -255,7 +349,6 @@ for q_idx = 1:num_queries
         segment_results = cell(num_query_segments, 1);
         segment_dtw_times = zeros(num_query_segments, 1);
         
-        % Get segment metadata for all query segments
         all_segments_metadata = cell(num_query_segments, 1);
         
         for seg_idx = 1:num_query_segments
@@ -276,7 +369,6 @@ for q_idx = 1:num_queries
                 continue;
             end
             
-            % Get segment data from cache
             seg_candidate_ids = candidate_segments.segment_id;
             [~, seg_cache_idx] = ismember(seg_candidate_ids, data_cache.segments.segment_ids);
             
@@ -323,7 +415,7 @@ for q_idx = 1:num_queries
             end
             
             % DTW
-            seg_dtw_limit = min(top_k_trajectories, seg_keogh_keep_count);
+            seg_dtw_limit = seg_keogh_keep_count;
             segment_dtw_distances = inf(seg_dtw_limit, 1);
             
             for cand_seg_idx = 1:seg_dtw_limit
@@ -333,11 +425,15 @@ for q_idx = 1:num_queries
                     candidate_segment_data = candidate_segment_data - candidate_segment_data(1, :);
                 end
                 
-                if cand_seg_idx <= 10
+                if cand_seg_idx <= top_k_trajectories
                     best_so_far = inf;
                 else
                     sorted_seg_dists = sort(segment_dtw_distances(1:cand_seg_idx-1));
-                    best_so_far = sorted_seg_dists(10);
+                    if length(sorted_seg_dists) >= top_k_trajectories
+                        best_so_far = sorted_seg_dists(top_k_trajectories);
+                    else
+                        best_so_far = inf;
+                    end
                 end
                 
                 dist = cDTW(query_segment_data, candidate_segment_data, dtw_mode, cdtw_window, ...
@@ -399,7 +495,6 @@ fprintf('  Modes per query: %d\n', num_modes);
 fprintf('  Total combinations: %d\n', counter);
 fprintf('  Average time per combination: %.2f seconds\n\n', total_time/counter);
 
-% Memory usage
 cache_info = whos('dtw_cache');
 fprintf('--- Cache Info ---\n');
 fprintf('  Cache size: %.1f MB\n', cache_info.bytes / 1e6);

@@ -106,6 +106,10 @@ metadata_query = sprintf(...
 
 candidate_metadata = fetch(conn, metadata_query);
 
+[~, idx] = ismember(candidate_ids, candidate_metadata{:,1});
+
+candidate_metadata = candidate_metadata(idx, :);
+
 fprintf('    ✓ Loaded metadata for %d trajectories\n', height(candidate_metadata));
 
 % ------------------------------------------------------------------------

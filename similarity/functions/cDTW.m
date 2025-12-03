@@ -15,11 +15,19 @@ function dist = cDTW(seq1, seq2, mode, window_percent, best_so_far, align_rotati
         mode = 'position';
     end
 
+    if strcmp(mode, 'position')
+    % Remove translation (set start to origin)
+    seq1 = seq1 - seq1(1, :);
+    seq2 = seq2 - seq2(1, :);
+    end
+    
+    % Apply normalization AFTER translation removal
     if normalize_dtw && strcmp(mode, 'position')
         seq1 = normalizeForDTW(seq1);
         seq2 = normalizeForDTW(seq2);
     end
-
+    
+    % Apply rotation alignment AFTER normalization
     if align_rotation && strcmp(mode, 'position')
         [seq1, seq2] = alignRotation(seq1, seq2);
     end

@@ -305,32 +305,25 @@ if exist('coverage_traj', 'var') && ~isempty(coverage_traj)
     idx_10 = find(coverage_traj.k_values == 10, 1);
     idx_50 = find(coverage_traj.k_values == 50, 1);
     
+    % P_all: Maximum coverage point across all K values
+    % This is the minimum embedding top-X needed to cover ALL DTW candidates
+    results.p_all_traj = max(coverage_traj.coverage_points);
+    
     if ~isempty(idx_10)
-        results.coverage_at_10 = coverage_traj.coverage_points(idx_10);
-        results.expansion_ratio_10 = coverage_traj.expansion_ratios(idx_10);
         results.recall_at_10 = coverage_traj.recall_at_k(idx_10);
     else
-        results.coverage_at_10 = NaN;
-        results.expansion_ratio_10 = NaN;
         results.recall_at_10 = NaN;
     end
     
     if ~isempty(idx_50)
-        results.coverage_at_50 = coverage_traj.coverage_points(idx_50);
-        results.expansion_ratio_50 = coverage_traj.expansion_ratios(idx_50);
         results.recall_at_50 = coverage_traj.recall_at_k(idx_50);
     else
-        results.coverage_at_50 = NaN;
-        results.expansion_ratio_50 = NaN;
         results.recall_at_50 = NaN;
     end
 else
     % No coverage data available
-    results.coverage_at_10 = NaN;
-    results.expansion_ratio_10 = NaN;
+    results.p_all_traj = NaN;
     results.recall_at_10 = NaN;
-    results.coverage_at_50 = NaN;
-    results.expansion_ratio_50 = NaN;
     results.recall_at_50 = NaN;
 end
 
@@ -343,32 +336,24 @@ if exist('coverage_seg_avg', 'var') && ~isempty(coverage_seg_avg)
     idx_10 = find(coverage_seg_avg.k_values == 10, 1);
     idx_50 = find(coverage_seg_avg.k_values == 50, 1);
     
-    if ~isempty(idx_10) && coverage_seg_avg.expansion_ratios(idx_10) > 0
-        results.seg_coverage_at_10 = coverage_seg_avg.coverage_points(idx_10);
-        results.seg_expansion_ratio_10 = coverage_seg_avg.expansion_ratios(idx_10);
+    % P_all: Maximum coverage point across all K values
+    results.p_all_seg = max(coverage_seg_avg.coverage_points);
+    
+    if ~isempty(idx_10)
         results.seg_recall_at_10 = coverage_seg_avg.recall_at_k(idx_10);
     else
-        results.seg_coverage_at_10 = NaN;
-        results.seg_expansion_ratio_10 = NaN;
         results.seg_recall_at_10 = NaN;
     end
     
-    if ~isempty(idx_50) && coverage_seg_avg.expansion_ratios(idx_50) > 0
-        results.seg_coverage_at_50 = coverage_seg_avg.coverage_points(idx_50);
-        results.seg_expansion_ratio_50 = coverage_seg_avg.expansion_ratios(idx_50);
+    if ~isempty(idx_50)
         results.seg_recall_at_50 = coverage_seg_avg.recall_at_k(idx_50);
     else
-        results.seg_coverage_at_50 = NaN;
-        results.seg_expansion_ratio_50 = NaN;
         results.seg_recall_at_50 = NaN;
     end
 else
     % No segment coverage data available
-    results.seg_coverage_at_10 = NaN;
-    results.seg_expansion_ratio_10 = NaN;
+    results.p_all_seg = NaN;
     results.seg_recall_at_10 = NaN;
-    results.seg_coverage_at_50 = NaN;
-    results.seg_expansion_ratio_50 = NaN;
     results.seg_recall_at_50 = NaN;
 end
 
@@ -381,47 +366,35 @@ if exist('gt_coverage_traj', 'var') && ~isempty(gt_coverage_traj)
     idx_10 = find(gt_coverage_traj.k_values == 10, 1);
     idx_50 = find(gt_coverage_traj.k_values == 50, 1);
     
+    % P_GT: Overall coverage point for ALL GT trajectories
+    results.p_gt_traj = gt_coverage_traj.overall_coverage_point;
+    
     if ~isempty(idx_10)
         results.gt_recall_at_10 = gt_coverage_traj.recall_at_k(idx_10);
-        results.gt_expansion_ratio_10 = gt_coverage_traj.expansion_ratios(idx_10);
-        results.gt_coverage_at_10 = gt_coverage_traj.coverage_points(idx_10);
     else
         results.gt_recall_at_10 = NaN;
-        results.gt_expansion_ratio_10 = NaN;
-        results.gt_coverage_at_10 = NaN;
     end
     
     if ~isempty(idx_50)
         results.gt_recall_at_50 = gt_coverage_traj.recall_at_k(idx_50);
-        results.gt_expansion_ratio_50 = gt_coverage_traj.expansion_ratios(idx_50);
-        results.gt_coverage_at_50 = gt_coverage_traj.coverage_points(idx_50);
     else
         results.gt_recall_at_50 = NaN;
-        results.gt_expansion_ratio_50 = NaN;
-        results.gt_coverage_at_50 = NaN;
     end
     
     % Additional GT statistics
     results.num_gt = gt_coverage_traj.num_gt;
     results.num_gt_found = gt_coverage_traj.num_gt_found;
     results.mean_gt_rank = gt_coverage_traj.mean_gt_rank;
-    results.overall_gt_coverage = gt_coverage_traj.overall_coverage_point;
-    results.overall_gt_expansion = gt_coverage_traj.overall_expansion_ratio;
 else
     % No GT coverage data available
+    results.p_gt_traj = NaN;
     results.gt_recall_at_10 = NaN;
-    results.gt_expansion_ratio_10 = NaN;
-    results.gt_coverage_at_10 = NaN;
     results.gt_recall_at_50 = NaN;
-    results.gt_expansion_ratio_50 = NaN;
-    results.gt_coverage_at_50 = NaN;
     
     % Additional GT statistics
     results.num_gt = NaN;
     results.num_gt_found = NaN;
     results.mean_gt_rank = NaN;
-    results.overall_gt_coverage = NaN;
-    results.overall_gt_expansion = NaN;
 end
 
 % ========================================================================
@@ -433,43 +406,31 @@ if exist('gt_coverage_seg_avg', 'var') && ~isempty(gt_coverage_seg_avg)
     idx_10 = find(gt_coverage_seg_avg.k_values == 10, 1);
     idx_50 = find(gt_coverage_seg_avg.k_values == 50, 1);
     
+    % P_GT: Overall coverage point for ALL GT segments
+    results.p_gt_seg = gt_coverage_seg_avg.overall_coverage_point;
+    
     if ~isempty(idx_10)
         results.seg_gt_recall_at_10 = gt_coverage_seg_avg.recall_at_k(idx_10);
-        results.seg_gt_expansion_ratio_10 = gt_coverage_seg_avg.expansion_ratios(idx_10);
-        results.seg_gt_coverage_at_10 = gt_coverage_seg_avg.coverage_points(idx_10);
     else
         results.seg_gt_recall_at_10 = NaN;
-        results.seg_gt_expansion_ratio_10 = NaN;
-        results.seg_gt_coverage_at_10 = NaN;
     end
     
     if ~isempty(idx_50)
         results.seg_gt_recall_at_50 = gt_coverage_seg_avg.recall_at_k(idx_50);
-        results.seg_gt_expansion_ratio_50 = gt_coverage_seg_avg.expansion_ratios(idx_50);
-        results.seg_gt_coverage_at_50 = gt_coverage_seg_avg.coverage_points(idx_50);
     else
         results.seg_gt_recall_at_50 = NaN;
-        results.seg_gt_expansion_ratio_50 = NaN;
-        results.seg_gt_coverage_at_50 = NaN;
     end
     
     % Additional segment GT statistics
     results.seg_mean_gt_rank = gt_coverage_seg_avg.mean_gt_rank;
-    results.seg_overall_gt_coverage = gt_coverage_seg_avg.overall_coverage_point;
-    results.seg_overall_gt_expansion = gt_coverage_seg_avg.overall_expansion_ratio;
 else
     % No segment GT coverage data available
+    results.p_gt_seg = NaN;
     results.seg_gt_recall_at_10 = NaN;
-    results.seg_gt_expansion_ratio_10 = NaN;
-    results.seg_gt_coverage_at_10 = NaN;
     results.seg_gt_recall_at_50 = NaN;
-    results.seg_gt_expansion_ratio_50 = NaN;
-    results.seg_gt_coverage_at_50 = NaN;
     
     % Additional segment GT statistics
     results.seg_mean_gt_rank = NaN;
-    results.seg_overall_gt_coverage = NaN;
-    results.seg_overall_gt_expansion = NaN;
 end
 
 end

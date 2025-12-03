@@ -42,25 +42,41 @@ use_ground_truth = true;  % Set to false to disable
 
 % === Base Configuration ===
 base_config = struct();
-base_config.database_sample_size = 1170;  % Fixed for fair comparison
+base_config.database_sample_size = 80;  % Fixed for fair comparison
 base_config.random_seed = 42;
-base_config.top_k_trajectories = 100;     % Fixed
+base_config.top_k_trajectories = 50;     % Fixed
 
 % === DIMENSION 1: Embedding Architectures ===
 embedding_configs = {
     % Name,                  n_coarse, n_fine, use_multi_scale
-    'Single-Fine-75',        0,        75,     false;
-    %'Multi-Balanced-100',    25,       75,     true;
-    %'Single-Fine-150',       0,        150,    false;
-    %'Multi-Dense-200',       50,       150,    true;
+    'Single-Fine-250',        0,        250,     false;
+    'Multi-Balanced-350',    50,       300,     true;
+    'Single-Fine-500',       0,        500,    false;
+    'Multi-Dense-700',       200,       500,    true;
 };
 
 % === DIMENSION 2: Query Trajectories ===
 query_ids = {
-    '1763567277';   % gt = 9
-    '1763567148';   % gt = 9
-    '1763567026';   % gt = 9
-
+    '1764766034'; % np = 2 / p = 843
+    %'1764766001'; % np = 2 / p = 861
+    %'1764765958'; % np = 2 / p = 1077
+    %'1764765635'; % np = 2 / p = 1278
+    %'1764765776'; % np = 2 / p = 1851
+    %'1763567277'; % np = 3 / p = 1188
+    %'1763567148'; % np = 3 / p = 1482  
+    %'1763567026'; % np = 3 / p = 1434
+    %'1764763889'; % np = 3 / p = 1392
+    %'1764763510'; % np = 3 / p = 1554
+    %'1764762584'; % np = 4 / p = 2034
+    %'1764763238'; % np = 4 / p = 1341
+    %'1764762971'; % np = 4 / p = 1353
+    %'1764762831'; % np = 4 / p = 1326
+    %'1764762655'; % np = 4 / p = 1539
+    %'1764765476'; % np = 5 / p = 1398
+    %'1764765121'; % np = 5 / p = 2076
+    %'1764764821'; % np = 5 / p = 1944
+    %'1764765396'; % np = 5 / p = 1692
+    %'1764765286'; % np = 5 / p = 1377
 };
 
 % === DIMENSION 3: DTW Mode + Weight Combinations ===
@@ -177,6 +193,35 @@ else
     base_config.has_ground_truth = false;
 end
 
+if use_ground_truth && ~isempty(ground_truth_ids)
+    query_id = query_ids{1};  % Erste Query
+    query_field = sprintf('q_%s', strrep(query_id, '-', '_'));
+    
+    if isfield(ground_truth_map, query_field)
+        gt_for_query = ground_truth_map.(query_field).trajectories;
+        
+        fprintf('\n╔════════════════════════════════════════════════════════════════╗\n');
+        fprintf('║ 🔍 DEBUG: Ground Truth Check                                  ║\n');
+        fprintf('╚════════════════════════════════════════════════════════════════╝\n');
+        fprintf('Query: %s\n', query_id);
+        fprintf('GT count: %d\n', length(gt_for_query));
+        fprintf('Total candidates: %d\n', length(candidate_ids));
+        
+        % Check if each GT is in candidates
+        for i = 1:length(gt_for_query)
+            gt_id = gt_for_query{i};
+            is_in_candidates = ismember(gt_id, candidate_ids);
+            
+            if is_in_candidates
+                fprintf('  ✓ GT %d (%s): IN candidates\n', i, gt_id);
+            else
+                fprintf('  ✗ GT %d (%s): NOT IN candidates! ❌\n', i, gt_id);
+            end
+        end
+        fprintf('\n');
+    end
+end
+
 % ========================================================================
 %%  PRE-LOAD ALL DATA (ONE-TIME COST)
 %  ========================================================================
@@ -202,6 +247,79 @@ fprintf('║  Memory: %.1f MB                                               ║\
 fprintf('║  Ready to pre-compute DTW and embeddings!                      ║\n');
 fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
 
+
+% ================================================================
+% 🔍 DEBUG: Verify data cache integrity
+% ================================================================
+
+fprintf('\n╔════════════════════════════════════════════════════════════════╗\n');
+fprintf('║ 🔍 DEBUG: Verifying Data Cache Integrity                      ║\n');
+fprintf('╚════════════════════════════════════════════════════════════════╝\n');
+
+if use_ground_truth && ~isempty(ground_truth_ids)
+    query_id = query_ids{1};
+    query_field = sprintf('q_%s', strrep(query_id, '-', '_'));
+    gt_ids = ground_truth_map.(query_field).trajectories;
+    
+    if ~isempty(gt_ids)
+        gt_id = gt_ids{1};
+        
+        % Find GT in cache
+        gt_idx = find(strcmp(data_cache.candidates.bahn_ids, gt_id));
+        
+        if ~isempty(gt_idx)
+            fprintf('\nGT: %s (index %d in cache)\n', gt_id, gt_idx);
+            
+            % Load GT directly from DB
+            fprintf('  Loading from DB for comparison...\n');
+            gt_position_db = loadTrajectoryPosition(conn, schema, gt_id);
+            gt_joint_db = loadTrajectoryJointStates(conn, schema, gt_id);
+            
+            % Compare with cache
+            gt_position_cache = data_cache.candidates.position{gt_idx};
+            gt_joint_cache = data_cache.candidates.joint{gt_idx};
+            
+            fprintf('\n  Position Data:\n');
+            fprintf('    DB length: %d\n', size(gt_position_db, 1));
+            fprintf('    Cache length: %d\n', size(gt_position_cache, 1));
+            fprintf('    DB first point: [%.2f, %.2f, %.2f]\n', ...
+                gt_position_db(1,1), gt_position_db(1,2), gt_position_db(1,3));
+            fprintf('    Cache first point: [%.2f, %.2f, %.2f]\n', ...
+                gt_position_cache(1,1), gt_position_cache(1,2), gt_position_cache(1,3));
+            
+            pos_diff = norm(gt_position_db(1,:) - gt_position_cache(1,:));
+            fprintf('    Difference: %.2f mm\n', pos_diff);
+            
+            if pos_diff < 0.01
+                fprintf('    ✅ Cache matches DB!\n');
+            else
+                fprintf('    ❌ Cache DOES NOT match DB!\n');
+            end
+            
+            fprintf('\n  Joint Data:\n');
+            fprintf('    DB length: %d\n', size(gt_joint_db, 1));
+            fprintf('    Cache length: %d\n', size(gt_joint_cache, 1));
+            fprintf('    DB first joints: [%.4f, %.4f, %.4f, ...]\n', ...
+                gt_joint_db(1,1), gt_joint_db(1,2), gt_joint_db(1,3));
+            fprintf('    Cache first joints: [%.4f, %.4f, %.4f, ...]\n', ...
+                gt_joint_cache(1,1), gt_joint_cache(1,2), gt_joint_cache(1,3));
+            
+            joint_diff = norm(gt_joint_db(1,:) - gt_joint_cache(1,:));
+            fprintf('    Difference: %.6f rad\n', joint_diff);
+            
+            if joint_diff < 0.001
+                fprintf('    ✅ Cache matches DB!\n');
+            else
+                fprintf('    ❌ Cache DOES NOT match DB!\n');
+            end
+        else
+            fprintf('✗ GT not found in cache!\n');
+        end
+    end
+end
+
+fprintf('\n');
+
 % ========================================================================
 %%  PRE-COMPUTE ALL DTW (ONE-TIME COST)
 %  ========================================================================
@@ -217,11 +335,12 @@ dtw_tic = tic;
 % Prepare config for DTW pre-computation
 dtw_config = struct();
 dtw_config.top_k_trajectories = base_config.top_k_trajectories;
-dtw_config.lb_kim_keep_ratio = 0.6;
-dtw_config.lb_keogh_candidates = 200;
-dtw_config.cdtw_window = 0.10;
-dtw_config.normalize_dtw = true;
+dtw_config.lb_kim_keep_ratio = 1.0;
+dtw_config.lb_keogh_candidates = 500;
+dtw_config.cdtw_window = 0.50;
+dtw_config.normalize_dtw = false;
 dtw_config.use_rotation_alignment = false;
+dtw_config.ground_truth_map = ground_truth_map;
 
 dtw_cache = precomputeDTW(data_cache, query_ids, dtw_config);
 
@@ -393,37 +512,25 @@ w_orient = zeros(total_experiments, 1);
 w_vel = zeros(total_experiments, 1);
 w_meta = zeros(total_experiments, 1);
 
-% ========================================================================
-% DTW vs Embedding Coverage metrics arrays (trajectory level) - EXISTING
-% ========================================================================
-coverage_10 = zeros(total_experiments, 1);
-coverage_50 = zeros(total_experiments, 1);
-expansion_10 = zeros(total_experiments, 1);
-expansion_50 = zeros(total_experiments, 1);
+% DTW vs Embedding Coverage metrics arrays (trajectory level)
+p_all_traj = zeros(total_experiments, 1);  % Coverage point for all DTW candidates
 recall_cov_10 = zeros(total_experiments, 1);
 recall_cov_50 = zeros(total_experiments, 1);
 
-% DTW vs Embedding Coverage metrics arrays (segment level) - EXISTING
-seg_coverage_10 = zeros(total_experiments, 1);
-seg_coverage_50 = zeros(total_experiments, 1);
-seg_expansion_10 = zeros(total_experiments, 1);
-seg_expansion_50 = zeros(total_experiments, 1);
+% DTW vs Embedding Coverage metrics arrays (segment level)
+p_all_seg = zeros(total_experiments, 1);   % Coverage point for all DTW candidates
 seg_recall_cov_10 = zeros(total_experiments, 1);
 seg_recall_cov_50 = zeros(total_experiments, 1);
 
-% ========================================================================
-% GT Coverage metrics arrays (trajectory level) - NEW!
-% ========================================================================
+% GT Coverage metrics arrays (trajectory level)
+p_gt_traj = zeros(total_experiments, 1);   % Coverage point for all GT trajectories
 gt_recall_10 = zeros(total_experiments, 1);
 gt_recall_50 = zeros(total_experiments, 1);
-gt_expansion_10 = zeros(total_experiments, 1);
-gt_expansion_50 = zeros(total_experiments, 1);
 
-% GT Coverage metrics arrays (segment level) - NEW!
+% GT Coverage metrics arrays (segment level)
+p_gt_seg = zeros(total_experiments, 1);    % Coverage point for all GT segments
 seg_gt_recall_10 = zeros(total_experiments, 1);
 seg_gt_recall_50 = zeros(total_experiments, 1);
-seg_gt_expansion_10 = zeros(total_experiments, 1);
-seg_gt_expansion_50 = zeros(total_experiments, 1);
 
 % Additional GT statistics arrays - NEW!
 num_gt_arr = zeros(total_experiments, 1);
@@ -465,87 +572,48 @@ for i = 1:total_experiments
     ];
     
     % ====================================================================
-    % DTW vs Embedding Coverage metrics (trajectory level) - EXISTING
-    % ====================================================================
-    if isfield(r, 'coverage_at_10')
-        coverage_10(i) = r.coverage_at_10;
-        expansion_10(i) = r.expansion_ratio_10;
+    % DTW vs Embedding Coverage metrics (trajectory level)
+    if isfield(r, 'p_all_traj')
+        p_all_traj(i) = r.p_all_traj;
         recall_cov_10(i) = r.recall_at_10;
-    else
-        coverage_10(i) = NaN;
-        expansion_10(i) = NaN;
-        recall_cov_10(i) = NaN;
-    end
-    
-    if isfield(r, 'coverage_at_50')
-        coverage_50(i) = r.coverage_at_50;
-        expansion_50(i) = r.expansion_ratio_50;
         recall_cov_50(i) = r.recall_at_50;
     else
-        coverage_50(i) = NaN;
-        expansion_50(i) = NaN;
+        p_all_traj(i) = NaN;
+        recall_cov_10(i) = NaN;
         recall_cov_50(i) = NaN;
     end
     
-    % ====================================================================
-    % DTW vs Embedding Coverage metrics (segment level) - EXISTING
-    % ====================================================================
-    if isfield(r, 'seg_coverage_at_10')
-        seg_coverage_10(i) = r.seg_coverage_at_10;
-        seg_expansion_10(i) = r.seg_expansion_ratio_10;
+    % DTW vs Embedding Coverage metrics (segment level)
+    if isfield(r, 'p_all_seg')
+        p_all_seg(i) = r.p_all_seg;
         seg_recall_cov_10(i) = r.seg_recall_at_10;
-    else
-        seg_coverage_10(i) = NaN;
-        seg_expansion_10(i) = NaN;
-        seg_recall_cov_10(i) = NaN;
-    end
-    
-    if isfield(r, 'seg_coverage_at_50')
-        seg_coverage_50(i) = r.seg_coverage_at_50;
-        seg_expansion_50(i) = r.seg_expansion_ratio_50;
         seg_recall_cov_50(i) = r.seg_recall_at_50;
     else
-        seg_coverage_50(i) = NaN;
-        seg_expansion_50(i) = NaN;
+        p_all_seg(i) = NaN;
+        seg_recall_cov_10(i) = NaN;
         seg_recall_cov_50(i) = NaN;
     end
     
-    % ====================================================================
-    % GT Coverage metrics (trajectory level) - NEW!
-    % ====================================================================
-    if isfield(r, 'gt_recall_at_10')
+    % GT Coverage metrics (trajectory level)
+    if isfield(r, 'p_gt_traj')
+        p_gt_traj(i) = r.p_gt_traj;
         gt_recall_10(i) = r.gt_recall_at_10;
-        gt_expansion_10(i) = r.gt_expansion_ratio_10;
-    else
-        gt_recall_10(i) = NaN;
-        gt_expansion_10(i) = NaN;
-    end
-    
-    if isfield(r, 'gt_recall_at_50')
         gt_recall_50(i) = r.gt_recall_at_50;
-        gt_expansion_50(i) = r.gt_expansion_ratio_50;
     else
+        p_gt_traj(i) = NaN;
+        gt_recall_10(i) = NaN;
         gt_recall_50(i) = NaN;
-        gt_expansion_50(i) = NaN;
     end
     
-    % ====================================================================
-    % GT Coverage metrics (segment level) - NEW!
-    % ====================================================================
-    if isfield(r, 'seg_gt_recall_at_10')
+    % GT Coverage metrics (segment level)
+    if isfield(r, 'p_gt_seg')
+        p_gt_seg(i) = r.p_gt_seg;
         seg_gt_recall_10(i) = r.seg_gt_recall_at_10;
-        seg_gt_expansion_10(i) = r.seg_gt_expansion_ratio_10;
-    else
-        seg_gt_recall_10(i) = NaN;
-        seg_gt_expansion_10(i) = NaN;
-    end
-    
-    if isfield(r, 'seg_gt_recall_at_50')
         seg_gt_recall_50(i) = r.seg_gt_recall_at_50;
-        seg_gt_expansion_50(i) = r.seg_gt_expansion_ratio_50;
     else
+        p_gt_seg(i) = NaN;
+        seg_gt_recall_10(i) = NaN;
         seg_gt_recall_50(i) = NaN;
-        seg_gt_expansion_50(i) = NaN;
     end
     
     % ====================================================================
@@ -572,72 +640,50 @@ traj_table = array2table(traj_results_matrix, ...
     'VariableNames', {'Spearman', sprintf('P@%d', base_config.top_k_trajectories), ...
                       'P@10', 'P@5', 'P@3', 'P@1'});
 
-% Runtime (rightmost column)
-traj_table = addvars(traj_table, runtimes, 'After', 'P@1', ...
-    'NewVariableNames', 'Runtime_min');
-
-% GT Statistics
-traj_table = addvars(traj_table, mean_gt_rank_arr, 'Before', 'Runtime_min', ...
-    'NewVariableNames', 'Mean_GT_Rank');
-traj_table = addvars(traj_table, num_gt_arr, 'Before', 'Mean_GT_Rank', ...
-    'NewVariableNames', 'Num_GT');
-
-% GT Coverage - K=50 metrics (before Num_GT)
-traj_table = addvars(traj_table, gt_expansion_50, 'Before', 'Num_GT', ...
-    'NewVariableNames', 'ER@50_GT');
-traj_table = addvars(traj_table, gt_recall_50, 'Before', 'ER@50_GT', ...
-    'NewVariableNames', 'R@50_GT');
-
-% GT Coverage - K=10 metrics (before R@50_GT)
-traj_table = addvars(traj_table, gt_expansion_10, 'Before', 'R@50_GT', ...
-    'NewVariableNames', 'ER@10_GT');
-traj_table = addvars(traj_table, gt_recall_10, 'Before', 'ER@10_GT', ...
-    'NewVariableNames', 'R@10_GT');
-
-% DTW vs Embedding Coverage - K=50 metrics (before R@10_GT)
-traj_table = addvars(traj_table, expansion_50, 'Before', 'R@10_GT', ...
-    'NewVariableNames', 'ER@50_all');
-traj_table = addvars(traj_table, recall_cov_50, 'Before', 'ER@50_all', ...
-    'NewVariableNames', 'R@50_all');
-
-% DTW vs Embedding Coverage - K=10 metrics (before R@50_all)
-traj_table = addvars(traj_table, expansion_10, 'Before', 'R@50_all', ...
-    'NewVariableNames', 'ER@10_all');
-traj_table = addvars(traj_table, recall_cov_10, 'Before', 'ER@10_all', ...
+% Add coverage metrics after P@1
+traj_table = addvars(traj_table, recall_cov_10, 'After', 'P@1', ...
     'NewVariableNames', 'R@10_all');
+traj_table = addvars(traj_table, recall_cov_50, 'After', 'R@10_all', ...
+    'NewVariableNames', 'R@50_all');
+traj_table = addvars(traj_table, p_all_traj, 'After', 'R@50_all', ...
+    'NewVariableNames', 'P_all');
 
-% Add configuration columns (from right to left to maintain order)
-traj_table = addvars(traj_table, w_meta, 'Before', 'Runtime_min', ...
-    'NewVariableNames', 'W_Meta');
-traj_table = addvars(traj_table, w_vel, 'Before', 'W_Meta', ...
-    'NewVariableNames', 'W_Vel');
-traj_table = addvars(traj_table, w_orient, 'Before', 'W_Vel', ...
-    'NewVariableNames', 'W_Orient');
-traj_table = addvars(traj_table, w_joint, 'Before', 'W_Orient', ...
-    'NewVariableNames', 'W_Joint');
-traj_table = addvars(traj_table, w_pos, 'Before', 'W_Joint', ...
-    'NewVariableNames', 'W_Pos');
-traj_table = addvars(traj_table, multi_scale_arr, 'Before', 'W_Pos', ...
-    'NewVariableNames', 'Multi_Scale');
-traj_table = addvars(traj_table, total_dims_arr, 'Before', 'Multi_Scale', ...
+% Add GT coverage metrics
+traj_table = addvars(traj_table, gt_recall_10, 'After', 'P_all', ...
+    'NewVariableNames', 'R@10_GT');
+traj_table = addvars(traj_table, gt_recall_50, 'After', 'R@10_GT', ...
+    'NewVariableNames', 'R@50_GT');
+traj_table = addvars(traj_table, p_gt_traj, 'After', 'R@50_GT', ...
+    'NewVariableNames', 'P_GT');
+
+% Add GT statistics
+traj_table = addvars(traj_table, num_gt_arr, 'After', 'P_GT', ...
+    'NewVariableNames', 'Num_GT');
+traj_table = addvars(traj_table, mean_gt_rank_arr, 'After', 'Num_GT', ...
+    'NewVariableNames', 'Mean_GT_Rank');
+
+% Add configuration columns BEFORE Spearman (from right to left)
+traj_table = addvars(traj_table, dtw_modes, 'Before', 'Spearman', ...
+    'NewVariableNames', 'DTW_Mode');
+traj_table = addvars(traj_table, total_dims_arr, 'Before', 'DTW_Mode', ...
     'NewVariableNames', 'Total_Dims');
 traj_table = addvars(traj_table, n_fine_arr, 'Before', 'Total_Dims', ...
     'NewVariableNames', 'N_Fine');
 traj_table = addvars(traj_table, n_coarse_arr, 'Before', 'N_Fine', ...
     'NewVariableNames', 'N_Coarse');
-traj_table = addvars(traj_table, dtw_modes, 'Before', 'N_Coarse', ...
-    'NewVariableNames', 'DTW_Mode');
-traj_table = addvars(traj_table, weight_modes, 'Before', 'DTW_Mode', ...
+traj_table = addvars(traj_table, weight_modes, 'Before', 'N_Coarse', ...
     'NewVariableNames', 'Weight_Mode');
-traj_table = addvars(traj_table, query_bahn_ids, 'Before', 'Weight_Mode', ...
-    'NewVariableNames', 'Query_Bahn_ID');
-traj_table = addvars(traj_table, embedding_names, 'Before', 'Query_Bahn_ID', ...
+traj_table = addvars(traj_table, embedding_names, 'Before', 'Weight_Mode', ...
     'NewVariableNames', 'Embedding_Config');
 
 % Add level identifier
 level_traj = repmat({'Trajectory'}, total_experiments, 1);
 traj_table = addvars(traj_table, level_traj, 'Before', 'Embedding_Config', ...
     'NewVariableNames', 'Level');
+
+% Add Query_Bahn_ID
+traj_table = addvars(traj_table, query_bahn_ids, 'Before', 'Level', ...
+    'NewVariableNames', 'Query_Bahn_ID');
 
 % ========================================================================
 %%  BUILD SEGMENT-LEVEL TABLE
@@ -647,77 +693,50 @@ seg_table = array2table(seg_results_matrix, ...
     'VariableNames', {'Spearman', sprintf('P@%d', base_config.top_k_trajectories), ...
                       'P@10', 'P@5', 'P@3', 'P@1'});
 
-% ========================================================================
-% Add columns in SAME ORDER as trajectory table
-% Use segment data but SAME column names (Level distinguishes!)
-% ========================================================================
-
-% Runtime
-seg_table = addvars(seg_table, runtimes, 'After', 'P@1', ...
-    'NewVariableNames', 'Runtime_min');
-
-% GT Statistics (use segment GT stats where available, otherwise use traj stats)
-seg_table = addvars(seg_table, mean_gt_rank_arr, 'Before', 'Runtime_min', ...
-    'NewVariableNames', 'Mean_GT_Rank');
-seg_table = addvars(seg_table, num_gt_arr, 'Before', 'Mean_GT_Rank', ...
-    'NewVariableNames', 'Num_GT');
-
-% GT Coverage - K=50 metrics (SEGMENT DATA, SAME COLUMN NAMES!)
-seg_table = addvars(seg_table, seg_gt_expansion_50, 'Before', 'Num_GT', ...
-    'NewVariableNames', 'ER@50_GT');
-seg_table = addvars(seg_table, seg_gt_recall_50, 'Before', 'ER@50_GT', ...
-    'NewVariableNames', 'R@50_GT');
-
-% GT Coverage - K=10 metrics (SEGMENT DATA, SAME COLUMN NAMES!)
-seg_table = addvars(seg_table, seg_gt_expansion_10, 'Before', 'R@50_GT', ...
-    'NewVariableNames', 'ER@10_GT');
-seg_table = addvars(seg_table, seg_gt_recall_10, 'Before', 'ER@10_GT', ...
-    'NewVariableNames', 'R@10_GT');
-
-% DTW vs Embedding Coverage - K=50 metrics (SEGMENT DATA, SAME COLUMN NAMES!)
-seg_table = addvars(seg_table, seg_expansion_50, 'Before', 'R@10_GT', ...
-    'NewVariableNames', 'ER@50_all');
-seg_table = addvars(seg_table, seg_recall_cov_50, 'Before', 'ER@50_all', ...
-    'NewVariableNames', 'R@50_all');
-
-% DTW vs Embedding Coverage - K=10 metrics (SEGMENT DATA, SAME COLUMN NAMES!)
-seg_table = addvars(seg_table, seg_expansion_10, 'Before', 'R@50_all', ...
-    'NewVariableNames', 'ER@10_all');
-seg_table = addvars(seg_table, seg_recall_cov_10, 'Before', 'ER@10_all', ...
+% Add coverage metrics after P@1 (SEGMENT DATA!)
+seg_table = addvars(seg_table, seg_recall_cov_10, 'After', 'P@1', ...
     'NewVariableNames', 'R@10_all');
+seg_table = addvars(seg_table, seg_recall_cov_50, 'After', 'R@10_all', ...
+    'NewVariableNames', 'R@50_all');
+seg_table = addvars(seg_table, p_all_seg, 'After', 'R@50_all', ...
+    'NewVariableNames', 'P_all');
 
-% Configuration columns (identical to trajectory table)
-seg_table = addvars(seg_table, w_meta, 'Before', 'R@10_all', ...
-    'NewVariableNames', 'W_Meta');
-seg_table = addvars(seg_table, w_vel, 'Before', 'W_Meta', ...
-    'NewVariableNames', 'W_Vel');
-seg_table = addvars(seg_table, w_orient, 'Before', 'W_Vel', ...
-    'NewVariableNames', 'W_Orient');
-seg_table = addvars(seg_table, w_joint, 'Before', 'W_Orient', ...
-    'NewVariableNames', 'W_Joint');
-seg_table = addvars(seg_table, w_pos, 'Before', 'W_Joint', ...
-    'NewVariableNames', 'W_Pos');
-seg_table = addvars(seg_table, multi_scale_arr, 'Before', 'W_Pos', ...
-    'NewVariableNames', 'Multi_Scale');
-seg_table = addvars(seg_table, total_dims_arr, 'Before', 'Multi_Scale', ...
+% Add GT coverage metrics (SEGMENT DATA!)
+seg_table = addvars(seg_table, seg_gt_recall_10, 'After', 'P_all', ...
+    'NewVariableNames', 'R@10_GT');
+seg_table = addvars(seg_table, seg_gt_recall_50, 'After', 'R@10_GT', ...
+    'NewVariableNames', 'R@50_GT');
+seg_table = addvars(seg_table, p_gt_seg, 'After', 'R@50_GT', ...
+    'NewVariableNames', 'P_GT');
+
+% Add GT statistics
+seg_table = addvars(seg_table, num_gt_arr, 'After', 'P_GT', ...
+    'NewVariableNames', 'Num_GT');
+seg_table = addvars(seg_table, mean_gt_rank_arr, 'After', 'Num_GT', ...
+    'NewVariableNames', 'Mean_GT_Rank');
+
+% Add configuration columns BEFORE Spearman (from right to left)
+seg_table = addvars(seg_table, dtw_modes, 'Before', 'Spearman', ...
+    'NewVariableNames', 'DTW_Mode');
+seg_table = addvars(seg_table, total_dims_arr, 'Before', 'DTW_Mode', ...
     'NewVariableNames', 'Total_Dims');
 seg_table = addvars(seg_table, n_fine_arr, 'Before', 'Total_Dims', ...
     'NewVariableNames', 'N_Fine');
 seg_table = addvars(seg_table, n_coarse_arr, 'Before', 'N_Fine', ...
     'NewVariableNames', 'N_Coarse');
-seg_table = addvars(seg_table, dtw_modes, 'Before', 'N_Coarse', ...
-    'NewVariableNames', 'DTW_Mode');
-seg_table = addvars(seg_table, weight_modes, 'Before', 'DTW_Mode', ...
+seg_table = addvars(seg_table, weight_modes, 'Before', 'N_Coarse', ...
     'NewVariableNames', 'Weight_Mode');
-seg_table = addvars(seg_table, query_bahn_ids, 'Before', 'Weight_Mode', ...
-    'NewVariableNames', 'Query_Bahn_ID');
-seg_table = addvars(seg_table, embedding_names, 'Before', 'Query_Bahn_ID', ...
+seg_table = addvars(seg_table, embedding_names, 'Before', 'Weight_Mode', ...
     'NewVariableNames', 'Embedding_Config');
 
-% Level identifier
+% Add level identifier
 level_seg = repmat({'Segment'}, total_experiments, 1);
 seg_table = addvars(seg_table, level_seg, 'Before', 'Embedding_Config', ...
     'NewVariableNames', 'Level');
+
+% Add Query_Bahn_ID
+seg_table = addvars(seg_table, query_bahn_ids, 'Before', 'Level', ...
+    'NewVariableNames', 'Query_Bahn_ID');
 
 % ========================================================================
 %%  COMBINE TABLES
@@ -740,32 +759,35 @@ database_size_arr = repmat(base_config.database_sample_size, num_total_rows, 1);
 top_k_arr = repmat(base_config.top_k_trajectories, num_total_rows, 1);
 lb_kim_ratio_arr = repmat(dtw_config.lb_kim_keep_ratio, num_total_rows, 1);
 lb_keogh_candidates_arr = repmat(dtw_config.lb_keogh_candidates, num_total_rows, 1);
-dtw_window_arr = repmat(dtw_config.cdtw_window, num_total_rows, 1);
 dtw_normalization_arr = repmat(dtw_config.normalize_dtw, num_total_rows, 1);
 dtw_rotation_align_arr = repmat(dtw_config.use_rotation_alignment, num_total_rows, 1);
-ground_truth_arr = repmat(base_config.has_ground_truth, num_total_rows, 1);
 
-% Add columns at the BEGINNING (before 'Level')
-combined_table = addvars(combined_table, ground_truth_arr, 'Before', 'Level', ...
-    'NewVariableNames', 'Ground_Truth');
-combined_table = addvars(combined_table, dtw_rotation_align_arr, 'Before', 'Ground_Truth', ...
-    'NewVariableNames', 'DTW_RotationAlign');
-combined_table = addvars(combined_table, dtw_normalization_arr, 'Before', 'DTW_RotationAlign', ...
-    'NewVariableNames', 'DTW_Normalization');
-combined_table = addvars(combined_table, dtw_window_arr, 'Before', 'DTW_Normalization', ...
-    'NewVariableNames', 'DTW_Window');
-combined_table = addvars(combined_table, lb_keogh_candidates_arr, 'Before', 'DTW_Window', ...
-    'NewVariableNames', 'LB_Keogh_Candidates');
-combined_table = addvars(combined_table, lb_kim_ratio_arr, 'Before', 'LB_Keogh_Candidates', ...
-    'NewVariableNames', 'LB_Kim_Ratio');
-combined_table = addvars(combined_table, top_k_arr, 'Before', 'LB_Kim_Ratio', ...
+% Add columns BEFORE Query_Bahn_ID (in reverse order to get correct sequence)
+combined_table = addvars(combined_table, top_k_arr, 'Before', 'Query_Bahn_ID', ...
     'NewVariableNames', 'Top_K');
 combined_table = addvars(combined_table, database_size_arr, 'Before', 'Top_K', ...
     'NewVariableNames', 'Database_Size');
-combined_table = addvars(combined_table, timestamp_arr, 'Before', 'Database_Size', ...
+combined_table = addvars(combined_table, lb_keogh_candidates_arr, 'Before', 'Database_Size', ...
+    'NewVariableNames', 'LB_Keogh_Candidates');
+combined_table = addvars(combined_table, lb_kim_ratio_arr, 'Before', 'LB_Keogh_Candidates', ...
+    'NewVariableNames', 'LB_Kim_Ratio');
+combined_table = addvars(combined_table, dtw_rotation_align_arr, 'Before', 'LB_Kim_Ratio', ...
+    'NewVariableNames', 'DTW_RotationAlign');
+combined_table = addvars(combined_table, dtw_normalization_arr, 'Before', 'DTW_RotationAlign', ...
+    'NewVariableNames', 'DTW_Normalization');
+combined_table = addvars(combined_table, timestamp_arr, 'Before', 'DTW_Normalization', ...
     'NewVariableNames', 'Timestamp');
 
-fprintf('✓ Added 9 configuration columns\n\n');
+% Remove columns that are not in the desired order
+cols_to_remove = {'Runtime_min', 'W_Pos', 'W_Joint', 'W_Orient', 'W_Vel', 'W_Meta', ...
+                  'Multi_Scale', 'DTW_Window', 'Ground_Truth'};
+for i = 1:length(cols_to_remove)
+    if ismember(cols_to_remove{i}, combined_table.Properties.VariableNames)
+        combined_table = removevars(combined_table, cols_to_remove{i});
+    end
+end
+
+fprintf('✓ Added configuration columns and removed unused columns\n\n');
 
 % ========================================================================
 %%  SAVE RESULTS

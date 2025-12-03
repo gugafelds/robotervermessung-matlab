@@ -42,41 +42,41 @@ use_ground_truth = true;  % Set to false to disable
 
 % === Base Configuration ===
 base_config = struct();
-base_config.database_sample_size = 80;  % Fixed for fair comparison
+base_config.database_sample_size = 1000;  % Fixed for fair comparison
 base_config.random_seed = 42;
-base_config.top_k_trajectories = 50;     % Fixed
+base_config.top_k_trajectories = 100;     % Fixed
 
 % === DIMENSION 1: Embedding Architectures ===
 embedding_configs = {
     % Name,                  n_coarse, n_fine, use_multi_scale
-    'Single-Fine-250',        0,        250,     false;
-    'Multi-Balanced-350',    50,       300,     true;
-    'Single-Fine-500',       0,        500,    false;
-    'Multi-Dense-700',       200,       500,    true;
+    'Single-Fine-75',        0,        75,     false;
+    'Multi-Balanced-100',    25,       75,     true;
+    'Single-Fine-150',       0,        150,    false;
+    'Multi-Dense-200',       50,       150,    true;
 };
 
 % === DIMENSION 2: Query Trajectories ===
 query_ids = {
     '1764766034'; % np = 2 / p = 843
-    %'1764766001'; % np = 2 / p = 861
-    %'1764765958'; % np = 2 / p = 1077
-    %'1764765635'; % np = 2 / p = 1278
-    %'1764765776'; % np = 2 / p = 1851
-    %'1763567277'; % np = 3 / p = 1188
-    %'1763567148'; % np = 3 / p = 1482  
-    %'1763567026'; % np = 3 / p = 1434
-    %'1764763889'; % np = 3 / p = 1392
-    %'1764763510'; % np = 3 / p = 1554
-    %'1764762584'; % np = 4 / p = 2034
-    %'1764763238'; % np = 4 / p = 1341
-    %'1764762971'; % np = 4 / p = 1353
-    %'1764762831'; % np = 4 / p = 1326
-    %'1764762655'; % np = 4 / p = 1539
-    %'1764765476'; % np = 5 / p = 1398
-    %'1764765121'; % np = 5 / p = 2076
-    %'1764764821'; % np = 5 / p = 1944
-    %'1764765396'; % np = 5 / p = 1692
-    %'1764765286'; % np = 5 / p = 1377
+    '1764766001'; % np = 2 / p = 861
+    '1764765958'; % np = 2 / p = 1077
+    '1764765635'; % np = 2 / p = 1278
+    '1764765776'; % np = 2 / p = 1851
+    '1763567277'; % np = 3 / p = 1188
+    '1763567148'; % np = 3 / p = 1482  
+    '1763567026'; % np = 3 / p = 1434
+    '1764763889'; % np = 3 / p = 1392
+    '1764763510'; % np = 3 / p = 1554
+    '1764762584'; % np = 4 / p = 2034
+    '1764763238'; % np = 4 / p = 1341
+    '1764762971'; % np = 4 / p = 1353
+    '1764762831'; % np = 4 / p = 1326
+    '1764762655'; % np = 4 / p = 1539
+    '1764765476'; % np = 5 / p = 1398
+    '1764765121'; % np = 5 / p = 2076
+    '1764764821'; % np = 5 / p = 1944
+    '1764765396'; % np = 5 / p = 1692
+    '1764765286'; % np = 5 / p = 1377
 };
 
 % === DIMENSION 3: DTW Mode + Weight Combinations ===
@@ -196,30 +196,6 @@ end
 if use_ground_truth && ~isempty(ground_truth_ids)
     query_id = query_ids{1};  % Erste Query
     query_field = sprintf('q_%s', strrep(query_id, '-', '_'));
-    
-    if isfield(ground_truth_map, query_field)
-        gt_for_query = ground_truth_map.(query_field).trajectories;
-        
-        fprintf('\n╔════════════════════════════════════════════════════════════════╗\n');
-        fprintf('║ 🔍 DEBUG: Ground Truth Check                                  ║\n');
-        fprintf('╚════════════════════════════════════════════════════════════════╝\n');
-        fprintf('Query: %s\n', query_id);
-        fprintf('GT count: %d\n', length(gt_for_query));
-        fprintf('Total candidates: %d\n', length(candidate_ids));
-        
-        % Check if each GT is in candidates
-        for i = 1:length(gt_for_query)
-            gt_id = gt_for_query{i};
-            is_in_candidates = ismember(gt_id, candidate_ids);
-            
-            if is_in_candidates
-                fprintf('  ✓ GT %d (%s): IN candidates\n', i, gt_id);
-            else
-                fprintf('  ✗ GT %d (%s): NOT IN candidates! ❌\n', i, gt_id);
-            end
-        end
-        fprintf('\n');
-    end
 end
 
 % ========================================================================
@@ -248,78 +224,6 @@ fprintf('║  Ready to pre-compute DTW and embeddings!                      ║\
 fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
 
 
-% ================================================================
-% 🔍 DEBUG: Verify data cache integrity
-% ================================================================
-
-fprintf('\n╔════════════════════════════════════════════════════════════════╗\n');
-fprintf('║ 🔍 DEBUG: Verifying Data Cache Integrity                      ║\n');
-fprintf('╚════════════════════════════════════════════════════════════════╝\n');
-
-if use_ground_truth && ~isempty(ground_truth_ids)
-    query_id = query_ids{1};
-    query_field = sprintf('q_%s', strrep(query_id, '-', '_'));
-    gt_ids = ground_truth_map.(query_field).trajectories;
-    
-    if ~isempty(gt_ids)
-        gt_id = gt_ids{1};
-        
-        % Find GT in cache
-        gt_idx = find(strcmp(data_cache.candidates.bahn_ids, gt_id));
-        
-        if ~isempty(gt_idx)
-            fprintf('\nGT: %s (index %d in cache)\n', gt_id, gt_idx);
-            
-            % Load GT directly from DB
-            fprintf('  Loading from DB for comparison...\n');
-            gt_position_db = loadTrajectoryPosition(conn, schema, gt_id);
-            gt_joint_db = loadTrajectoryJointStates(conn, schema, gt_id);
-            
-            % Compare with cache
-            gt_position_cache = data_cache.candidates.position{gt_idx};
-            gt_joint_cache = data_cache.candidates.joint{gt_idx};
-            
-            fprintf('\n  Position Data:\n');
-            fprintf('    DB length: %d\n', size(gt_position_db, 1));
-            fprintf('    Cache length: %d\n', size(gt_position_cache, 1));
-            fprintf('    DB first point: [%.2f, %.2f, %.2f]\n', ...
-                gt_position_db(1,1), gt_position_db(1,2), gt_position_db(1,3));
-            fprintf('    Cache first point: [%.2f, %.2f, %.2f]\n', ...
-                gt_position_cache(1,1), gt_position_cache(1,2), gt_position_cache(1,3));
-            
-            pos_diff = norm(gt_position_db(1,:) - gt_position_cache(1,:));
-            fprintf('    Difference: %.2f mm\n', pos_diff);
-            
-            if pos_diff < 0.01
-                fprintf('    ✅ Cache matches DB!\n');
-            else
-                fprintf('    ❌ Cache DOES NOT match DB!\n');
-            end
-            
-            fprintf('\n  Joint Data:\n');
-            fprintf('    DB length: %d\n', size(gt_joint_db, 1));
-            fprintf('    Cache length: %d\n', size(gt_joint_cache, 1));
-            fprintf('    DB first joints: [%.4f, %.4f, %.4f, ...]\n', ...
-                gt_joint_db(1,1), gt_joint_db(1,2), gt_joint_db(1,3));
-            fprintf('    Cache first joints: [%.4f, %.4f, %.4f, ...]\n', ...
-                gt_joint_cache(1,1), gt_joint_cache(1,2), gt_joint_cache(1,3));
-            
-            joint_diff = norm(gt_joint_db(1,:) - gt_joint_cache(1,:));
-            fprintf('    Difference: %.6f rad\n', joint_diff);
-            
-            if joint_diff < 0.001
-                fprintf('    ✅ Cache matches DB!\n');
-            else
-                fprintf('    ❌ Cache DOES NOT match DB!\n');
-            end
-        else
-            fprintf('✗ GT not found in cache!\n');
-        end
-    end
-end
-
-fprintf('\n');
-
 % ========================================================================
 %%  PRE-COMPUTE ALL DTW (ONE-TIME COST)
 %  ========================================================================
@@ -335,9 +239,9 @@ dtw_tic = tic;
 % Prepare config for DTW pre-computation
 dtw_config = struct();
 dtw_config.top_k_trajectories = base_config.top_k_trajectories;
-dtw_config.lb_kim_keep_ratio = 1.0;
-dtw_config.lb_keogh_candidates = 500;
-dtw_config.cdtw_window = 0.50;
+dtw_config.lb_kim_keep_ratio = 0.5;
+dtw_config.lb_keogh_candidates = 100;
+dtw_config.cdtw_window = 0.10;
 dtw_config.normalize_dtw = false;
 dtw_config.use_rotation_alignment = false;
 dtw_config.ground_truth_map = ground_truth_map;
@@ -442,7 +346,6 @@ for emb_idx = 1:num_embeddings
             config.embedding_config_name = embedding_configs{emb_idx, 1};
             config.weight_mode_name = weight_mode_configs{wm_idx, 1};
             
-            % ⭐ CRITICAL: Pass all pre-loaded caches
             config.data_cache = data_cache;
             config.dtw_cache = dtw_cache;
             config.embeddings_cache = embeddings_cache;
@@ -793,10 +696,30 @@ fprintf('✓ Added configuration columns and removed unused columns\n\n');
 %%  SAVE RESULTS
 %  ========================================================================
 
-output_dir = fullfile(pwd, 'results');
+% Find robotervermessung-matlab root directory
+current_path = mfilename('fullpath');
+path_parts = strsplit(current_path, filesep);
+
+% Find the index of 'robotervermessung-matlab' in path
+matlab_project_idx = find(contains(path_parts, 'robotervermessung-matlab'), 1, 'last');
+
+if ~isempty(matlab_project_idx)
+    % Build path to project root
+    project_root = fullfile(filesep, path_parts{1:matlab_project_idx});
+    output_dir = fullfile(project_root, 'similarity');
+else
+    % Fallback: use current directory
+    warning('Could not find robotervermessung-matlab in path, using current directory');
+    output_dir = fullfile(pwd, 'similarity');
+end
+
+% Create directory if it doesn't exist
 if ~exist(output_dir, 'dir')
     mkdir(output_dir);
+    fprintf('Created directory: %s\n', output_dir);
 end
+
+fprintf('Saving results to: %s\n', output_dir);
 
 output_file = fullfile(output_dir, sprintf('embedding_validation_%s.csv', timestamp));
 writetable(combined_table, output_file, 'WriteRowNames', false);
@@ -818,69 +741,6 @@ fprintf('Total runtime: %.2f hours\n', (preload_time + dtw_time + emb_time + tot
 fprintf('Total Experiments: %d\n', total_experiments);
 fprintf('Average time per experiment: %.1f seconds (weights-only!)\n', total_time/total_experiments);
 fprintf('Results file: %s\n\n', output_file);
-
-% ========================================================================
-%%  SAVE METADATA (CONFIGURATION PARAMETERS)
-%  ========================================================================
-
-fprintf('=== Saving Experiment Metadata ===\n');
-
-% Build metadata struct
-metadata = struct();
-
-% General Configuration
-metadata.timestamp = timestamp;
-metadata.total_experiments = total_experiments;
-metadata.database_sample_size = base_config.database_sample_size;
-metadata.random_seed = base_config.random_seed;
-metadata.top_k_trajectories = base_config.top_k_trajectories;
-
-% DTW Configuration
-metadata.lb_kim_keep_ratio = dtw_config.lb_kim_keep_ratio;
-metadata.lb_keogh_candidates = dtw_config.lb_keogh_candidates;
-metadata.cdtw_window = dtw_config.cdtw_window;
-metadata.normalize_dtw = dtw_config.normalize_dtw;
-metadata.use_rotation_alignment = dtw_config.use_rotation_alignment;
-
-% Data Loading Configuration
-metadata.chunk_size = chunk_size;
-metadata.schema = schema;
-
-% Timing
-metadata.preload_time_minutes = preload_time / 60;
-metadata.dtw_precompute_time_minutes = dtw_time / 60;
-metadata.emb_precompute_time_minutes = emb_time / 60;
-metadata.experiments_time_minutes = total_time / 60;
-metadata.total_runtime_hours = (preload_time + dtw_time + emb_time + total_time) / 3600;
-metadata.avg_time_per_experiment_seconds = total_time / total_experiments;
-
-% Dimensions
-metadata.num_embedding_configs = num_embeddings;
-metadata.num_queries = num_queries;
-metadata.num_weight_modes = num_weight_modes;
-
-% Embedding Configurations (as comma-separated strings)
-metadata.embedding_configs = strjoin(embedding_configs(:,1), '; ');
-
-% Query IDs (as comma-separated string)
-metadata.query_ids = strjoin(query_ids, '; ');
-
-% Weight Modes (as comma-separated string)
-metadata.weight_mode_names = strjoin(weight_mode_configs(:,1), '; ');
-
-% Memory Usage
-metadata.data_cache_size_MB = whos('data_cache').bytes / 1e6;
-metadata.dtw_cache_size_MB = whos('dtw_cache').bytes / 1e6;
-metadata.embeddings_cache_size_MB = whos('embeddings_cache').bytes / 1e6;
-
-% Convert struct to table (transpose for vertical layout)
-metadata_table = struct2table(metadata);
-
-% Save as CSV
-metadata_file = strrep(output_file, '.csv', '_metadata.csv');
-writetable(metadata_table, metadata_file, 'WriteRowNames', false);
-
-fprintf('✓ Metadata saved to: %s\n\n', metadata_file);
 
 fprintf('╔════════════════════════════════════════════════════════════════╗\n');
 fprintf('║  🎉 EXPERIMENT COMPLETED SUCCESSFULLY!                         ║\n');

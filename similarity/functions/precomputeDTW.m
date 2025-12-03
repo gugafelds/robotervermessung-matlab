@@ -169,66 +169,6 @@ for q_idx = 1:num_queries
         end
         
         fprintf('  Candidates: %d trajectories\n', num_candidates);
-
-        % ================================================================
-        % 🔍 DEBUG STEP 3: Direct DTW to GT (BEFORE any filtering!)
-        % ================================================================
-        query_field = ['q_' strrep(query_id, '-', '_')];
-        
-        if has_ground_truth && isfield(ground_truth_map, query_field)
-            gt_ids = ground_truth_map.(query_field).trajectories;
-            
-            if ~isempty(gt_ids) && length(gt_ids) > 0
-                fprintf('\n  🔍 DEBUG: Direct DTW to GT (before filtering)...\n');
-                
-                gt_id = gt_ids{1};  % First GT
-                
-                % Find GT in ORIGINAL candidates (before any filtering!)
-                gt_candidate_idx = find(strcmp(candidate_metadata.bahn_id, gt_id));
-                
-                if ~isempty(gt_candidate_idx)
-                    gt_data = candidate_trajectories{gt_candidate_idx};
-                    
-                    % Compute DTW directly
-                    tic;
-                    direct_dtw = cDTW(query_data, gt_data, dtw_mode, cdtw_window, ...
-                        inf, use_rotation_alignment, normalize_dtw);
-                    t = toc;
-                    
-                    fprintf('    GT 1 (%s):\n', gt_id);
-                    fprintf('      Direct DTW distance: %.2f (%.3f sec)\n', direct_dtw, t);
-                    fprintf('      Query length: %d, GT length: %d\n', ...
-                        size(query_data, 1), size(gt_data, 1));
-                    
-                    % Compare to random
-                    random_idx = randi(num_candidates);
-                    random_id = candidate_metadata.bahn_id{random_idx};
-                    random_data = candidate_trajectories{random_idx};
-                    
-                    random_dtw = cDTW(query_data, random_data, dtw_mode, cdtw_window, ...
-                        inf, use_rotation_alignment, normalize_dtw);
-                    
-                    fprintf('      Random (%s): DTW = %.2f\n', random_id, random_dtw);
-                    
-                    if direct_dtw > 0
-                        ratio = random_dtw / direct_dtw;
-                        fprintf('      Ratio (Random/GT): %.2fx ', ratio);
-                        
-                        if ratio >= 5.0
-                            fprintf('✅\n');
-                        elseif ratio >= 2.0
-                            fprintf('⚠️\n');
-                        else
-                            fprintf('❌\n');
-                        end
-                    end
-                    
-                    fprintf('\n');
-                else
-                    fprintf('    ✗ GT not in candidate pool!\n\n');
-                end
-            end
-        end
         
         % ================================================================
         % STEP 3: TRAJECTORY-LEVEL DTW
@@ -315,30 +255,6 @@ for q_idx = 1:num_queries
         traj_dtw_time = toc(traj_dtw_tic);
         
         fprintf('    ✓ Trajectory DTW: %.2fs (%d candidates)\n', traj_dtw_time, dtw_limit);
-
-        % ================================================================
-        % 🔍 DEBUG: Check GT in final DTW results
-        % ================================================================
-        
-        if has_ground_truth && isfield(ground_truth_map, query_field)
-            gt_ids = ground_truth_map.(query_field).trajectories;
-            
-            fprintf('\n  🔍 DEBUG: GT in final DTW results...\n');
-            
-            for i = 1:min(3, length(gt_ids))
-                gt_id = gt_ids{i};
-                gt_idx = find(strcmp(trajectory_table.bahn_id, gt_id));
-                
-                if ~isempty(gt_idx)
-                    fprintf('    ✓ GT %d (%s): Rank %d, DTW %.2f\n', ...
-                        i, gt_id, gt_idx, trajectory_table.dtw_distance(gt_idx));
-                else
-                    fprintf('    ✗ GT %d (%s): NOT FOUND\n', i, gt_id);
-                end
-            end
-            
-            fprintf('\n');
-        end
         
         % ================================================================
         % STEP 4: SEGMENT-LEVEL DTW

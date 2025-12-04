@@ -12,9 +12,9 @@ function lb_dist = LB_Keogh(query, candidate, window_percent, mode, align_rotati
         window_percent = 0.15;
     end
 
-    if normalize_dtw && strcmp(mode, 'position')
-        query = normalizeForDTW(query);
-        candidate = normalizeForDTW(candidate);
+    if normalize_dtw || strcmp(mode, 'joint_states')
+        query = normalizeForDTW(query, mode);
+        candidate = normalizeForDTW(candidate, mode);
     end
     
     n = size(query, 1);

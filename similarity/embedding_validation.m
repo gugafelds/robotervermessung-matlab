@@ -42,9 +42,9 @@ use_ground_truth = true;  % Set to false to disable
 
 % === Base Configuration ===
 base_config = struct();
-base_config.database_sample_size = 1000;  % Fixed for fair comparison
+base_config.database_sample_size = 300;  % Fixed for fair comparison
 base_config.random_seed = 42;
-base_config.top_k_trajectories = 100;     % Fixed
+base_config.top_k_trajectories = 75;     % Fixed
 
 % === DIMENSION 1: Embedding Architectures ===
 embedding_configs = {
@@ -77,6 +77,7 @@ query_ids = {
     %'1764764821'; % np = 5 / p = 1944
     %'1764765396'; % np = 5 / p = 1692
     %'1764765286'; % np = 5 / p = 1377
+    '1764863841'; % np = 4 / p = 1332 / noisy
 };
 
 % === DIMENSION 3: DTW Mode + Weight Combinations ===
@@ -345,13 +346,13 @@ if use_ground_truth && ~isempty(ground_truth_ids)
             end
             
             % ============================================================
-            % SEGMENT-LEVEL GT METRICS
+            % SEGMENT-LEVEL GT METRICS (CORRECTED - CONSISTENT WITH GTvsEB!)
             % ============================================================
             segment_rankings = dtw_cache.(query_field).(dtw_mode).segment_rankings;
             num_segments = length(segment_rankings);
             
-            % Aggregate segment ranks for GT trajectories
-            seg_gt_ranks = [];
+            % Calculate GT coverage for EACH segment separately (like GTvsEB!)
+            gt_coverage_segments = cell(num_segments, 1);
             
             for seg_idx = 1:num_segments
                 if isempty(segment_rankings{seg_idx})
@@ -360,22 +361,55 @@ if use_ground_truth && ~isempty(ground_truth_ids)
                 
                 seg_ranking = segment_rankings{seg_idx};
                 
+                % Find GT ranks for this segment
+                seg_gt_ranks = zeros(num_gt, 1);
+                
                 for gt_idx = 1:num_gt
                     gt_id = gt_ids_for_query{gt_idx};
+                    rank_idx = find(strcmp(seg_ranking.bahn_id, gt_id), 1);
                     
-                    % Find where GT appears in this segment ranking
-                    seg_gt_mask = strcmp(seg_ranking.bahn_id, gt_id);
-                    
-                    if any(seg_gt_mask)
-                        seg_ranks = find(seg_gt_mask);
-                        seg_gt_ranks = [seg_gt_ranks; seg_ranks];
+                    if ~isempty(rank_idx)
+                        seg_gt_ranks(gt_idx) = rank_idx;
+                    else
+                        seg_gt_ranks(gt_idx) = inf;
                     end
                 end
+                
+                % Calculate metrics for THIS segment
+                valid_seg_ranks = seg_gt_ranks(seg_gt_ranks < inf);
+                
+                if isempty(valid_seg_ranks)
+                    % No GT found in this segment
+                    seg_cov = struct();
+                    seg_cov.k_values = [1, 3, 5, 10, 50];
+                    seg_cov.recall_at_k = zeros(5, 1);
+                    seg_cov.mean_gt_rank = inf;
+                    seg_cov.overall_coverage_point = inf;
+                else
+                    % Calculate for this segment using SAME logic as GTvsEB!
+                    seg_cov = struct();
+                    seg_cov.k_values = [1, 3, 5, 10, 50];
+                    seg_cov.recall_at_k = zeros(5, 1);
+                    
+                    k_vals = [1, 3, 5, 10, 50];
+                    for k_idx = 1:5
+                        K = k_vals(k_idx);
+                        num_gt_in_top_k = sum(valid_seg_ranks <= K);
+                        % SAME FORMULA AS calculateGTCoverage!
+                        seg_cov.recall_at_k(k_idx) = num_gt_in_top_k / min(K, num_gt);
+                    end
+                    
+                    seg_cov.mean_gt_rank = mean(valid_seg_ranks);
+                    seg_cov.overall_coverage_point = max(valid_seg_ranks);
+                end
+                
+                gt_coverage_segments{seg_idx} = seg_cov;
             end
             
-            % Calculate segment metrics
-            if isempty(seg_gt_ranks)
-                % No GT found in segments
+            % Average across segments (using same logic as averageGTCoverage)
+            valid_segments = gt_coverage_segments(~cellfun(@isempty, gt_coverage_segments));
+            
+            if isempty(valid_segments)
                 seg_p_gt_dtw = inf;
                 seg_mean_gt_rank_dtw = inf;
                 seg_r50_gt_dtw = 0;
@@ -384,32 +418,31 @@ if use_ground_truth && ~isempty(ground_truth_ids)
                 seg_r3_gt_dtw = 0;
                 seg_r1_gt_dtw = 0;
             else
-                valid_seg_ranks = seg_gt_ranks(seg_gt_ranks < inf);
+                % Average recall values
+                recall_sum = zeros(5, 1);
+                count = 0;
+                mean_rank_sum = 0;
+                coverage_sum = 0;
                 
-                if isempty(valid_seg_ranks)
-                    seg_p_gt_dtw = inf;
-                    seg_mean_gt_rank_dtw = inf;
-                    seg_r50_gt_dtw = 0;
-                    seg_r10_gt_dtw = 0;
-                    seg_r5_gt_dtw = 0;
-                    seg_r3_gt_dtw = 0;
-                    seg_r1_gt_dtw = 0;
-                else
-                    % For segments: use average metrics across all segment instances
-                    seg_p_gt_dtw = max(valid_seg_ranks);
-                    seg_mean_gt_rank_dtw = mean(valid_seg_ranks);
-                    
-                    % Count unique GT-segment pairs in Top-K
-                    total_gt_seg_pairs = num_gt * num_segments;
-                    
-                    % R@K_GT: (CORRECTED!)
-                    % Normalize by min(K, total_gt_seg_pairs)
-                    seg_r50_gt_dtw = sum(valid_seg_ranks <= 50) / (num_segments * min(50, num_gt));
-                    seg_r10_gt_dtw = sum(valid_seg_ranks <= 10) / (num_segments * min(10, num_gt));
-                    seg_r5_gt_dtw = sum(valid_seg_ranks <= 5) / (num_segments * min(5, num_gt));
-                    seg_r3_gt_dtw = sum(valid_seg_ranks <= 3) / (num_segments * min(3, num_gt));
-                    seg_r1_gt_dtw = sum(valid_seg_ranks <= 1) / (num_segments * min(1, num_gt));
+                for i = 1:length(valid_segments)
+                    seg = valid_segments{i};
+                    recall_sum = recall_sum + seg.recall_at_k;
+                    mean_rank_sum = mean_rank_sum + seg.mean_gt_rank;
+                    coverage_sum = coverage_sum + seg.overall_coverage_point;
+                    count = count + 1;
                 end
+                
+                avg_recall = recall_sum / count;
+                
+                % Extract averaged values
+                seg_r1_gt_dtw = avg_recall(1);   % K=1
+                seg_r3_gt_dtw = avg_recall(2);   % K=3
+                seg_r5_gt_dtw = avg_recall(3);   % K=5
+                seg_r10_gt_dtw = avg_recall(4);  % K=10
+                seg_r50_gt_dtw = avg_recall(5);  % K=50
+                
+                seg_mean_gt_rank_dtw = mean_rank_sum / count;
+                seg_p_gt_dtw = coverage_sum / count;
             end
             
             % ============================================================

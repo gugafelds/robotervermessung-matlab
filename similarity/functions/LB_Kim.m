@@ -34,9 +34,9 @@ function lb_dist = LB_Kim(seq1, seq2, mode, align_rotation, normalize_dtw)
     end
     
     % Apply normalization if requested (same as LB_Keogh)
-    if normalize_dtw && strcmp(mode, 'position')
-        seq1 = normalizeForDTW(seq1);
-        seq2 = normalizeForDTW(seq2);
+    if normalize_dtw || strcmp(mode, 'joint_states')
+        seq1 = normalizeForDTW(seq1, mode);
+        seq2 = normalizeForDTW(seq2, mode);
     end
     
     % Resample seq2 to match seq1 length (for fair comparison)

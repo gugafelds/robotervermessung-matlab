@@ -301,9 +301,12 @@ results.num_query_segments = num_query_segments;
 % ========================================================================
 
 if exist('coverage_traj', 'var') && ~isempty(coverage_traj)
-    % Find indices for K=10 and K=50
+    % Find indices for K=10, K=50, K=5, K=3, K=1
     idx_10 = find(coverage_traj.k_values == 10, 1);
     idx_50 = find(coverage_traj.k_values == 50, 1);
+    idx_5 = find(coverage_traj.k_values == 5, 1);   % NEW
+    idx_3 = find(coverage_traj.k_values == 3, 1);   % NEW
+    idx_1 = find(coverage_traj.k_values == 1, 1);   
     
     % P_all: Maximum coverage point across all K values
     % This is the minimum embedding top-X needed to cover ALL DTW candidates
@@ -320,11 +323,33 @@ if exist('coverage_traj', 'var') && ~isempty(coverage_traj)
     else
         results.recall_at_50 = NaN;
     end
+    
+    % NEW: Add R@5, R@3, R@1
+    if ~isempty(idx_5)
+        results.recall_at_5 = coverage_traj.recall_at_k(idx_5);
+    else
+        results.recall_at_5 = NaN;
+    end
+    
+    if ~isempty(idx_3)
+        results.recall_at_3 = coverage_traj.recall_at_k(idx_3);
+    else
+        results.recall_at_3 = NaN;
+    end
+    
+    if ~isempty(idx_1)
+        results.recall_at_1 = coverage_traj.recall_at_k(idx_1);
+    else
+        results.recall_at_1 = NaN;
+    end
 else
     % No coverage data available
     results.p_all_traj = NaN;
     results.recall_at_10 = NaN;
     results.recall_at_50 = NaN;
+    results.recall_at_5 = NaN;   
+    results.recall_at_3 = NaN;   
+    results.recall_at_1 = NaN;   
 end
 
 % ========================================================================
@@ -332,9 +357,12 @@ end
 % ========================================================================
 
 if exist('coverage_seg_avg', 'var') && ~isempty(coverage_seg_avg)
-    % Find indices for K=10 and K=50
+    % Find indices for K=10, K=50, K=5, K=3, K=1
     idx_10 = find(coverage_seg_avg.k_values == 10, 1);
     idx_50 = find(coverage_seg_avg.k_values == 50, 1);
+    idx_5 = find(coverage_seg_avg.k_values == 5, 1);  
+    idx_3 = find(coverage_seg_avg.k_values == 3, 1);   
+    idx_1 = find(coverage_seg_avg.k_values == 1, 1);   
     
     % P_all: Maximum coverage point across all K values
     results.p_all_seg = max(coverage_seg_avg.coverage_points);
@@ -350,11 +378,33 @@ if exist('coverage_seg_avg', 'var') && ~isempty(coverage_seg_avg)
     else
         results.seg_recall_at_50 = NaN;
     end
+    
+    % NEW: Add R@5, R@3, R@1
+    if ~isempty(idx_5)
+        results.seg_recall_at_5 = coverage_seg_avg.recall_at_k(idx_5);
+    else
+        results.seg_recall_at_5 = NaN;
+    end
+    
+    if ~isempty(idx_3)
+        results.seg_recall_at_3 = coverage_seg_avg.recall_at_k(idx_3);
+    else
+        results.seg_recall_at_3 = NaN;
+    end
+    
+    if ~isempty(idx_1)
+        results.seg_recall_at_1 = coverage_seg_avg.recall_at_k(idx_1);
+    else
+        results.seg_recall_at_1 = NaN;
+    end
 else
     % No segment coverage data available
     results.p_all_seg = NaN;
     results.seg_recall_at_10 = NaN;
     results.seg_recall_at_50 = NaN;
+    results.seg_recall_at_5 = NaN;   
+    results.seg_recall_at_3 = NaN;   
+    results.seg_recall_at_1 = NaN;   
 end
 
 % ========================================================================
@@ -362,9 +412,12 @@ end
 % ========================================================================
 
 if exist('gt_coverage_traj', 'var') && ~isempty(gt_coverage_traj)
-    % Find indices for K=10 and K=50
+    % Find indices for K=10, K=50, K=5, K=3, K=1
     idx_10 = find(gt_coverage_traj.k_values == 10, 1);
     idx_50 = find(gt_coverage_traj.k_values == 50, 1);
+    idx_5 = find(gt_coverage_traj.k_values == 5, 1);  
+    idx_3 = find(gt_coverage_traj.k_values == 3, 1);   
+    idx_1 = find(gt_coverage_traj.k_values == 1, 1);   
     
     % P_GT: Overall coverage point for ALL GT trajectories
     results.p_gt_traj = gt_coverage_traj.overall_coverage_point;
@@ -381,6 +434,25 @@ if exist('gt_coverage_traj', 'var') && ~isempty(gt_coverage_traj)
         results.gt_recall_at_50 = NaN;
     end
     
+    % NEW: Add R@5, R@3, R@1
+    if ~isempty(idx_5)
+        results.gt_recall_at_5 = gt_coverage_traj.recall_at_k(idx_5);
+    else
+        results.gt_recall_at_5 = NaN;
+    end
+    
+    if ~isempty(idx_3)
+        results.gt_recall_at_3 = gt_coverage_traj.recall_at_k(idx_3);
+    else
+        results.gt_recall_at_3 = NaN;
+    end
+    
+    if ~isempty(idx_1)
+        results.gt_recall_at_1 = gt_coverage_traj.recall_at_k(idx_1);
+    else
+        results.gt_recall_at_1 = NaN;
+    end
+    
     % Additional GT statistics
     results.num_gt = gt_coverage_traj.num_gt;
     results.num_gt_found = gt_coverage_traj.num_gt_found;
@@ -390,6 +462,9 @@ else
     results.p_gt_traj = NaN;
     results.gt_recall_at_10 = NaN;
     results.gt_recall_at_50 = NaN;
+    results.gt_recall_at_5 = NaN;   
+    results.gt_recall_at_3 = NaN;   
+    results.gt_recall_at_1 = NaN;   
     
     % Additional GT statistics
     results.num_gt = NaN;
@@ -402,9 +477,12 @@ end
 % ========================================================================
 
 if exist('gt_coverage_seg_avg', 'var') && ~isempty(gt_coverage_seg_avg)
-    % Find indices for K=10 and K=50
+    % Find indices for K=10, K=50, K=5, K=3, K=1
     idx_10 = find(gt_coverage_seg_avg.k_values == 10, 1);
     idx_50 = find(gt_coverage_seg_avg.k_values == 50, 1);
+    idx_5 = find(gt_coverage_seg_avg.k_values == 5, 1);  
+    idx_3 = find(gt_coverage_seg_avg.k_values == 3, 1);   
+    idx_1 = find(gt_coverage_seg_avg.k_values == 1, 1);   
     
     % P_GT: Overall coverage point for ALL GT segments
     results.p_gt_seg = gt_coverage_seg_avg.overall_coverage_point;
@@ -421,6 +499,25 @@ if exist('gt_coverage_seg_avg', 'var') && ~isempty(gt_coverage_seg_avg)
         results.seg_gt_recall_at_50 = NaN;
     end
     
+    % NEW: Add R@5, R@3, R@1
+    if ~isempty(idx_5)
+        results.seg_gt_recall_at_5 = gt_coverage_seg_avg.recall_at_k(idx_5);
+    else
+        results.seg_gt_recall_at_5 = NaN;
+    end
+    
+    if ~isempty(idx_3)
+        results.seg_gt_recall_at_3 = gt_coverage_seg_avg.recall_at_k(idx_3);
+    else
+        results.seg_gt_recall_at_3 = NaN;
+    end
+    
+    if ~isempty(idx_1)
+        results.seg_gt_recall_at_1 = gt_coverage_seg_avg.recall_at_k(idx_1);
+    else
+        results.seg_gt_recall_at_1 = NaN;
+    end
+    
     % Additional segment GT statistics
     results.seg_mean_gt_rank = gt_coverage_seg_avg.mean_gt_rank;
 else
@@ -428,6 +525,9 @@ else
     results.p_gt_seg = NaN;
     results.seg_gt_recall_at_10 = NaN;
     results.seg_gt_recall_at_50 = NaN;
+    results.seg_gt_recall_at_5 = NaN;  
+    results.seg_gt_recall_at_3 = NaN;  
+    results.seg_gt_recall_at_1 = NaN;  
     
     % Additional segment GT statistics
     results.seg_mean_gt_rank = NaN;

@@ -1297,7 +1297,7 @@ fprintf('\n=== Coverage Analysis ===\n');
 fprintf('Analyzing how many embedding top-X are needed for all DTW top-K...\n\n');
 
 % Define K values to analyze
-k_values_to_analyze = [10, 50];  % Can be adjusted based on top_k_trajectories
+k_values_to_analyze = [1, 3, 5, 10, 50];  % Extended for detailed analysis
 
 % Filter k_values to only those <= available results
 max_k_traj = min([top_k_trajectories, height(trajectory_table), height(embedding_table)]);
@@ -1332,7 +1332,7 @@ gt_coverage_traj = [];
 gt_coverage_seg_avg = [];
 
 % ⭐ DEFINE K VALUES FIRST (needed for both trajectory and segment level)
-k_values_gt = [10, 50];
+k_values_gt = [1, 3, 5, 10, 50]; 
 
 % Check if GT is enabled
 if ~exist('config', 'var')

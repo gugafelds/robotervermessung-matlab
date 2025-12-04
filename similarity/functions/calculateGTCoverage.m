@@ -163,7 +163,12 @@ for k_idx = 1:num_k
     % ====================================================================
     % "How many GT are found in embedding top-K?"
     num_gt_in_top_k = sum(valid_gt_ranks <= K);
-    recall_at_k(k_idx) = num_gt_in_top_k / num_gt;
+    
+    % Maximum possible GT in top-K
+    max_possible_gt_in_topK = min(K, num_gt);
+    
+    % Recall@K = (found GT) / (max possible GT in top-K)
+    recall_at_k(k_idx) = num_gt_in_top_k / max_possible_gt_in_topK;
     
     % ====================================================================
     % METRIC 2: Coverage Point

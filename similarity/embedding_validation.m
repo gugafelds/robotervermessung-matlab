@@ -58,25 +58,25 @@ embedding_configs = {
 % === DIMENSION 2: Query Trajectories ===
 query_ids = {
     '1764766034'; % np = 2 / p = 843
-    '1764766001'; % np = 2 / p = 861
-    '1764765958'; % np = 2 / p = 1077
-    '1764765635'; % np = 2 / p = 1278
-    '1764765776'; % np = 2 / p = 1851
-    '1763567277'; % np = 3 / p = 1188
-    '1763567148'; % np = 3 / p = 1482  
-    '1763567026'; % np = 3 / p = 1434
-    '1764763889'; % np = 3 / p = 1392
-    '1764763510'; % np = 3 / p = 1554
-    '1764762584'; % np = 4 / p = 2034
-    '1764763238'; % np = 4 / p = 1341
-    '1764762971'; % np = 4 / p = 1353
-    '1764762831'; % np = 4 / p = 1326
-    '1764762655'; % np = 4 / p = 1539
-    '1764765476'; % np = 5 / p = 1398
-    '1764764632'; % np = 5 / p = 2430
-    '1764764821'; % np = 5 / p = 1944
-    '1764765396'; % np = 5 / p = 1692
-    '1764765286'; % np = 5 / p = 1377
+    %'1764766001'; % np = 2 / p = 861
+    %'1764765958'; % np = 2 / p = 1077
+    %'1764765635'; % np = 2 / p = 1278
+    %'1764765776'; % np = 2 / p = 1851
+    %'1763567277'; % np = 3 / p = 1188
+    %'1763567148'; % np = 3 / p = 1482  
+    %'1763567026'; % np = 3 / p = 1434
+    %'1764763889'; % np = 3 / p = 1392
+    %'1764763510'; % np = 3 / p = 1554
+    %'1764762584'; % np = 4 / p = 2034
+    %'1764763238'; % np = 4 / p = 1341
+    %'1764762971'; % np = 4 / p = 1353
+    %'1764762831'; % np = 4 / p = 1326
+    %'1764762655'; % np = 4 / p = 1539
+    %'1764765476'; % np = 5 / p = 1398
+    %'1764764632'; % np = 5 / p = 2430
+    %'1764764821'; % np = 5 / p = 1944
+    %'1764765396'; % np = 5 / p = 1692
+    %'1764765286'; % np = 5 / p = 1377
 };
 
 % === DIMENSION 3: DTW Mode + Weight Combinations ===
@@ -241,7 +241,7 @@ dtw_config = struct();
 dtw_config.top_k_trajectories = base_config.top_k_trajectories;
 dtw_config.lb_kim_keep_ratio = 0.5;
 dtw_config.lb_keogh_candidates = 100;
-dtw_config.cdtw_window = 0.10;
+dtw_config.cdtw_window = 0.05;
 dtw_config.normalize_dtw = true;
 dtw_config.use_rotation_alignment = false;
 dtw_config.ground_truth_map = ground_truth_map;
@@ -335,12 +335,13 @@ if use_ground_truth && ~isempty(ground_truth_ids)
                 % Mean GT Rank
                 mean_gt_rank_dtw = mean(valid_ranks);
                 
-                % R@K_GT: Fraction of GT in Top-K
-                r50_gt_dtw = sum(valid_ranks <= 50) / num_gt;
-                r10_gt_dtw = sum(valid_ranks <= 10) / num_gt;
-                r5_gt_dtw = sum(valid_ranks <= 5) / num_gt;
-                r3_gt_dtw = sum(valid_ranks <= 3) / num_gt;
-                r1_gt_dtw = sum(valid_ranks <= 1) / num_gt;
+                % R@K_GT: Fraction of GT in Top-K (CORRECTED!)
+                % Normalize by min(K, num_gt) not by num_gt!
+                r50_gt_dtw = sum(valid_ranks <= 50) / min(50, num_gt);
+                r10_gt_dtw = sum(valid_ranks <= 10) / min(10, num_gt);
+                r5_gt_dtw = sum(valid_ranks <= 5) / min(5, num_gt);
+                r3_gt_dtw = sum(valid_ranks <= 3) / min(3, num_gt);
+                r1_gt_dtw = sum(valid_ranks <= 1) / min(1, num_gt);
             end
             
             % ============================================================
@@ -400,11 +401,14 @@ if use_ground_truth && ~isempty(ground_truth_ids)
                     
                     % Count unique GT-segment pairs in Top-K
                     total_gt_seg_pairs = num_gt * num_segments;
-                    seg_r50_gt_dtw = sum(valid_seg_ranks <= 50) / total_gt_seg_pairs;
-                    seg_r10_gt_dtw = sum(valid_seg_ranks <= 10) / total_gt_seg_pairs;
-                    seg_r5_gt_dtw = sum(valid_seg_ranks <= 5) / total_gt_seg_pairs;
-                    seg_r3_gt_dtw = sum(valid_seg_ranks <= 3) / total_gt_seg_pairs;
-                    seg_r1_gt_dtw = sum(valid_seg_ranks <= 1) / total_gt_seg_pairs;
+                    
+                    % R@K_GT: (CORRECTED!)
+                    % Normalize by min(K, total_gt_seg_pairs)
+                    seg_r50_gt_dtw = sum(valid_seg_ranks <= 50) / (num_segments * min(50, num_gt));
+                    seg_r10_gt_dtw = sum(valid_seg_ranks <= 10) / (num_segments * min(10, num_gt));
+                    seg_r5_gt_dtw = sum(valid_seg_ranks <= 5) / (num_segments * min(5, num_gt));
+                    seg_r3_gt_dtw = sum(valid_seg_ranks <= 3) / (num_segments * min(3, num_gt));
+                    seg_r1_gt_dtw = sum(valid_seg_ranks <= 1) / (num_segments * min(1, num_gt));
                 end
             end
             

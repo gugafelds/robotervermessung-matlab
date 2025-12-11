@@ -42,7 +42,7 @@ use_ground_truth = true;  % Set to false to disable
 
 % === Base Configuration ===
 base_config = struct();
-base_config.database_sample_size = 750;  % Fixed for fair comparison
+base_config.database_sample_size = 500;  % Fixed for fair comparison
 base_config.random_seed = 42;
 base_config.top_k_trajectories = 100;     % Fixed
 
@@ -242,7 +242,7 @@ dtw_config = struct();
 dtw_config.top_k_trajectories = base_config.top_k_trajectories;
 dtw_config.lb_kim_keep_ratio = 0.5;
 dtw_config.lb_keogh_candidates = 200;
-dtw_config.cdtw_window = 0.10;
+dtw_config.cdtw_window = 0.15;
 dtw_config.normalize_dtw = false;
 dtw_config.use_rotation_alignment = false;
 dtw_config.ground_truth_map = ground_truth_map;

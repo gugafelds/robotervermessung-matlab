@@ -48,35 +48,34 @@ function lb_dist = LB_Keogh(query, candidate, window_percent, mode, align_rotati
         end
     end
     
-    % --- Compute LB_Keogh distance ---
-    lb_dist_squared = 0;
-
-    for dim = 1:d
-        for i = 1:n
-            q_val = query(i, dim);
-
-            if strcmp(mode, 'joint_states')
-                % Wrap-around angular distance
-                if q_val > upper_env(i, dim)
-                    diff = abs(q_val - upper_env(i, dim));
-                    diff = min(diff, 2*pi - diff);
-                    lb_dist_squared = lb_dist_squared + diff^2;
-
-                elseif q_val < lower_env(i, dim)
-                    diff = abs(q_val - lower_env(i, dim));
-                    diff = min(diff, 2*pi - diff);
-                    lb_dist_squared = lb_dist_squared + diff^2;
-                end
-
-            else
-                % Standard Euclidean
-                if q_val > upper_env(i, dim)
-                    lb_dist_squared = lb_dist_squared + (q_val - upper_env(i, dim))^2;
-                elseif q_val < lower_env(i, dim)
-                    lb_dist_squared = lb_dist_squared + (q_val - lower_env(i, dim))^2;
-                end
-            end
-        end
+    % --- Compute LB_Keogh distance (vectorized) ---
+    if strcmp(mode, 'joint_states')
+        % Wrap-around angular distance
+        % Points above upper envelope
+        above_mask = query > upper_env;
+        diff_above = abs(query - upper_env);
+        diff_above = min(diff_above, 2*pi - diff_above);
+        
+        % Points below lower envelope
+        below_mask = query < lower_env;
+        diff_below = abs(query - lower_env);
+        diff_below = min(diff_below, 2*pi - diff_below);
+        
+        % Sum squared distances
+        lb_dist_squared = sum(above_mask .* diff_above.^2, 'all') + ...
+                          sum(below_mask .* diff_below.^2, 'all');
+    else
+        % Standard Euclidean
+        % Points above upper envelope
+        above_diff = query - upper_env;
+        above_diff(above_diff < 0) = 0;
+        
+        % Points below lower envelope
+        below_diff = lower_env - query;
+        below_diff(below_diff < 0) = 0;
+        
+        % Sum squared distances
+        lb_dist_squared = sum(above_diff.^2, 'all') + sum(below_diff.^2, 'all');
     end
     
     lb_dist = sqrt(lb_dist_squared);

@@ -10,7 +10,7 @@ function [bahn_ids, existing_bahn_ids] = getBahnIds(conn,evaluate_orientation)
     
     % Check ob Orientierung, Geschwindigkeit oder Position ausgewertet wird 
     if evaluate_orientation == true
-        query = sprintf("SELECT bahn_id FROM robotervermessung.auswertung.info_qad");
+        query = sprintf("SELECT bahn_id FROM robotervermessung.auswertung.qdtw_info");
     else
         query = sprintf("SELECT bahn_id FROM robotervermessung.auswertung.info_sidtw");
     end

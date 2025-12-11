@@ -80,11 +80,11 @@ end
 
     % Anwendung der Methoden - NUR wenn aktiviert
     if use_sidtw
-        [sidtw_distances, ~, ~, ~, sidtw_soll, sidtw_ist, ~, ~, ~, sidtw_segments_order] = fkt_selintdtw3d_opt(segment_soll,segment_ist,segment_ids_soll,segment_ids_ist,false);
+        [sidtw_distances, ~, ~, ~, sidtw_soll, sidtw_ist, ~, ~, ~, sidtw_segments_order] = fkt_selintdtw3d_opt(segment_soll, segment_ist, segment_ids_soll,segment_ids_ist,false);
     end
 
     if use_euclidean
-        [euclidean_soll, euclidean_distances,~] = distance2curve(segment_soll,segment_ist, 'linear');
+        [euclidean_soll, euclidean_distances,~] = distance2curve(segment_soll, segment_ist, 'linear');
         euclidean_segments_order = segment_ids_ist;
     end
 

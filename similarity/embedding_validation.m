@@ -42,9 +42,9 @@ use_ground_truth = true;  % Set to false to disable
 
 % === Base Configuration ===
 base_config = struct();
-base_config.database_sample_size = 300;  % Fixed for fair comparison
+base_config.database_sample_size = 750;  % Fixed for fair comparison
 base_config.random_seed = 42;
-base_config.top_k_trajectories = 75;     % Fixed
+base_config.top_k_trajectories = 100;     % Fixed
 
 % === DIMENSION 1: Embedding Architectures ===
 embedding_configs = {
@@ -58,25 +58,25 @@ embedding_configs = {
 % === DIMENSION 2: Query Trajectories ===
 query_ids = {
     '1764766034'; % np = 2 / p = 843
-    %'1764766001'; % np = 2 / p = 861
-    %'1764765958'; % np = 2 / p = 1077
-    %'1764765635'; % np = 2 / p = 1278
-    %'1764765776'; % np = 2 / p = 1851
-    %'1763567277'; % np = 3 / p = 1188
-    %'1763567148'; % np = 3 / p = 1482  
-    %'1763567026'; % np = 3 / p = 1434
-    %'1764763889'; % np = 3 / p = 1392
-    %'1764763510'; % np = 3 / p = 1554
-    %'1764762584'; % np = 4 / p = 2034
-    %'1764763238'; % np = 4 / p = 1341
-    %'1764762971'; % np = 4 / p = 1353
-    %'1764762831'; % np = 4 / p = 1326
-    %'1764762655'; % np = 4 / p = 1539
-    %'1764765476'; % np = 5 / p = 1398
-    %'1764764632'; % np = 5 / p = 2430
-    %'1764764821'; % np = 5 / p = 1944
-    %'1764765396'; % np = 5 / p = 1692
-    %'1764765286'; % np = 5 / p = 1377
+    '1764766001'; % np = 2 / p = 861
+    '1764765958'; % np = 2 / p = 1077
+    '1764765635'; % np = 2 / p = 1278
+    '1764765776'; % np = 2 / p = 1851
+    '1763567277'; % np = 3 / p = 1188
+    '1763567148'; % np = 3 / p = 1482  
+    '1763567026'; % np = 3 / p = 1434
+    '1764763889'; % np = 3 / p = 1392
+    '1764763510'; % np = 3 / p = 1554
+    '1764762584'; % np = 4 / p = 2034
+    '1764763238'; % np = 4 / p = 1341
+    '1764762971'; % np = 4 / p = 1353
+    '1764762831'; % np = 4 / p = 1326
+    '1764762655'; % np = 4 / p = 1539
+    '1764765476'; % np = 5 / p = 1398
+    '1764764632'; % np = 5 / p = 2430
+    '1764764821'; % np = 5 / p = 1944
+    '1764765396'; % np = 5 / p = 1692
+    '1764765286'; % np = 5 / p = 1377
     '1764863841'; % np = 4 / p = 1332 / noisy
 };
 
@@ -241,9 +241,9 @@ dtw_tic = tic;
 dtw_config = struct();
 dtw_config.top_k_trajectories = base_config.top_k_trajectories;
 dtw_config.lb_kim_keep_ratio = 0.5;
-dtw_config.lb_keogh_candidates = 100;
-dtw_config.cdtw_window = 0.05;
-dtw_config.normalize_dtw = true;
+dtw_config.lb_keogh_candidates = 200;
+dtw_config.cdtw_window = 0.10;
+dtw_config.normalize_dtw = false;
 dtw_config.use_rotation_alignment = false;
 dtw_config.ground_truth_map = ground_truth_map;
 

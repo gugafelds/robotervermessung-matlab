@@ -27,10 +27,10 @@ if upload_info
         infoTables(end+1,:) = {'robotervermessung.auswertung.info_dfd', batchInfo.dfd};
     end
     if use_qad
-        infoTables(end+1,:) = {'robotervermessung.auswertung.info_qad', batchInfo.qad};
+        infoTables(end+1,:) = {'robotervermessung.auswertung.qad_info', batchInfo.qad};
     end
     if use_qdtw
-        infoTables(end+1,:) = {'robotervermessung.auswertung.info_qdtw', batchInfo.qdtw};
+        infoTables(end+1,:) = {'robotervermessung.auswertung.qdtw_info', batchInfo.qdtw};
     end
     
     
@@ -57,10 +57,10 @@ if upload_deviations
     
     if evaluate_orientation
         if use_qad
-            deviationTables(end+1,:) = {'robotervermessung.auswertung.orientation_qad', batchDeviations.qad};
+            deviationTables(end+1,:) = {'robotervermessung.auswertung.qad_evaluation', batchDeviations.qad};
         end
         if use_qdtw
-            deviationTables(end+1,:) = {'robotervermessung.auswertung.orientation_qdtw', batchDeviations.qdtw};
+            deviationTables(end+1,:) = {'robotervermessung.auswertung.qdtw_evaluation', batchDeviations.qdtw};
         end
     else
         if use_euclidean

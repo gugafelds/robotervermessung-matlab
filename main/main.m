@@ -9,8 +9,9 @@ addpath(genpath('methods'))
 mode = 'automatic'; % 'manual' oder 'automatic'
 
 % Manual mode parameters
+%bahn_id = '1765280434';
 bahn_id = '';
-record_date = '31.10.2025'; % Format: dd.mm.yyyy
+record_date = ''; % Format: dd.mm.yyyy
 loop_record_date = 1;
 loop_all = 0;
 overwrite = 0;
@@ -63,7 +64,7 @@ if strcmpi(mode, 'manual')
     
     if loop_record_date && isempty(bahn_id)
         % Bahnen eines bestimmten Datums
-        query = 'SELECT * FROM robotervermessung.bewegungsdaten.bahn_info WHERE calibration_run = false';
+        query = 'SELECT * FROM robotervermessung.bewegungsdaten.bahn_info';
         all_info = fetch(conn, query);
         all_dates = extractBetween(all_info.record_filename, "record_", "_");
         bahn_info = all_info(all_dates == record_date, :);
@@ -94,7 +95,7 @@ elseif strcmpi(mode, 'automatic')
     % Bestimme welche Tabelle für die Prüfung verwendet wird
     check_table = 'info_sidtw';
     if evaluate_orientation == 1
-        check_table = 'info_qad';
+        check_table = 'qdtw_info';
     end
     
     % Hole alle noch nicht ausgewerteten Bahnen

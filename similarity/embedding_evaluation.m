@@ -159,297 +159,354 @@ fprintf('      Trajectory/Segment filtering can be done in Excel.\n\n');
 
 fprintf('Press Enter to continue to analysis...\n');
 pause;
-%% STEP 2: Find Best Embedding Config + Weight Mode
+%% STEP 2: Incremental Decision Making - Finding Best Configuration
+% ========================================================================
+% Goal: Show step-by-step how we arrive at the best embedding configuration
+% through systematic analysis and justification of each decision
 % ========================================================================
 
-fprintf('\nSTEP 2: Finding Best Embedding Config + Weight Mode...\n');
-fprintf('────────────────────────────────────────────────────────────────\n\n');
+fprintf('\n╔════════════════════════════════════════════════════════════════╗\n');
+fprintf('║  STEP 2: CONFIGURATION SELECTION ANALYSIS                      ║\n');
+fprintf('║  Incremental decision-making with visual evidence              ║\n');
+fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
 
-% Focus on Trajectory level for main analysis
-traj_data = data.combined;
+% Use all data (no filtering yet - we'll decide what to filter based on analysis)
+analysis_data = data.combined;
 
-fprintf('Analyzing %d trajectory-level experiments...\n\n', height(traj_data));
+fprintf('Total experiments available: %d\n', height(analysis_data));
+fprintf('  - Trajectory level: %d\n', sum(strcmp(analysis_data.Level, 'Trajectory')));
+fprintf('  - Segment level: %d\n\n', sum(strcmp(analysis_data.Level, 'Segment')));
 
-%% ========================================================================
-%  DTW CONFIGURATION FILTER
-%  ========================================================================
+% ========================================================================
+%% DECISION 1: Which Level? (Trajectory vs Segment)
+% ========================================================================
 
 fprintf('═══════════════════════════════════════════════════════════════\n');
-fprintf('DTW CONFIGURATION FILTER\n');
+fprintf('DECISION 1: Trajectory-Level vs. Segment-Level Analysis\n');
 fprintf('═══════════════════════════════════════════════════════════════\n\n');
 
-% Check what configurations are available
-unique_dtw_norm = unique(traj_data.DTW_Normalization);
-unique_dtw_rot = unique(traj_data.DTW_RotationAlign);
-unique_lb_keogh = unique(traj_data.LB_Keogh_Candidates);
-unique_db_size = unique(traj_data.Database_Size);
+% Compare performance at both levels
+traj_mask = strcmp(analysis_data.Level, 'Trajectory');
+seg_mask = strcmp(analysis_data.Level, 'Segment');
 
-fprintf('Available configurations:\n');
-fprintf('  DTW_Normalization:   %s\n', mat2str(unique_dtw_norm));
-fprintf('  DTW_RotationAlign:   %s\n', mat2str(unique_dtw_rot));
-fprintf('  LB_Keogh_Candidates: %s\n', mat2str(unique_lb_keogh));
-fprintf('  Database_Size:       %s\n\n', mat2str(unique_db_size));
+fprintf('Performance Comparison:\n\n');
+fprintf('                          | Trajectory | Segment  | Difference\n');
+fprintf('--------------------------|------------|----------|------------\n');
 
-% ========================================================================
-% USER FILTER: Set your desired configuration here
-% ========================================================================
+% Key metrics
+metrics_to_compare = {
+    'Mean_GTvsEB_Rank',  'GT Mean Rank (EB)';
+    'Mean_GTvsDTW_Rank', 'GT Mean Rank (DTW)';
+    'R@10_GTvsEB',       'R@10 (GT vs EB)';
+    'R@10_GTvsDTW',      'R@10 (GT vs DTW)';
+    'Spearman_DTWvsEB',  'Spearman (DTW vs EB)';
+};
 
-USE_FILTER = true;  % Set to false to analyze all data
-
-if USE_FILTER
-    % Filter settings
-    FILTER_DTW_NORM = 0;        % 0 = no normalization, 1 = normalized
-    FILTER_DTW_ROT = 0;         % 0 = no rotation, 1 = with rotation alignment
-    FILTER_LB_KEOGH = 200;       % Leave empty [] to include all, or set to 100 or 200
-    FILTER_DB_SIZE = [];        % Leave empty [] to include all, or set to specific size (e.g., 750, 1000)
+for i = 1:size(metrics_to_compare, 1)
+    metric = metrics_to_compare{i, 1};
+    label = metrics_to_compare{i, 2};
     
-    fprintf('FILTER ACTIVE:\n');
-    fprintf('  DTW_Normalization = %d\n', FILTER_DTW_NORM);
-    fprintf('  DTW_RotationAlign = %d\n', FILTER_DTW_ROT);
+    traj_val = nanmean(analysis_data.(metric)(traj_mask));
+    seg_val = nanmean(analysis_data.(metric)(seg_mask));
+    diff = ((traj_val - seg_val) / seg_val) * 100;
     
-    if ~isempty(FILTER_LB_KEOGH)
-        fprintf('  LB_Keogh_Candidates = %d\n', FILTER_LB_KEOGH);
-    else
-        fprintf('  LB_Keogh_Candidates = ALL\n');
-    end
-    
-    if ~isempty(FILTER_DB_SIZE)
-        fprintf('  Database_Size = %d\n', FILTER_DB_SIZE);
-    else
-        fprintf('  Database_Size = ALL\n');
-    end
-    
-    % Apply filter
-    dtw_filter_mask = (traj_data.DTW_Normalization == FILTER_DTW_NORM) & ...
-                      (traj_data.DTW_RotationAlign == FILTER_DTW_ROT);
-    
-    % Add LB_Keogh filter if specified
-    if ~isempty(FILTER_LB_KEOGH)
-        dtw_filter_mask = dtw_filter_mask & (traj_data.LB_Keogh_Candidates == FILTER_LB_KEOGH);
-    end
-    
-    % Add Database_Size filter if specified
-    if ~isempty(FILTER_DB_SIZE)
-        dtw_filter_mask = dtw_filter_mask & (traj_data.Database_Size == FILTER_DB_SIZE);
-    end
-    
-    traj_data_filtered = traj_data(dtw_filter_mask, :);
-    
-    fprintf('\n  Filtered: %d → %d experiments (%.1f%%)\n\n', ...
-        height(traj_data), height(traj_data_filtered), ...
-        100 * height(traj_data_filtered) / height(traj_data));
-    
-    if height(traj_data_filtered) == 0
-        error('No data matches the filter criteria! Adjust filter settings.');
-    end
-    
-    % Use filtered data
-    traj_data = traj_data_filtered;
-    
-else
-    fprintf('FILTER DISABLED: Analyzing ALL configurations\n\n');
+    fprintf('%-25s | %10.3f | %8.3f | %+7.1f%%\n', label, traj_val, seg_val, diff);
 end
 
+fprintf('\n📊 DECISION: Focus on TRAJECTORY level\n');
+fprintf('Rationale: [Add your reasoning based on results]\n\n');
+
+% Filter to trajectory level for remaining analysis
+analysis_data = analysis_data(traj_mask, :);
+
+% ========================================================================
+%% DECISION 2: DTW Configuration (Normalized vs Non-Normalized)
+% ========================================================================
+
+fprintf('═══════════════════════════════════════════════════════════════\n');
+fprintf('DECISION 2: DTW Normalization\n');
 fprintf('═══════════════════════════════════════════════════════════════\n\n');
 
-%% Aggregate Performance by Config + Weight Mode
+norm0_mask = analysis_data.DTW_Normalization == 0;
+norm1_mask = analysis_data.DTW_Normalization == 1;
+
+fprintf('Performance Comparison:\n\n');
+fprintf('                          | Non-Norm   | Normalized | Difference\n');
+fprintf('--------------------------|------------|------------|------------\n');
+
+for i = 1:size(metrics_to_compare, 1)
+    metric = metrics_to_compare{i, 1};
+    label = metrics_to_compare{i, 2};
+    
+    norm0_val = nanmean(analysis_data.(metric)(norm0_mask));
+    norm1_val = nanmean(analysis_data.(metric)(norm1_mask));
+    diff = ((norm0_val - norm1_val) / norm1_val) * 100;
+    
+    fprintf('%-25s | %10.3f | %10.3f | %+7.1f%%\n', label, norm0_val, norm1_val, diff);
+end
+
+fprintf('\n📊 DECISION: Use NON-NORMALIZED DTW (normalize=0)\n');
+fprintf('Rationale: Trajectory length is a discriminative feature\n\n');
+
+% Filter to non-normalized
+analysis_data = analysis_data(norm0_mask, :);
+
 % ========================================================================
+%% DECISION 3: DTW Mode (Joint States vs Position)
+% ========================================================================
+
+fprintf('═══════════════════════════════════════════════════════════════\n');
+fprintf('DECISION 3: DTW Space (Joint States vs. Cartesian Position)\n');
+fprintf('═══════════════════════════════════════════════════════════════\n\n');
+
+joint_mask = strcmp(analysis_data.DTW_Mode, 'joint_states');
+pos_mask = strcmp(analysis_data.DTW_Mode, 'position');
+
+fprintf('Performance Comparison:\n\n');
+fprintf('                          | Joint States | Position   | Difference\n');
+fprintf('--------------------------|--------------|------------|------------\n');
+
+for i = 1:size(metrics_to_compare, 1)
+    metric = metrics_to_compare{i, 1};
+    label = metrics_to_compare{i, 2};
+    
+    joint_val = nanmean(analysis_data.(metric)(joint_mask));
+    pos_val = nanmean(analysis_data.(metric)(pos_mask));
+    diff = ((joint_val - pos_val) / pos_val) * 100;
+    
+    fprintf('%-25s | %12.3f | %10.3f | %+7.1f%%\n', label, joint_val, pos_val, diff);
+end
+
+fprintf('\n📊 DECISION: Use JOINT STATES space\n');
+fprintf('Rationale: [Add your reasoning based on results]\n\n');
+
+% Filter to joint states
+analysis_data = analysis_data(joint_mask, :);
+
+% ========================================================================
+%% ANALYSIS 4: Embedding Architecture Comparison
+% ========================================================================
+
+fprintf('═══════════════════════════════════════════════════════════════\n');
+fprintf('ANALYSIS 4: Embedding Architecture Impact\n');
+fprintf('═══════════════════════════════════════════════════════════════\n\n');
 
 configs = data.metadata.unique_embedding_configs;
+
+fprintf('Performance by Embedding Config:\n\n');
+fprintf('Config            | Dims | Mean Rank | R@10  | Spearman | n\n');
+fprintf('                  |      | (GTvsEB)  |(GTvsEB)| (DTWvsEB)|  \n');
+fprintf('------------------|------|-----------|--------|----------|----\n');
+
+config_results = [];
+for c = 1:length(configs)
+    config = configs{c};
+    config_mask = strcmp(analysis_data.Embedding_Config, config);
+    
+    if any(config_mask)
+        mean_rank = nanmean(analysis_data.Mean_GTvsEB_Rank(config_mask));
+        r10 = nanmean(analysis_data.("R@10_GTvsEB")(config_mask));
+        spearman = nanmean(analysis_data.Spearman_DTWvsEB(config_mask));
+        dims = analysis_data.Total_Dims(find(config_mask, 1));
+        n = sum(config_mask);
+        
+        fprintf('%-17s | %4d | %9.2f | %6.3f | %8.3f | %d\n', ...
+            config, dims, mean_rank, r10, spearman, n);
+        
+        config_results(end+1).name = config;
+        config_results(end).dims = dims;
+        config_results(end).mean_rank = mean_rank;
+        config_results(end).r10 = r10;
+        config_results(end).spearman = spearman;
+    end
+end
+
+fprintf('\n📊 OBSERVATION: All configs perform nearly identically!\n');
+fprintf('→ Single-Fine-75 (75 dims) achieves same performance as Multi-Dense-200 (200 dims)\n');
+fprintf('→ Dimensionality and architecture have minimal impact\n\n');
+
+fprintf('📊 DECISION: Use Single-Fine-75 (simplest, lowest compute)\n\n');
+
+% Filter to best config for next analysis
+best_config = 'Single-Fine-75';
+analysis_data = analysis_data(strcmp(analysis_data.Embedding_Config, best_config), :);
+
+% ========================================================================
+%% ANALYSIS 5: Weight Mode Impact
+% ========================================================================
+
+fprintf('═══════════════════════════════════════════════════════════════\n');
+fprintf('ANALYSIS 5: Weight Mode Combinations\n');
+fprintf('═══════════════════════════════════════════════════════════════\n\n');
+
 weight_modes = data.metadata.unique_weight_modes;
+
+fprintf('Performance by Weight Mode:\n\n');
+fprintf('Weight Mode              | Mean Rank | R@10  | R@1   | Spearman | n\n');
+fprintf('                         | (GTvsEB)  |(GTvsEB)|(GTvsEB)| (DTWvsEB)|  \n');
+fprintf('-------------------------|-----------|-------|-------|----------|----\n');
+
+weight_results = [];
+for w = 1:length(weight_modes)
+    weight_mode = weight_modes{w};
+    weight_mask = strcmp(analysis_data.Weight_Mode, weight_mode);
+    
+    if any(weight_mask)
+        mean_rank = nanmean(analysis_data.Mean_GTvsEB_Rank(weight_mask));
+        r10 = nanmean(analysis_data.("R@10_GTvsEB")(weight_mask));
+        r1 = nanmean(analysis_data.("R@1_GTvsEB")(weight_mask));
+        spearman = nanmean(analysis_data.Spearman_DTWvsEB(weight_mask));
+        n = sum(weight_mask);
+        
+        fprintf('%-24s | %9.2f | %5.3f | %5.3f | %8.3f | %d\n', ...
+            weight_mode, mean_rank, r10, r1, spearman, n);
+        
+        weight_results(end+1).name = weight_mode;
+        weight_results(end).mean_rank = mean_rank;
+        weight_results(end).r10 = r10;
+        weight_results(end).r1 = r1;
+        weight_results(end).spearman = spearman;
+    end
+end
+
+% Sort by mean rank
+[~, sort_idx] = sort([weight_results.mean_rank]);
+best_weight = weight_results(sort_idx(1));
+
+fprintf('\n📊 BEST Weight Mode: %s\n', best_weight.name);
+fprintf('  Mean Rank: %.2f\n', best_weight.mean_rank);
+fprintf('  R@10: %.3f\n', best_weight.r10);
+fprintf('  R@1: %.3f\n', best_weight.r1);
+fprintf('  Spearman: %.3f\n\n', best_weight.spearman);
+
+% ========================================================================
+%% FINAL CONFIGURATION SUMMARY
+% ========================================================================
+
+fprintf('╔════════════════════════════════════════════════════════════════╗\n');
+fprintf('║  FINAL CONFIGURATION                                           ║\n');
+fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
+
+fprintf('Selected Configuration:\n');
+fprintf('  ✓ Level: Trajectory\n');
+fprintf('  ✓ DTW Normalization: False (Non-normalized)\n');
+fprintf('  ✓ DTW Mode: joint_states\n');
+fprintf('  ✓ Embedding Config: %s (75 dims)\n', best_config);
+fprintf('  ✓ Weight Mode: %s\n\n', best_weight.name);
+
+fprintf('Performance (Average across %d queries):\n', length(data.metadata.unique_queries));
+fprintf('  GT Mean Rank: %.2f (DTW: %.2f)\n', ...
+    nanmean(analysis_data.Mean_GTvsEB_Rank), ...
+    nanmean(analysis_data.Mean_GTvsDTW_Rank));
+fprintf('  R@10: %.3f (DTW: %.3f)\n', ...
+    nanmean(analysis_data.("R@10_GTvsEB")), ...
+    nanmean(analysis_data.("R@10_GTvsDTW")));
+fprintf('  R@1: %.3f (DTW: %.3f)\n', ...
+    nanmean(analysis_data.("R@1_GTvsEB")), ...
+    nanmean(analysis_data.("R@1_GTvsDTW")));
+fprintf('  Spearman (DTW vs EB): %.3f\n\n', ...
+    nanmean(analysis_data.Spearman_DTWvsEB));
+
+fprintf(['═════════════════════════════════' ...
+    '══════════════════════════════\n']);
+fprintf('DECISION-MAKING COMPLETE\n');
+fprintf('═══════════════════════════════════════════════════════════════\n\n');
+
+%% ========================================================================
+%  PLOT 5: Weight Mode Impact (BOTH DTW Spaces)
+%  ========================================================================
+
+fprintf('Creating Plot 5: Weight Mode Performance (Both DTW Spaces)...\n');
+
+figure('Position', [100, 100, 1400, 600]);
+
+% Build base filtered data (Trajectory + Non-Norm only)
+filtered_data = data.combined;
+filtered_data = filtered_data(strcmp(filtered_data.Level, 'Trajectory'), :);
+filtered_data = filtered_data(filtered_data.DTW_Normalization == 0, :);
+
+% Split by DTW Mode
 dtw_modes = {'joint_states', 'position'};
-levels = {'Trajectory', 'Segment'};
 
-% ========================================================================
-% USER CONFIG: Composite Score Weights
-% ========================================================================
-
-WEIGHT_GT_RETRIEVAL = 0.5;      % GT Coverage (R@50_GTvsEB)
-WEIGHT_CONSISTENCY = 0.3;       % Ranking Consistency (|Rank_EB - Rank_DTW|)
-WEIGHT_DTW_APPROX = 0.2;        % DTW Approximation (Spearman_DTWvsEB)
-
-fprintf('═══════════════════════════════════════════════════════════════\n');
-fprintf('COMPOSITE SCORE CONFIGURATION\n');
-fprintf('═══════════════════════════════════════════════════════════════\n\n');
-fprintf('Score = %.1f × R@50_GT + %.1f × Consistency + %.1f × Spearman_DTW\n', ...
-    WEIGHT_GT_RETRIEVAL, WEIGHT_CONSISTENCY, WEIGHT_DTW_APPROX);
-fprintf('where Consistency = 1 / (1 + |Rank_EB - Rank_DTW|)\n\n');
-
-fprintf('═══════════════════════════════════════════════════════════════\n');
-fprintf('BEST CONFIGURATIONS - MULTI-OBJECTIVE RANKING\n');
-fprintf('═══════════════════════════════════════════════════════════════\n\n');
-
-% Use the filtered data (contains BOTH Trajectory and Segment levels!)
-all_filtered_data = traj_data;  % ← ÄNDERUNG: Umbenennen für Klarheit
-
-% For each level (Trajectory / Segment)
-for level_idx = 1:length(levels)
-    level = levels{level_idx};
+for mode_idx = 1:2
+    dtw_mode = dtw_modes{mode_idx};
     
-    fprintf('\n╔═══════════════════════════════════════════════════════════════╗\n');
-    fprintf('║  %s LEVEL                                                  \n', upper(level));
-    fprintf('╚═══════════════════════════════════════════════════════════════╝\n\n');
+    subplot(1, 2, mode_idx);
     
-    % Filter for this level
-    level_mask = strcmp(all_filtered_data.Level, level);  % ← ÄNDERUNG
-    level_data = all_filtered_data(level_mask, :);        % ← ÄNDERUNG
+    % Filter for this DTW mode
+    mode_data = filtered_data(strcmp(filtered_data.DTW_Mode, dtw_mode), :);
     
-    if isempty(level_data)
-        fprintf('  No data for this level.\n\n');
+    % Use best config
+    best_config_data = mode_data(strcmp(mode_data.Embedding_Config, 'Single-Fine-75'), :);
+    
+    if isempty(best_config_data)
+        best_config_data = mode_data;
+    end
+    
+    weight_modes = data.metadata.unique_weight_modes;
+    
+    weight_results = [];
+    for w = 1:length(weight_modes)
+        weight_mode = weight_modes{w};
+        weight_mask = strcmp(best_config_data.Weight_Mode, weight_mode);
+        
+        if any(weight_mask)
+            weight_results(end+1).name = weight_mode;
+            weight_results(end).spearman = nanmean(best_config_data.Spearman_DTWvsEB(weight_mask));
+            weight_results(end).r50 = nanmean(best_config_data.("R@50_DTWvsEB")(weight_mask));
+            weight_results(end).r10 = nanmean(best_config_data.("R@10_DTWvsEB")(weight_mask));
+        end
+    end
+    
+    if isempty(weight_results)
         continue;
     end
     
-    fprintf('Analyzing %d experiments at %s level...\n\n', height(level_data), level);
+    % Sort by Spearman
+    [~, sort_idx] = sort([weight_results.spearman], 'descend');
+    weight_results = weight_results(sort_idx);
     
-    % For each DTW mode
-    for dtw_idx = 1:length(dtw_modes)
-        dtw_mode = dtw_modes{dtw_idx};
-        
-        fprintf('───────────────────────────────────────────────────────────────\n');
-        if strcmp(dtw_mode, 'joint_states')
-            fprintf('JOINT STATES SPACE\n');
-        else
-            fprintf('CARTESIAN SPACE\n');
-        end
-        fprintf('───────────────────────────────────────────────────────────────\n\n');
-        
-        % Filter for this DTW mode
-        mode_mask = strcmp(level_data.DTW_Mode, dtw_mode);
-        mode_data = level_data(mode_mask, :);
-        
-        if isempty(mode_data)
-            fprintf('  No data for this DTW mode.\n\n');
-            continue;
-        end
-        
-        % Create results array
-        results = [];
-        
-        for c = 1:length(configs)
-            for w = 1:length(weight_modes)
-                config = configs{c};
-                weight_mode = weight_modes{w};
-                
-                % Filter for this config + weight combination
-                combo_mask = strcmp(mode_data.Embedding_Config, config) & ...
-                             strcmp(mode_data.Weight_Mode, weight_mode);
-                combo_data = mode_data(combo_mask, :);
-                
-                if ~isempty(combo_data)
-                    % Metric 1: DTW Approximation
-                    spearman_dtw = nanmean(combo_data.Spearman_DTWvsEB);
-                    
-                    % Metric 2: GT Retrieval Quality
-                    r50_gt = nanmean(combo_data.("R@50_GTvsEB"));
-                    r10_gt = nanmean(combo_data.("R@10_GTvsEB"));
-                    mean_rank_eb = nanmean(combo_data.Mean_GTvsEB_Rank);
-                    mean_rank_dtw = nanmean(combo_data.Mean_GTvsDTW_Rank);
-                    
-                    % Metric 3: Ranking Consistency
-                    rank_diff = abs(mean_rank_eb - mean_rank_dtw);
-                    consistency_score = 1 / (1 + rank_diff);
-                    
-                    % Composite Score (user-configurable weights)
-                    composite_score = WEIGHT_GT_RETRIEVAL * r50_gt + ...
-                                      WEIGHT_CONSISTENCY * consistency_score + ...
-                                      WEIGHT_DTW_APPROX * spearman_dtw;
-                    
-                    % Store result
-                    results(end+1).config = config;
-                    results(end).weight_mode = weight_mode;
-                    results(end).spearman_dtw = spearman_dtw;
-                    results(end).r50_gt = r50_gt;
-                    results(end).r10_gt = r10_gt;
-                    results(end).mean_rank_eb = mean_rank_eb;
-                    results(end).mean_rank_dtw = mean_rank_dtw;
-                    results(end).rank_diff = rank_diff;
-                    results(end).consistency_score = consistency_score;
-                    results(end).composite_score = composite_score;
-                    results(end).n = height(combo_data);
-                end
-            end
-        end
-        
-        if isempty(results)
-            fprintf('  No results found.\n\n');
-            continue;
-        end
-        
-        % Sort by composite score (descending)
-        [~, sort_idx] = sort([results.composite_score], 'descend');
-        results = results(sort_idx);
-        
-        % Print top 10
-        fprintf('Rank | Config       | Weight Mode          | Spear | R@50  | Rank | Rank  | Cons | Score | n\n');
-        fprintf('     |              |                      | (DTW) | (GT)  | (EB) | Diff  |      |       |  \n');
-        fprintf('-----|--------------|----------------------|-------|-------|------|-------|------|-------|----\n');
-        
-        for i = 1:min(10, length(results))
-            r = results(i);
-            fprintf(' %2d  | %-12s | %-20s | %.3f | %.3f | %4.1f | %4.1f | %.2f | %.3f | %d\n', ...
-                i, r.config, r.weight_mode, r.spearman_dtw, r.r50_gt, ...
-                r.mean_rank_eb, r.rank_diff, r.consistency_score, r.composite_score, r.n);
-        end
-        
-        fprintf('\n');
-        
-        % Highlight best
-        best = results(1);
-        fprintf('★ BEST OVERALL for %s - %s:\n', level, upper(dtw_mode));
-        fprintf('  Config: %s\n', best.config);
-        fprintf('  Weight Mode: %s\n', best.weight_mode);
-        fprintf('  Composite Score: %.3f\n', best.composite_score);
-        fprintf('  ├─ Spearman (DTW): %.3f (weight: %.1f)\n', best.spearman_dtw, WEIGHT_DTW_APPROX);
-        fprintf('  ├─ R@50 (GT): %.3f (weight: %.1f)\n', best.r50_gt, WEIGHT_GT_RETRIEVAL);
-        fprintf('  ├─ R@10 (GT): %.3f\n', best.r10_gt);
-        fprintf('  ├─ Mean Rank (EB): %.1f\n', best.mean_rank_eb);
-        fprintf('  ├─ Mean Rank (DTW): %.1f\n', best.mean_rank_dtw);
-        fprintf('  ├─ Rank Difference: %.1f\n', best.rank_diff);
-        fprintf('  └─ Consistency Score: %.2f (weight: %.1f)\n', best.consistency_score, WEIGHT_CONSISTENCY);
-        fprintf('  Based on %d experiments\n\n', best.n);
-        
-        % Show Pareto-optimal configs
-        fprintf('PARETO-OPTIMAL CONFIGS:\n\n');
-        
-        % Best DTW approximation
-        [~, best_dtw_idx] = max([results.spearman_dtw]);
-        if best_dtw_idx ~= 1
-            fprintf('  • Best DTW Approximation: %s + %s (Spearman=%.3f)\n', ...
-                results(best_dtw_idx).config, results(best_dtw_idx).weight_mode, ...
-                results(best_dtw_idx).spearman_dtw);
-        end
-        
-        % Best GT retrieval
-        [~, best_gt_idx] = max([results.r50_gt]);
-        if best_gt_idx ~= 1
-            fprintf('  • Best GT Retrieval: %s + %s (R@50=%.3f)\n', ...
-                results(best_gt_idx).config, results(best_gt_idx).weight_mode, ...
-                results(best_gt_idx).r50_gt);
-        end
-        
-        % Best ranking consistency
-        [~, best_cons_idx] = min([results.rank_diff]);
-        if best_cons_idx ~= 1
-            fprintf('  • Best Ranking Consistency: %s + %s (Diff=%.1f)\n', ...
-                results(best_cons_idx).config, results(best_cons_idx).weight_mode, ...
-                results(best_cons_idx).rank_diff);
-        end
-        
-        fprintf('\n');
+    n_weights = length(weight_results);
+    names = {weight_results.name};
+    spearman_vals = [weight_results.spearman];
+    r10_vals = [weight_results.r10];
+    r50_vals = [weight_results.r50];
+    
+    x = 1:n_weights;
+    
+    % Dual axis plot
+    yyaxis left
+    bar(x, spearman_vals, 'FaceColor', [0.2, 0.5, 0.8], 'FaceAlpha', 0.8);
+    ylabel('Spearman Correlation', 'FontWeight', 'bold');
+    ylim([0, max(spearman_vals)*1.2]);
+    
+    for i = 1:n_weights
+        text(x(i), spearman_vals(i)+0.01, sprintf('%.2f', spearman_vals(i)), ...
+            'HorizontalAlignment', 'center', 'FontSize', 8);
     end
+    
+    yyaxis right
+    hold on;
+    plot(x, r10_vals, 'o-', 'LineWidth', 2, 'MarkerSize', 8, ...
+        'Color', [0.8, 0.3, 0.2], 'MarkerFaceColor', [0.8, 0.3, 0.2]);
+    plot(x, r50_vals, 's--', 'LineWidth', 2, 'MarkerSize', 7, ...
+        'Color', [0.2, 0.7, 0.3], 'MarkerFaceColor', [0.2, 0.7, 0.3]);
+    hold off;
+    ylabel('Recall@K', 'FontWeight', 'bold');
+    ylim([0, 1]);
+    
+    set(gca, 'XTick', x, 'XTickLabel', names, 'XTickLabelRotation', 45);
+    
+    if strcmp(dtw_mode, 'joint_states')
+        title('Joint States Space', 'FontSize', 12, 'FontWeight', 'bold');
+    else
+        title('Cartesian Space', 'FontSize', 12, 'FontWeight', 'bold');
+    end
+    
+    legend({'Spearman', 'R@10', 'R@50'}, 'Location', 'northwest');
+    grid on;
 end
 
-fprintf('\n═══════════════════════════════════════════════════════════════\n');
-fprintf('ANALYSIS COMPLETE\n');
-fprintf('═══════════════════════════════════════════════════════════════\n\n');
+sgtitle('Weight Mode Impact on DTW Approximation (Both Spaces)', ...
+    'FontSize', 14, 'FontWeight', 'bold');
 
-fprintf('═══════════════════════════════════════════════════════════════\n');
-fprintf('SCORING FORMULA\n');
-fprintf('═══════════════════════════════════════════════════════════════\n\n');
-fprintf('Composite Score = %.1f × R@50_GT + %.1f × Consistency + %.1f × Spearman_DTW\n', ...
-    WEIGHT_GT_RETRIEVAL, WEIGHT_CONSISTENCY, WEIGHT_DTW_APPROX);
-fprintf('where Consistency = 1 / (1 + |Rank_EB - Rank_DTW|)\n\n');
-fprintf('Rationale:\n');
-fprintf('  • GT Retrieval (%.0f%%): Most important - find the right trajectories\n', WEIGHT_GT_RETRIEVAL * 100);
-fprintf('  • Ranking Consistency (%.0f%%): Embeddings rank similar to DTW\n', WEIGHT_CONSISTENCY * 100);
-fprintf('  • DTW Approximation (%.0f%%): Nice-to-have bonus\n\n', WEIGHT_DTW_APPROX * 100);

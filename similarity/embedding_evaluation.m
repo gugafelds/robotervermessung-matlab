@@ -27,10 +27,10 @@ fprintf('───────────────────────�
 % Load all CSV files from current directory
 data = loadExperimentData('.');
 
-%% STEP 1.5: Export Filtered Data to Excel
+%% STEP 1.5: Smart Excel Export - Append Only New Data
 % ========================================================================
 
-fprintf('\nSTEP 1.5: Exporting data to Excel...\n');
+fprintf('\nSTEP 1.5: Smart Excel Export (Append New Data Only)...\n');
 fprintf('────────────────────────────────────────\n\n');
 
 % Create export folder if it doesn't exist
@@ -40,107 +40,125 @@ if ~exist(export_folder, 'dir')
     fprintf('Created folder: %s\n', export_folder);
 end
 
-% Generate filename with timestamp
-timestamp = char(datetime('now', 'Format', 'yyyy-MM-dd_HHmmss'));
-export_filename = fullfile(export_folder, sprintf('experiment_data_%s.xlsx', timestamp));
+% Fixed filename
+export_filename = fullfile(export_folder, 'experiment_data.xlsx');
 
-% Get the combined data
-export_data = data.combined;
+% Get the new data to potentially add
+new_data = data.combined;
 
-% Convert numeric columns to use comma as decimal separator for European format
-% Note: Excel will handle this based on system locale, but we prepare the data
+fprintf('New data loaded: %d rows\n', height(new_data));
 
-fprintf('Preparing data for export...\n');
-fprintf('  Total rows: %d\n', height(export_data));
-fprintf('  Total columns: %d\n\n', width(export_data));
+%% Check if Excel file exists
+% ========================================================================
 
-% Write to Excel with multiple sheets
-fprintf('Writing to Excel file: %s\n\n', export_filename);
-
-try
-    % Sheet 1: All data
-    writetable(export_data, export_filename, 'Sheet', 'All Data', 'WriteRowNames', false);
-    fprintf('  ✓ Sheet 1: All Data (%d rows)\n', height(export_data));
+if exist(export_filename, 'file')
+    fprintf('✓ Found existing file: %s\n', export_filename);
     
-    % Sheet 2: Trajectory level only
-    traj_data_export = export_data(strcmp(export_data.Level, 'Trajectory'), :);
-    writetable(traj_data_export, export_filename, 'Sheet', 'Trajectory Level', 'WriteRowNames', false);
-    fprintf('  ✓ Sheet 2: Trajectory Level (%d rows)\n', height(traj_data_export));
+    % Read existing data from "All Data" sheet
+    try
+        fprintf('  Reading existing data from sheet "All Data"...\n');
+        existing_data = readtable(export_filename, 'Sheet', 'All Data', 'VariableNamingRule', 'preserve');
+        fprintf('  ✓ Existing data: %d rows\n', height(existing_data));
+        
+        % Check which timestamps are already in the file
+        if ismember('Timestamp', existing_data.Properties.VariableNames) && ...
+           ismember('Timestamp', new_data.Properties.VariableNames)
+            
+            % Get unique timestamps from both datasets
+            existing_timestamps = unique(existing_data.Timestamp);
+            new_timestamps = unique(new_data.Timestamp);
+            
+            fprintf('\n  Existing timestamps in file: %d unique\n', length(existing_timestamps));
+            fprintf('  New timestamps in loaded data: %d unique\n', length(new_timestamps));
+            
+            % Find which timestamps are NOT in the existing file
+            timestamps_to_add = setdiff(new_timestamps, existing_timestamps);
+            
+            if isempty(timestamps_to_add)
+                fprintf('\n  ℹ All data already exists in Excel file - nothing to add!\n\n');
+                fprintf('Press Enter to continue to analysis...\n');
+                pause;
+                % Skip rest of export
+            else
+                fprintf('\n  → Found %d NEW timestamp(s) to add:\n', length(timestamps_to_add));
+                for i = 1:length(timestamps_to_add)
+                    fprintf('      %d. %s\n', i, char(timestamps_to_add(i)));
+                end
+                
+                % Filter new_data to only include rows with new timestamps
+                if iscellstr(timestamps_to_add) || isstring(timestamps_to_add)
+                    mask_to_add = ismember(new_data.Timestamp, timestamps_to_add);
+                else
+                    mask_to_add = false(height(new_data), 1);
+                    for i = 1:length(timestamps_to_add)
+                        mask_to_add = mask_to_add | strcmp(new_data.Timestamp, timestamps_to_add(i));
+                    end
+                end
+                
+                data_to_add = new_data(mask_to_add, :);
+                
+                fprintf('  → Rows to add: %d\n\n', height(data_to_add));
+                
+                % Append new data to existing data
+                combined_data = [existing_data; data_to_add];
+                
+                fprintf('  Combined data: %d rows (was %d, added %d)\n\n', ...
+                    height(combined_data), height(existing_data), height(data_to_add));
+                
+                % Write back to Excel
+                fprintf('  Writing updated data back to Excel...\n');
+                writetable(combined_data, export_filename, 'Sheet', 'All Data', 'WriteRowNames', false);
+                fprintf('  ✓ Successfully appended new data!\n\n');
+                
+                fprintf('╔════════════════════════════════════════════════════════════════╗\n');
+                fprintf('║  DATA APPENDED SUCCESSFULLY                                    ║\n');
+                fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
+                fprintf('Excel file updated: %s\n', export_filename);
+                fprintf('  Previous rows: %d\n', height(existing_data));
+                fprintf('  Added rows: %d\n', height(data_to_add));
+                fprintf('  Total rows now: %d\n\n', height(combined_data));
+            end
+            
+        else
+            fprintf('  ⚠ Warning: Timestamp column not found in existing or new data\n');
+            fprintf('  Cannot determine which data is new - skipping append\n\n');
+        end
+        
+    catch ME
+        fprintf('  ✗ Error reading existing file: %s\n', ME.message);
+        fprintf('  Will create new file instead\n\n');
+        
+        % Create new file (fallback)
+        writetable(new_data, export_filename, 'Sheet', 'All Data', 'WriteRowNames', false);
+        fprintf('  ✓ Created new Excel file with %d rows\n\n', height(new_data));
+    end
     
-    % Sheet 3: Segment level only
-    seg_data_export = export_data(strcmp(export_data.Level, 'Segment'), :);
-    writetable(seg_data_export, export_filename, 'Sheet', 'Segment Level', 'WriteRowNames', false);
-    fprintf('  ✓ Sheet 3: Segment Level (%d rows)\n', height(seg_data_export));
+else
+    % File doesn't exist - create new
+    fprintf('ℹ File does not exist - creating new Excel file...\n');
+    fprintf('  Location: %s\n\n', export_filename);
     
-    % Sheet 4: Summary statistics
-    summary_table = table();
-    summary_table.Metric = {
-        'Total Experiments';
-        'Queries';
-        'Embedding Configs';
-        'Weight Modes';
-        'DTW Modes';
-        'Trajectory Rows';
-        'Segment Rows';
-        'Mean Spearman (Traj)';
-        'Mean Spearman (Seg)';
-        'Mean R@50 (Traj)';
-        'Mean R@50 (Seg)'
-    };
-    
-    summary_table.Value = {
-        height(export_data);
-        data.metadata.num_queries;
-        data.metadata.num_embedding_configs;
-        data.metadata.num_weight_modes;
-        data.metadata.num_dtw_modes;
-        height(traj_data_export);
-        height(seg_data_export);
-        nanmean(traj_data_export.Spearman_DTWvsEB);
-        nanmean(seg_data_export.Spearman_DTWvsEB);
-        nanmean(traj_data_export.("R@50_DTWvsEB"));
-        nanmean(seg_data_export.("R@50_DTWvsEB"))
-    };
-    
-    writetable(summary_table, export_filename, 'Sheet', 'Summary', 'WriteRowNames', false);
-    fprintf('  ✓ Sheet 4: Summary Statistics\n\n');
-    
-    fprintf('╔════════════════════════════════════════════════════════════════╗\n');
-    fprintf('║  EXPORT SUCCESSFUL                                             ║\n');
-    fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
-    fprintf('Excel file saved: %s\n', export_filename);
-    fprintf('File size: %.2f MB\n\n', dir(export_filename).bytes / 1e6);
-    
-    fprintf('Excel file contains:\n');
-    fprintf('  Sheet 1: All Data - Complete dataset\n');
-    fprintf('  Sheet 2: Trajectory Level - Filtered view\n');
-    fprintf('  Sheet 3: Segment Level - Filtered view\n');
-    fprintf('  Sheet 4: Summary - Key statistics\n\n');
-    
-    fprintf('Note: Open in Excel and set your locale to use comma as decimal separator.\n');
-    fprintf('      (File → Options → Advanced → Use system separators)\n\n');
-    
-catch ME
-    fprintf('✗ ERROR: Could not write Excel file\n');
-    fprintf('  Error message: %s\n\n', ME.message);
-    
-    % Fallback: Try CSV export with European format
-    fprintf('Attempting CSV export with European format (comma as decimal)...\n');
-    
-    csv_filename = fullfile(export_folder, sprintf('experiment_data_%s.csv', timestamp));
-    
-    % Convert to European CSV format (semicolon separator, comma decimal)
-    % This is tricky in MATLAB, so we use standard writetable
-    writetable(export_data, csv_filename, 'Delimiter', ';');
-    
-    fprintf('  ✓ CSV exported: %s\n', csv_filename);
-    fprintf('  Note: Use semicolon as separator when importing to Excel\n\n');
+    try
+        writetable(new_data, export_filename, 'Sheet', 'All Data', 'WriteRowNames', false);
+        fprintf('  ✓ Successfully created new file with %d rows\n\n', height(new_data));
+        
+        fprintf('╔════════════════════════════════════════════════════════════════╗\n');
+        fprintf('║  NEW FILE CREATED                                              ║\n');
+        fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
+        fprintf('Excel file created: %s\n', export_filename);
+        fprintf('  Total rows: %d\n', height(new_data));
+        fprintf('  Sheet: All Data\n\n');
+        
+    catch ME
+        fprintf('  ✗ Error creating file: %s\n\n', ME.message);
+    end
 end
+
+fprintf('Note: File contains ONLY "All Data" sheet.\n');
+fprintf('      Trajectory/Segment filtering can be done in Excel.\n\n');
 
 fprintf('Press Enter to continue to analysis...\n');
 pause;
-
-
 %% STEP 2: Find Best Embedding Config + Weight Mode
 % ========================================================================
 
@@ -148,7 +166,7 @@ fprintf('\nSTEP 2: Finding Best Embedding Config + Weight Mode...\n');
 fprintf('────────────────────────────────────────────────────────────────\n\n');
 
 % Focus on Trajectory level for main analysis
-traj_data = data.combined(strcmp(data.combined.Level, 'Trajectory'), :);
+traj_data = data.combined;
 
 fprintf('Analyzing %d trajectory-level experiments...\n\n', height(traj_data));
 
@@ -180,7 +198,7 @@ USE_FILTER = true;  % Set to false to analyze all data
 
 if USE_FILTER
     % Filter settings
-    FILTER_DTW_NORM = 1;        % 0 = no normalization, 1 = normalized
+    FILTER_DTW_NORM = 0;        % 0 = no normalization, 1 = normalized
     FILTER_DTW_ROT = 0;         % 0 = no rotation, 1 = with rotation alignment
     FILTER_LB_KEOGH = 200;       % Leave empty [] to include all, or set to 100 or 200
     FILTER_DB_SIZE = [];        % Leave empty [] to include all, or set to specific size (e.g., 750, 1000)
@@ -240,203 +258,198 @@ fprintf('═══════════════════════�
 configs = data.metadata.unique_embedding_configs;
 weight_modes = data.metadata.unique_weight_modes;
 dtw_modes = {'joint_states', 'position'};
+levels = {'Trajectory', 'Segment'};
 
-% Main metric for ranking
-metric_name = 'R@50_GTvsDTW';
+% ========================================================================
+% USER CONFIG: Composite Score Weights
+% ========================================================================
+
+WEIGHT_GT_RETRIEVAL = 0.5;      % GT Coverage (R@50_GTvsEB)
+WEIGHT_CONSISTENCY = 0.3;       % Ranking Consistency (|Rank_EB - Rank_DTW|)
+WEIGHT_DTW_APPROX = 0.2;        % DTW Approximation (Spearman_DTWvsEB)
 
 fprintf('═══════════════════════════════════════════════════════════════\n');
-fprintf('BEST CONFIGURATIONS (Sorted by %s)\n', metric_name);
+fprintf('COMPOSITE SCORE CONFIGURATION\n');
+fprintf('═══════════════════════════════════════════════════════════════\n\n');
+fprintf('Score = %.1f × R@50_GT + %.1f × Consistency + %.1f × Spearman_DTW\n', ...
+    WEIGHT_GT_RETRIEVAL, WEIGHT_CONSISTENCY, WEIGHT_DTW_APPROX);
+fprintf('where Consistency = 1 / (1 + |Rank_EB - Rank_DTW|)\n\n');
+
+fprintf('═══════════════════════════════════════════════════════════════\n');
+fprintf('BEST CONFIGURATIONS - MULTI-OBJECTIVE RANKING\n');
 fprintf('═══════════════════════════════════════════════════════════════\n\n');
 
-% For each DTW mode, find best combinations
-for dtw_idx = 1:length(dtw_modes)
-    dtw_mode = dtw_modes{dtw_idx};
+% Use the filtered data (contains BOTH Trajectory and Segment levels!)
+all_filtered_data = traj_data;  % ← ÄNDERUNG: Umbenennen für Klarheit
+
+% For each level (Trajectory / Segment)
+for level_idx = 1:length(levels)
+    level = levels{level_idx};
     
-    fprintf('───────────────────────────────────────────────────────────────\n');
-    if strcmp(dtw_mode, 'joint_states')
-        fprintf('JOINT STATES SPACE\n');
-    else
-        fprintf('CARTESIAN SPACE\n');
-    end
-    fprintf('───────────────────────────────────────────────────────────────\n\n');
+    fprintf('\n╔═══════════════════════════════════════════════════════════════╗\n');
+    fprintf('║  %s LEVEL                                                  \n', upper(level));
+    fprintf('╚═══════════════════════════════════════════════════════════════╝\n\n');
     
-    % Filter for this DTW mode
-    mode_mask = strcmp(traj_data.DTW_Mode, dtw_mode);
-    mode_data = traj_data(mode_mask, :);
+    % Filter for this level
+    level_mask = strcmp(all_filtered_data.Level, level);  % ← ÄNDERUNG
+    level_data = all_filtered_data(level_mask, :);        % ← ÄNDERUNG
     
-    if isempty(mode_data)
-        fprintf('  No data for this DTW mode after filtering.\n\n');
+    if isempty(level_data)
+        fprintf('  No data for this level.\n\n');
         continue;
     end
     
-    % Create results array
-    results = [];
+    fprintf('Analyzing %d experiments at %s level...\n\n', height(level_data), level);
     
-    for c = 1:length(configs)
-        for w = 1:length(weight_modes)
-            config = configs{c};
-            weight_mode = weight_modes{w};
-            
-            % Filter for this config + weight combination
-            combo_mask = strcmp(mode_data.Embedding_Config, config) & ...
-                         strcmp(mode_data.Weight_Mode, weight_mode);
-            combo_data = mode_data(combo_mask, :);
-            
-            if ~isempty(combo_data)
-                % Calculate mean over queries
-                mean_r50 = nanmean(combo_data.(metric_name));
-                std_r50 = nanstd(combo_data.(metric_name));
-                mean_r10 = nanmean(combo_data.("R@10_DTWvsEB"));
-                mean_spearman = nanmean(combo_data.Spearman_DTWvsEB);
-                n_experiments = height(combo_data);
+    % For each DTW mode
+    for dtw_idx = 1:length(dtw_modes)
+        dtw_mode = dtw_modes{dtw_idx};
+        
+        fprintf('───────────────────────────────────────────────────────────────\n');
+        if strcmp(dtw_mode, 'joint_states')
+            fprintf('JOINT STATES SPACE\n');
+        else
+            fprintf('CARTESIAN SPACE\n');
+        end
+        fprintf('───────────────────────────────────────────────────────────────\n\n');
+        
+        % Filter for this DTW mode
+        mode_mask = strcmp(level_data.DTW_Mode, dtw_mode);
+        mode_data = level_data(mode_mask, :);
+        
+        if isempty(mode_data)
+            fprintf('  No data for this DTW mode.\n\n');
+            continue;
+        end
+        
+        % Create results array
+        results = [];
+        
+        for c = 1:length(configs)
+            for w = 1:length(weight_modes)
+                config = configs{c};
+                weight_mode = weight_modes{w};
                 
-                % Store result
-                results(end+1).config = config;
-                results(end).weight_mode = weight_mode;
-                results(end).mean_r50 = mean_r50;
-                results(end).std_r50 = std_r50;
-                results(end).mean_r10 = mean_r10;
-                results(end).mean_spearman = mean_spearman;
-                results(end).n = n_experiments;
+                % Filter for this config + weight combination
+                combo_mask = strcmp(mode_data.Embedding_Config, config) & ...
+                             strcmp(mode_data.Weight_Mode, weight_mode);
+                combo_data = mode_data(combo_mask, :);
+                
+                if ~isempty(combo_data)
+                    % Metric 1: DTW Approximation
+                    spearman_dtw = nanmean(combo_data.Spearman_DTWvsEB);
+                    
+                    % Metric 2: GT Retrieval Quality
+                    r50_gt = nanmean(combo_data.("R@50_GTvsEB"));
+                    r10_gt = nanmean(combo_data.("R@10_GTvsEB"));
+                    mean_rank_eb = nanmean(combo_data.Mean_GTvsEB_Rank);
+                    mean_rank_dtw = nanmean(combo_data.Mean_GTvsDTW_Rank);
+                    
+                    % Metric 3: Ranking Consistency
+                    rank_diff = abs(mean_rank_eb - mean_rank_dtw);
+                    consistency_score = 1 / (1 + rank_diff);
+                    
+                    % Composite Score (user-configurable weights)
+                    composite_score = WEIGHT_GT_RETRIEVAL * r50_gt + ...
+                                      WEIGHT_CONSISTENCY * consistency_score + ...
+                                      WEIGHT_DTW_APPROX * spearman_dtw;
+                    
+                    % Store result
+                    results(end+1).config = config;
+                    results(end).weight_mode = weight_mode;
+                    results(end).spearman_dtw = spearman_dtw;
+                    results(end).r50_gt = r50_gt;
+                    results(end).r10_gt = r10_gt;
+                    results(end).mean_rank_eb = mean_rank_eb;
+                    results(end).mean_rank_dtw = mean_rank_dtw;
+                    results(end).rank_diff = rank_diff;
+                    results(end).consistency_score = consistency_score;
+                    results(end).composite_score = composite_score;
+                    results(end).n = height(combo_data);
+                end
             end
         end
+        
+        if isempty(results)
+            fprintf('  No results found.\n\n');
+            continue;
+        end
+        
+        % Sort by composite score (descending)
+        [~, sort_idx] = sort([results.composite_score], 'descend');
+        results = results(sort_idx);
+        
+        % Print top 10
+        fprintf('Rank | Config       | Weight Mode          | Spear | R@50  | Rank | Rank  | Cons | Score | n\n');
+        fprintf('     |              |                      | (DTW) | (GT)  | (EB) | Diff  |      |       |  \n');
+        fprintf('-----|--------------|----------------------|-------|-------|------|-------|------|-------|----\n');
+        
+        for i = 1:min(10, length(results))
+            r = results(i);
+            fprintf(' %2d  | %-12s | %-20s | %.3f | %.3f | %4.1f | %4.1f | %.2f | %.3f | %d\n', ...
+                i, r.config, r.weight_mode, r.spearman_dtw, r.r50_gt, ...
+                r.mean_rank_eb, r.rank_diff, r.consistency_score, r.composite_score, r.n);
+        end
+        
+        fprintf('\n');
+        
+        % Highlight best
+        best = results(1);
+        fprintf('★ BEST OVERALL for %s - %s:\n', level, upper(dtw_mode));
+        fprintf('  Config: %s\n', best.config);
+        fprintf('  Weight Mode: %s\n', best.weight_mode);
+        fprintf('  Composite Score: %.3f\n', best.composite_score);
+        fprintf('  ├─ Spearman (DTW): %.3f (weight: %.1f)\n', best.spearman_dtw, WEIGHT_DTW_APPROX);
+        fprintf('  ├─ R@50 (GT): %.3f (weight: %.1f)\n', best.r50_gt, WEIGHT_GT_RETRIEVAL);
+        fprintf('  ├─ R@10 (GT): %.3f\n', best.r10_gt);
+        fprintf('  ├─ Mean Rank (EB): %.1f\n', best.mean_rank_eb);
+        fprintf('  ├─ Mean Rank (DTW): %.1f\n', best.mean_rank_dtw);
+        fprintf('  ├─ Rank Difference: %.1f\n', best.rank_diff);
+        fprintf('  └─ Consistency Score: %.2f (weight: %.1f)\n', best.consistency_score, WEIGHT_CONSISTENCY);
+        fprintf('  Based on %d experiments\n\n', best.n);
+        
+        % Show Pareto-optimal configs
+        fprintf('PARETO-OPTIMAL CONFIGS:\n\n');
+        
+        % Best DTW approximation
+        [~, best_dtw_idx] = max([results.spearman_dtw]);
+        if best_dtw_idx ~= 1
+            fprintf('  • Best DTW Approximation: %s + %s (Spearman=%.3f)\n', ...
+                results(best_dtw_idx).config, results(best_dtw_idx).weight_mode, ...
+                results(best_dtw_idx).spearman_dtw);
+        end
+        
+        % Best GT retrieval
+        [~, best_gt_idx] = max([results.r50_gt]);
+        if best_gt_idx ~= 1
+            fprintf('  • Best GT Retrieval: %s + %s (R@50=%.3f)\n', ...
+                results(best_gt_idx).config, results(best_gt_idx).weight_mode, ...
+                results(best_gt_idx).r50_gt);
+        end
+        
+        % Best ranking consistency
+        [~, best_cons_idx] = min([results.rank_diff]);
+        if best_cons_idx ~= 1
+            fprintf('  • Best Ranking Consistency: %s + %s (Diff=%.1f)\n', ...
+                results(best_cons_idx).config, results(best_cons_idx).weight_mode, ...
+                results(best_cons_idx).rank_diff);
+        end
+        
+        fprintf('\n');
     end
-    
-    if isempty(results)
-        fprintf('  No results found.\n\n');
-        continue;
-    end
-    
-    % Sort by R@50 (descending)
-    [~, sort_idx] = sort([results.mean_r50], 'descend');
-    results = results(sort_idx);
-    
-    % Print top 10
-    fprintf('Rank | Config            | Weight Mode              | R@50   | R@10   | Spearman | n\n');
-    fprintf('-----|-------------------|--------------------------|--------|--------|----------|----\n');
-    
-    for i = 1:min(10, length(results))
-        r = results(i);
-        fprintf(' %2d  | %-17s | %-24s | %.3f  | %.3f  |  %.3f    | %d\n', ...
-            i, r.config, r.weight_mode, r.mean_r50, r.mean_r10, r.mean_spearman, r.n);
-    end
-    
-    fprintf('\n');
-    
-    % Highlight best
-    best = results(1);
-    fprintf('★ BEST for %s:\n', upper(dtw_mode));
-    fprintf('  Config: %s\n', best.config);
-    fprintf('  Weight Mode: %s\n', best.weight_mode);
-    fprintf('  R@50: %.3f (±%.3f)\n', best.mean_r50, best.std_r50);
-    fprintf('  R@10: %.3f\n', best.mean_r10);
-    fprintf('  Spearman: %.3f\n', best.mean_spearman);
-    fprintf('  Based on %d experiments\n\n', best.n);
 end
-
-%% Compare Embedding Configs (aggregated over weight modes)
-% ========================================================================
 
 fprintf('\n═══════════════════════════════════════════════════════════════\n');
-fprintf('EMBEDDING CONFIGS COMPARISON (Aggregated over all Weight Modes)\n');
+fprintf('ANALYSIS COMPLETE\n');
 fprintf('═══════════════════════════════════════════════════════════════\n\n');
-
-fprintf('Config            | Dims |     Joint States      |    Cartesian Space    \n');
-fprintf('                  |      |  R@50  | R@10 | Spear |  R@50  | R@10 | Spear\n');
-fprintf('------------------|------|-----------------------|----------------------\n');
-
-for c = 1:length(configs)
-    config = configs{c};
-    
-    % Get dims
-    config_mask = strcmp(traj_data.Embedding_Config, config);
-    if any(config_mask)
-        dims = traj_data.Total_Dims(find(config_mask, 1));
-    else
-        dims = 0;
-    end
-    
-    % Joint states
-    joint_mask = strcmp(traj_data.Embedding_Config, config) & ...
-                 strcmp(traj_data.DTW_Mode, 'joint_states');
-    if any(joint_mask)
-        joint_r50 = nanmean(traj_data.(metric_name)(joint_mask));
-        joint_r10 = nanmean(traj_data.("R@10_DTWvsEB")(joint_mask));
-        joint_spear = nanmean(traj_data.Spearman_DTWvsEB(joint_mask));
-    else
-        joint_r50 = NaN; joint_r10 = NaN; joint_spear = NaN;
-    end
-    
-    % Position
-    pos_mask = strcmp(traj_data.Embedding_Config, config) & ...
-               strcmp(traj_data.DTW_Mode, 'position');
-    if any(pos_mask)
-        pos_r50 = nanmean(traj_data.(metric_name)(pos_mask));
-        pos_r10 = nanmean(traj_data.("R@10_DTWvsEB")(pos_mask));
-        pos_spear = nanmean(traj_data.Spearman_DTWvsEB(pos_mask));
-    else
-        pos_r50 = NaN; pos_r10 = NaN; pos_spear = NaN;
-    end
-    
-    fprintf('%-17s | %4d | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f\n', ...
-        config, dims, joint_r50, joint_r10, joint_spear, pos_r50, pos_r10, pos_spear);
-end
-
-fprintf('\n');
-
-%% Key Insights
-% ========================================================================
 
 fprintf('═══════════════════════════════════════════════════════════════\n');
-fprintf('KEY INSIGHTS\n');
+fprintf('SCORING FORMULA\n');
 fprintf('═══════════════════════════════════════════════════════════════\n\n');
-
-% Best overall config (across both spaces)
-all_r50 = [];
-all_configs = {};
-for c = 1:length(configs)
-    config_mask = strcmp(traj_data.Embedding_Config, configs{c});
-    if any(config_mask)
-        all_r50(end+1) = nanmean(traj_data.(metric_name)(config_mask));
-        all_configs{end+1} = configs{c};
-    end
-end
-
-[best_overall_r50, best_idx] = max(all_r50);
-fprintf('1. Best Overall Embedding Config: %s (R@50 = %.3f)\n', ...
-    all_configs{best_idx}, best_overall_r50);
-
-% Joint vs Position
-joint_all = strcmp(traj_data.DTW_Mode, 'joint_states');
-pos_all = strcmp(traj_data.DTW_Mode, 'position');
-
-if any(joint_all) && any(pos_all)
-    mean_joint = nanmean(traj_data.(metric_name)(joint_all));
-    mean_pos = nanmean(traj_data.(metric_name)(pos_all));
-    
-    fprintf('2. Joint States vs Position: Joint is %.1f%% better (%.3f vs %.3f)\n', ...
-        100*(mean_joint - mean_pos)/mean_pos, mean_joint, mean_pos);
-end
-
-% Multi-Scale vs Single-Scale
-multi_mask = contains(traj_data.Embedding_Config, 'Multi');
-single_mask = ~multi_mask;
-
-if any(multi_mask) && any(single_mask)
-    mean_multi = nanmean(traj_data.(metric_name)(multi_mask));
-    mean_single = nanmean(traj_data.(metric_name)(single_mask));
-    
-    fprintf('3. Multi-Scale vs Single-Scale: Multi is %.1f%% better (%.3f vs %.3f)\n', ...
-        100*(mean_multi - mean_single)/mean_single, mean_multi, mean_single);
-end
-
-% Dimensionality effect
-dims = unique(traj_data.Total_Dims);
-fprintf('4. Dimensionality Effect:\n');
-for d = 1:length(dims)
-    dim_mask = (traj_data.Total_Dims == dims(d));
-    dim_perf = nanmean(traj_data.(metric_name)(dim_mask));
-    fprintf('   %3d dims: R@50 = %.3f\n', dims(d), dim_perf);
-end
-
-fprintf('\n');
+fprintf('Composite Score = %.1f × R@50_GT + %.1f × Consistency + %.1f × Spearman_DTW\n', ...
+    WEIGHT_GT_RETRIEVAL, WEIGHT_CONSISTENCY, WEIGHT_DTW_APPROX);
+fprintf('where Consistency = 1 / (1 + |Rank_EB - Rank_DTW|)\n\n');
+fprintf('Rationale:\n');
+fprintf('  • GT Retrieval (%.0f%%): Most important - find the right trajectories\n', WEIGHT_GT_RETRIEVAL * 100);
+fprintf('  • Ranking Consistency (%.0f%%): Embeddings rank similar to DTW\n', WEIGHT_CONSISTENCY * 100);
+fprintf('  • DTW Approximation (%.0f%%): Nice-to-have bonus\n\n', WEIGHT_DTW_APPROX * 100);

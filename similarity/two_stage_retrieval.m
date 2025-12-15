@@ -49,7 +49,7 @@ fprintf('╚══════════════════════�
 % === Best Configurations (from previous analysis) ===
 % TODO: Fill in your top 2 embedding configs from Figure 1
 embedding_configs = {
-    %'Multi-Balanced-25',      5,  20,   true;   % Best overall
+    'Multi-Balanced-25',      5,  20,   true;   % Best overall
     'Single-Coarse-15',     0,    15,   false;  % Best single-scale
 };
 
@@ -57,28 +57,28 @@ embedding_configs = {
 weight_mode_configs = {
     % Motion (Joint States)
     'Joint only',           'joint_states',  [0, 1, 0, 0, 0];  % Baseline
-    %'Joint + Pos',         'joint_states',  [1, 1, 0, 0, 0];  % Best (from Figure 2)
+    'Joint + Pos',         'joint_states',  [1, 1, 0, 0, 0];  % Best (from Figure 2)
     
     % Space (Cartesian/Position)
     'Position only',        'position',      [1, 0, 0, 0, 0];  % Baseline
-    %'Pos + Joint',            'position',      [1, 1, 0, 0, 0];  % Best (from Figure 2)
+    'Pos + Joint',            'position',      [1, 1, 0, 0, 0];  % Best (from Figure 2)
 };
 
 % === Two-Stage Parameters ===
 %k_candidates = [10, 50, 100, 200, 500];  % Stage 1 output sizes
 %database_sizes = [100, 500, 1000, 2000]; % Database sizes to test
-k_candidates = [25];  % Stage 1 output sizes
-database_sizes = [500]; % Database sizes to test
+k_candidates = [50, 100, 200];  % Stage 1 output sizes
+database_sizes = [5000]; % Database sizes to test
 k_final = 10;                             % Final Top-K (fixed)
 
 % === Query Trajectories ===
 query_ids = {
     '1764766034'; % Good query
-    %'1765473159'; % Noisy
-    %'1765473166'; % Noisy
-    %'1765473097'; % Noisy
-    %'1765473008'; % Noisy
-    %'1765472956'; % Noisy
+    '1765473159'; % Noisy
+    '1765473166'; % Noisy
+    '1765473097'; % Noisy
+    '1765473008'; % Noisy
+    '1765472956'; % Noisy
 };
 
 % === Base Configuration ===
@@ -1008,18 +1008,18 @@ for emb_idx = 1:num_embeddings
                     
                     experiment_counter = experiment_counter + 1;
                     
-                    if mod(experiment_counter, 50) == 1
-                        fprintf('\n╔════════════════════════════════════════════════════════════════╗\n');
-                        fprintf('║  EXPERIMENT %4d/%4d (TRAJECTORY LEVEL)                      ║\n', ...
-                            experiment_counter, total_experiments * 2);
-                        fprintf('╠════════════════════════════════════════════════════════════════╣\n');
-                        fprintf('║  Embedding:  %-48s ║\n', emb_name);
-                        fprintf('║  Weight:     %-48s ║\n', weight_mode_name);
-                        fprintf('║  K:          %-48d ║\n', K);
-                        fprintf('║  DB Size:    %-48d ║\n', db_size);
-                        fprintf('║  Query:      %-48s ║\n', query_id);
-                        fprintf('╚════════════════════════════════════════════════════════════════╝\n');
-                    end
+                    
+                    fprintf('\n╔════════════════════════════════════════════════════════════════╗\n');
+                    fprintf('║  EXPERIMENT %4d/%4d (TRAJECTORY LEVEL)                      ║\n', ...
+                        experiment_counter, total_experiments * 2);
+                    fprintf('╠════════════════════════════════════════════════════════════════╣\n');
+                    fprintf('║  Embedding:  %-48s ║\n', emb_name);
+                    fprintf('║  Weight:     %-48s ║\n', weight_mode_name);
+                    fprintf('║  K:          %-48d ║\n', K);
+                    fprintf('║  DB Size:    %-48d ║\n', db_size);
+                    fprintf('║  Query:      %-48s ║\n', query_id);
+                    fprintf('╚════════════════════════════════════════════════════════════════╝\n');
+                    
                     
                     % STAGE 1: Trajectory Embedding Retrieval
                     tic_stage1_traj = tic;

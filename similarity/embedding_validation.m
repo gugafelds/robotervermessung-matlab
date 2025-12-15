@@ -42,16 +42,24 @@ use_ground_truth = true;  % Set to false to disable
 
 % === Base Configuration ===
 base_config = struct();
-base_config.database_sample_size = 2000;  % Fixed for fair comparison
-base_config.random_seed = 42;
+base_config.database_sample_size = 1000;  % Fixed for fair comparison
+base_config.random_seed = 999;
 base_config.top_k_trajectories = 100;     % Fixed
 
 % === DIMENSION 1: Embedding Architectures ===
 embedding_configs = {
+    'Single-Fine-2'        0,    2,   false;
+    'Multi-Coarse-3'       1,    2,   true;
+    'Single-Fine-5'        0,    5,   false;
+    'Multi-Coarse-10'      5,    5,   true;
+    'Single-Fine-10',      0,    10,    false;
+    'Multi-Coarse-15',     5,   10,    true;
+    'Single-Fine-20',     0,    20,   false;
+    'Multi-Balanced-25',  5,   20,    true;
     'Single-Fine-50',      0,    50,    false;
-    'Multi-Coarse-75',     50,   25,    true;
+    'Multi-Coarse-75',     25,   50,    true;
     'Single-Fine-100',     0,    100,   false;
-    'Multi-Balanced-125',  50,   75,    true;
+    'Multi-Balanced-125',  25,   100,    true;
     'Single-Fine-200',     0,    200,   false;
     'Multi-Dense-250',     100,  150,   true;
     'Single-Fine-400',     0,    400,   false;
@@ -60,7 +68,7 @@ embedding_configs = {
 
 % === DIMENSION 2: Query Trajectories ===
 query_ids = {
-    %'1764766034'; % np = 2 / p = 843
+    '1764766034'; % np = 2 / p = 843
     %'1764766001'; % np = 2 / p = 861
     %'1764765958'; % np = 2 / p = 1077
     %'1764765635'; % np = 2 / p = 1278

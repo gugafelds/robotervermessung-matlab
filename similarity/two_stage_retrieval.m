@@ -68,17 +68,16 @@ weight_mode_configs = {
 %k_candidates = [10, 50, 100, 200, 500];  % Stage 1 output sizes
 %database_sizes = [100, 500, 1000, 2000]; % Database sizes to test
 k_candidates = [50];  % Stage 1 output sizes
-database_sizes = [1000]; % Database sizes to test
-k_final = 10;                             % Final Top-K (fixed)
+database_sizes = [250]; % Database sizes to test
 
 % === Query Trajectories ===
 query_ids = {
     %'1764766034'; % Good query
-    '1764167686'; % Noisy hard
+    %'1764167686'; % Noisy hard
     %'1765473159'; % Noisy
     %'1765473166'; % Noisy
     %'1765473097'; % Noisy
-    %'1765473008'; % Noisy
+    '1765473008'; % Noisy
     %'1765472956'; % Noisy
 };
 
@@ -186,7 +185,7 @@ if use_ground_truth
         
         % Store for later use
         base_config.ground_truth_map = ground_truth_map;
-        base_config.has_ground_truth = true;
+        base_config.has_ground_truth = false;
         base_config.ground_truth_ids = ground_truth_ids;
     else
         fprintf('⚠ No ground truth found - continuing without GT evaluation\n\n');
@@ -356,7 +355,7 @@ dtw_tic = tic;
 dtw_config = struct();
 dtw_config.top_k_trajectories = base_config.top_k_trajectories;
 dtw_config.lb_kim_keep_ratio = 0.9;      % Keep 80% after LB_Kim
-dtw_config.lb_keogh_candidates = 700;     % Further reduce to 400 with LB_Keogh
+dtw_config.lb_keogh_candidates = 500;     % Further reduce to 400 with LB_Keogh
 dtw_config.cdtw_window = 0.2;
 dtw_config.normalize_dtw = false;
 dtw_config.use_rotation_alignment = false;
@@ -500,22 +499,26 @@ else
 end
 
 % ========================================================================
-%% COMPUTE DTW GT METRICS (BASELINE PERFORMANCE)
+%% COMPUTE DTW GT METRICS + EXTRACT SIMILARITIES (COMBINED)
 % ========================================================================
 
 if base_config.has_ground_truth || base_config.has_proxy_gt
     fprintf('╔════════════════════════════════════════════════════════════════╗\n');
-    fprintf('║  COMPUTING DTW GT METRICS (BASELINE)                          ║\n');
+    fprintf('║  COMPUTING DTW GT METRICS + EXTRACTING SIMILARITIES           ║\n');
     
     if base_config.has_ground_truth
         fprintf('║  Using REAL ground truth                                       ║\n');
     else
-        fprintf('║  Using PROXY GT (DTW Top-50) - metrics will be near-perfect   ║\n');
+        fprintf('║  Using PROXY GT (DTW Top-50)                                   ║\n');
     end
     
     fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
     
     dtw_gt_metrics = struct();
+    
+    % Use LARGEST DB for similarity extraction
+    largest_db_size = max(database_sizes);
+    largest_pool_name = sprintf('db_%d', largest_db_size);
     
     % Loop through unique DTW modes
     for dtw_mode_idx = 1:length(unique_dtw_modes)
@@ -574,25 +577,30 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                 end
                 
                 % ============================================================
-                % TRAJECTORY-LEVEL GT METRICS
+                % TRAJECTORY-LEVEL GT METRICS + SIMILARITIES
                 % ============================================================
                 dtw_ranking = dtw_cache_curr.(query_field).(dtw_mode_curr).trajectory_ranking;
                 
-                % Calculate GT metrics (Trajectory level)
+                % Calculate GT ranks AND distances
                 gt_ranks = zeros(num_gt, 1);
+                gt_distances = zeros(num_gt, 1);
+                
                 for gt_idx = 1:num_gt
                     gt_id = gt_ids_for_query{gt_idx};
                     rank_idx = find(strcmp(dtw_ranking.bahn_id, gt_id), 1);
                     
                     if ~isempty(rank_idx)
                         gt_ranks(gt_idx) = rank_idx;
+                        gt_distances(gt_idx) = dtw_ranking.dtw_distance(rank_idx);
                     else
                         gt_ranks(gt_idx) = inf;
+                        gt_distances(gt_idx) = inf;
                     end
                 end
                 
                 valid_ranks = gt_ranks(gt_ranks < inf);
                 
+                % Compute metrics
                 if ~isempty(valid_ranks)
                     r10_gt_dtw = sum(valid_ranks <= 10) / min(10, num_gt);
                     r50_gt_dtw = sum(valid_ranks <= 50) / min(50, num_gt);
@@ -611,8 +619,50 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                     p_gt_dtw = inf;
                 end
                 
+                % ✅ EXTRACT SIMILARITIES
+                % Real GT: Only for LARGEST DB (doesn't change across sizes)
+                % Proxy GT: For EACH DB size (changes per size!)
+                extract_similarities = false;
+                
+                if base_config.has_ground_truth && strcmp(pool_name, largest_pool_name)
+                    % Real GT: Only once with largest DB
+                    extract_similarities = true;
+                elseif base_config.has_proxy_gt
+                    % Proxy GT: For EVERY DB size!
+                    extract_similarities = true;
+                end
+                
+                if extract_similarities
+                    % Convert distances to similarities
+                    valid_dists = gt_distances(gt_distances < inf);
+                    
+                    if ~isempty(valid_dists)
+                        max_dist = max(valid_dists);
+                        if max_dist > 0
+                            normalized_dists = gt_distances / max_dist;
+                        else
+                            normalized_dists = gt_distances;
+                        end
+                        gt_similarities = 1 ./ (1 + normalized_dists);
+                        gt_similarities(gt_distances == inf) = 0;
+                    else
+                        gt_similarities = zeros(num_gt, 1);
+                    end
+                    
+                    % ✅ STORE
+                    sim_field = sprintf('similarities_%s', dtw_mode_curr);
+                    
+                    if base_config.has_ground_truth
+                        ground_truth_map.(query_field).(sim_field) = gt_similarities;
+                    elseif base_config.has_proxy_gt
+                        % Store per DB size!
+                        proxy_field = sprintf('%s_%s', query_field, dtw_mode_curr);
+                        base_config.proxy_gt_map.(pool_name).(proxy_field).(sim_field) = gt_similarities;
+                    end
+                end
+                
                 % ============================================================
-                % SEGMENT-LEVEL GT METRICS
+                % SEGMENT-LEVEL GT METRICS + SIMILARITIES
                 % ============================================================
                 if isfield(dtw_cache_curr.(query_field).(dtw_mode_curr), 'segment_rankings')
                     segment_rankings = dtw_cache_curr.(query_field).(dtw_mode_curr).segment_rankings;
@@ -623,9 +673,8 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                         if isfield(ground_truth_map.(query_field), 'segments')
                             gt_segs_raw = ground_truth_map.(query_field).segments;
                             
-                            % Check structure type
+                            % Convert struct to cell array
                             if isstruct(gt_segs_raw)
-                                % Struct format: seg_1, seg_2, etc. → convert to cell array
                                 seg_fields = fieldnames(gt_segs_raw);
                                 gt_seg_ids_for_query = cell(length(seg_fields), 1);
                                 
@@ -633,48 +682,38 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                                     field_name = seg_fields{sf_idx};
                                     gt_seg_ids_for_query{sf_idx} = gt_segs_raw.(field_name);
                                     
-                                    % Ensure it's a cell array
                                     if ~iscell(gt_seg_ids_for_query{sf_idx})
                                         gt_seg_ids_for_query{sf_idx} = {gt_seg_ids_for_query{sf_idx}};
                                     end
                                 end
                                 has_segment_gt = true;
-                                
                             elseif iscell(gt_segs_raw) && ~isempty(gt_segs_raw) && iscell(gt_segs_raw{1})
-                                % Already cell array per segment
                                 gt_seg_ids_for_query = gt_segs_raw;
                                 has_segment_gt = true;
-                                
                             elseif iscell(gt_segs_raw)
-                                % Flat cell list
                                 gt_seg_ids_for_query = repmat({gt_segs_raw}, num_query_segments, 1);
                                 has_segment_gt = true;
-                                
                             else
-                                % Unknown format
                                 has_segment_gt = false;
                             end
                         else
                             has_segment_gt = false;
                         end
                         
-                        % FALLBACK if no proper segment GT
+                        % FALLBACK
                         if ~has_segment_gt
                             gt_traj_ids = ground_truth_map.(query_field).trajectories;
-                            
                             gt_seg_ids_all = {};
                             for traj_idx = 1:length(gt_traj_ids)
                                 traj_id = gt_traj_ids{traj_idx};
-                                seg_mask = strcmp(data_cache_curr.segments.bahn_ids, traj_id);
-                                gt_seg_ids_all = [gt_seg_ids_all; data_cache_curr.segments.segment_ids(seg_mask)];
+                                seg_mask = strcmp(dtw_cache_curr.segments.bahn_ids, traj_id);
+                                gt_seg_ids_all = [gt_seg_ids_all; dtw_cache_curr.segments.segment_ids(seg_mask)];
                             end
-                            
                             gt_seg_ids_for_query = repmat({gt_seg_ids_all}, num_query_segments, 1);
                             has_segment_gt = true;
                         end
                         
                     elseif base_config.has_proxy_gt
-                        % Proxy GT segments
                         proxy_field = sprintf('%s_%s', query_field, dtw_mode_curr);
                         if isfield(base_config.proxy_gt_map, pool_name) && ...
                            isfield(base_config.proxy_gt_map.(pool_name), proxy_field)
@@ -690,7 +729,6 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                     end
                     
                     if ~has_segment_gt || isempty(gt_seg_ids_for_query)
-                        % No segment GT at all
                         seg_r1_gt_dtw = NaN;
                         seg_r3_gt_dtw = NaN;
                         seg_r5_gt_dtw = NaN;
@@ -699,7 +737,7 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                         seg_mean_gt_rank_dtw = NaN;
                         seg_p_gt_dtw = NaN;
                     else
-                        % Calculate GT coverage for EACH segment separately
+                        % Calculate GT coverage + similarities for EACH segment
                         seg_gt_recalls = struct();
                         seg_gt_recalls.r1 = [];
                         seg_gt_recalls.r3 = [];
@@ -709,27 +747,41 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                         seg_gt_recalls.mean_rank = [];
                         seg_gt_recalls.p_gt = [];
                         
+                        % ✅ Segment similarities (only for LARGEST DB)
+                        if strcmp(pool_name, largest_pool_name)
+                            gt_seg_similarities_all = cell(num_query_segments, 1);
+                        end
+                        
                         for seg_idx = 1:num_query_segments
                             if isempty(segment_rankings{seg_idx})
+                                if strcmp(pool_name, largest_pool_name)
+                                    gt_seg_similarities_all{seg_idx} = [];
+                                end
                                 continue;
                             end
                             
                             seg_ranking = segment_rankings{seg_idx};
                             
-                            % Get GT for THIS specific query segment
                             if seg_idx <= length(gt_seg_ids_for_query)
                                 gt_segs_curr = gt_seg_ids_for_query{seg_idx};
                                 num_gt_seg_curr = length(gt_segs_curr);
                             else
+                                if strcmp(pool_name, largest_pool_name)
+                                    gt_seg_similarities_all{seg_idx} = [];
+                                end
                                 continue;
                             end
                             
                             if isempty(gt_segs_curr)
+                                if strcmp(pool_name, largest_pool_name)
+                                    gt_seg_similarities_all{seg_idx} = [];
+                                end
                                 continue;
                             end
                             
-                            % Find GT ranks by SEGMENT_ID
+                            % Find GT ranks AND distances
                             seg_gt_ranks = zeros(num_gt_seg_curr, 1);
+                            seg_gt_distances = zeros(num_gt_seg_curr, 1);
                             
                             for gt_idx = 1:num_gt_seg_curr
                                 gt_seg_id = gt_segs_curr{gt_idx};
@@ -737,8 +789,10 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                                 
                                 if ~isempty(rank_idx)
                                     seg_gt_ranks(gt_idx) = rank_idx;
+                                    seg_gt_distances(gt_idx) = seg_ranking.dtw_distance(rank_idx);
                                 else
                                     seg_gt_ranks(gt_idx) = inf;
+                                    seg_gt_distances(gt_idx) = inf;
                                 end
                             end
                             
@@ -753,9 +807,37 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                                 seg_gt_recalls.mean_rank = [seg_gt_recalls.mean_rank; mean(valid_seg_ranks)];
                                 seg_gt_recalls.p_gt = [seg_gt_recalls.p_gt; max(valid_seg_ranks)];
                             end
+                            
+                            % ✅ EXTRACT segment similarities (only for LARGEST DB)
+                            extract_seg_similarities = false;
+
+                            if base_config.has_ground_truth && strcmp(pool_name, largest_pool_name)
+                                extract_seg_similarities = true;
+                            elseif base_config.has_proxy_gt
+                                extract_seg_similarities = true;
+                            end
+                            
+                            if extract_seg_similarities
+                                valid_seg_dists = seg_gt_distances(seg_gt_distances < inf);
+                                
+                                if ~isempty(valid_seg_dists)
+                                    max_seg_dist = max(valid_seg_dists);
+                                    if max_seg_dist > 0
+                                        normalized_seg_dists = seg_gt_distances / max_seg_dist;
+                                    else
+                                        normalized_seg_dists = seg_gt_distances;
+                                    end
+                                    gt_seg_sims = 1 ./ (1 + normalized_seg_dists);
+                                    gt_seg_sims(seg_gt_distances == inf) = 0;
+                                else
+                                    gt_seg_sims = zeros(num_gt_seg_curr, 1);
+                                end
+                                
+                                gt_seg_similarities_all{seg_idx} = gt_seg_sims;
+                            end
                         end
                         
-                        % Average across segments
+                        % Average metrics across segments
                         if ~isempty(seg_gt_recalls.r1)
                             seg_r1_gt_dtw = mean(seg_gt_recalls.r1);
                             seg_r3_gt_dtw = mean(seg_gt_recalls.r3);
@@ -773,9 +855,20 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                             seg_mean_gt_rank_dtw = inf;
                             seg_p_gt_dtw = inf;
                         end
+                        
+                        % ✅ STORE segment similarities (only for LARGEST DB)
+                        if strcmp(pool_name, largest_pool_name)
+                            seg_sim_field = sprintf('segment_similarities_%s', dtw_mode_curr);
+                            
+                            if base_config.has_ground_truth
+                                ground_truth_map.(query_field).(seg_sim_field) = gt_seg_similarities_all;
+                            elseif base_config.has_proxy_gt
+                                proxy_field = sprintf('%s_%s', query_field, dtw_mode_curr);
+                                base_config.proxy_gt_map.(pool_name).(proxy_field).(seg_sim_field) = gt_seg_similarities_all;
+                            end
+                        end
                     end
                 else
-                    % No segment rankings
                     seg_r1_gt_dtw = NaN;
                     seg_r3_gt_dtw = NaN;
                     seg_r5_gt_dtw = NaN;
@@ -785,12 +878,9 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                     seg_p_gt_dtw = NaN;
                 end
                 
-                % Store metrics (key by dtw_mode, not weight_mode!)
+                % Store metrics
                 metric_key = sprintf('%s_%s_q%s', dtw_mode_curr, pool_name, query_id);
-                
                 dtw_gt_metrics.(metric_key) = struct();
-                
-                % Trajectory metrics
                 dtw_gt_metrics.(metric_key).r1_gt = r1_gt_dtw;
                 dtw_gt_metrics.(metric_key).r3_gt = r3_gt_dtw;
                 dtw_gt_metrics.(metric_key).r5_gt = r5_gt_dtw;
@@ -798,8 +888,6 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                 dtw_gt_metrics.(metric_key).r50_gt = r50_gt_dtw;
                 dtw_gt_metrics.(metric_key).mean_rank = mean_gt_rank_dtw;
                 dtw_gt_metrics.(metric_key).p_gt = p_gt_dtw;
-                
-                % Segment metrics
                 dtw_gt_metrics.(metric_key).seg_r1_gt = seg_r1_gt_dtw;
                 dtw_gt_metrics.(metric_key).seg_r3_gt = seg_r3_gt_dtw;
                 dtw_gt_metrics.(metric_key).seg_r5_gt = seg_r5_gt_dtw;
@@ -807,8 +895,6 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                 dtw_gt_metrics.(metric_key).seg_r50_gt = seg_r50_gt_dtw;
                 dtw_gt_metrics.(metric_key).seg_mean_rank = seg_mean_gt_rank_dtw;
                 dtw_gt_metrics.(metric_key).seg_p_gt = seg_p_gt_dtw;
-                
-                % Common
                 dtw_gt_metrics.(metric_key).num_gt = num_gt;
                 
                 fprintf('    Query %s:\n', query_id);
@@ -821,13 +907,12 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
         end
     end
     
-    % Store in base_config
     base_config.dtw_gt_metrics = dtw_gt_metrics;
     
-    fprintf('✓ DTW GT metrics computed for all configurations\n');
+    fprintf('✓ DTW GT metrics computed + Similarities extracted\n');
     
     if ~base_config.has_ground_truth
-        fprintf('  Note: Metrics use Proxy GT (DTW Top-50), so values are near-perfect\n');
+        fprintf('  Note: Metrics use Proxy GT (DTW Top-50)\n');
     end
     fprintf('\n');
 end
@@ -1037,6 +1122,50 @@ for emb_idx = 1:num_embeddings
                         num_gt_traj = 0;
                         gt_type = 'none';
                     end
+
+                    % ========================================================
+                    % GET GT SIMILARITIES (for NDCG calculation)
+                    % ========================================================
+                    if num_gt_traj > 0
+                        if base_config.has_ground_truth && isfield(ground_truth_map, query_field)
+                            % Real GT - get similarities for this DTW mode
+                            sim_field = sprintf('similarities_%s', dtw_mode_curr);
+                            
+                            if isfield(ground_truth_map.(query_field), sim_field)
+                                gt_traj_similarities = ground_truth_map.(query_field).(sim_field);
+                            else
+                                % Fallback: uniform relevance
+                                gt_traj_similarities = ones(num_gt_traj, 1);
+                                fprintf('  [DEBUG] Looking for field: %s\n', sim_field);
+                                fprintf('  [DEBUG] Available fields in ground_truth_map.%s:\n', query_field);
+                                available_fields = fieldnames(ground_truth_map.(query_field));
+                                for dbg_idx = 1:length(available_fields)
+                                    fprintf('    - %s\n', available_fields{dbg_idx});
+                                end
+                                warning('No DTW similarities found for %s.%s - using uniform relevance', query_field, sim_field);
+                            end
+                            
+                        elseif base_config.has_proxy_gt
+                            % Proxy GT - similarities stored per mode
+                            proxy_field = sprintf('%s_%s', query_field, dtw_mode_curr);
+                            
+                            % Use LARGEST DB for similarities (most accurate)
+                            largest_pool_name = sprintf('db_%d', max(database_sizes));
+                            
+                            if isfield(base_config.proxy_gt_map, largest_pool_name) && ...
+                               isfield(base_config.proxy_gt_map.(largest_pool_name), proxy_field) && ...
+                               isfield(base_config.proxy_gt_map.(largest_pool_name).(proxy_field), 'similarities')
+                                gt_traj_similarities = base_config.proxy_gt_map.(largest_pool_name).(proxy_field).similarities;
+                            else
+                                % Fallback: uniform relevance
+                                gt_traj_similarities = ones(num_gt_traj, 1);
+                            end
+                        else
+                            gt_traj_similarities = ones(num_gt_traj, 1);
+                        end
+                    else
+                        gt_traj_similarities = [];
+                    end
                     
                     % ====================================================
                     % LEVEL 1: TRAJECTORY-LEVEL TWO-STAGE
@@ -1071,7 +1200,7 @@ for emb_idx = 1:num_embeddings
                     
                     % Embedding-Only Metrics (Trajectory)
                     [emb_only_metrics_traj] = computeEmbeddingOnlyMetrics(...
-                        top_k_ids_traj, gt_traj_ids, num_gt_traj, K);
+                        top_k_ids_traj, gt_traj_ids, gt_traj_similarities, num_gt_traj, K);
                     
                     % STAGE 2: Trajectory DTW Reranking
                     [dtw_reranked_ids_traj, time_stage2_traj, num_dtw_calls_traj] = ...
@@ -1080,7 +1209,7 @@ for emb_idx = 1:num_embeddings
                     
                     % Two-Stage Metrics (Trajectory)
                     [twostage_metrics_traj] = computeTwoStageMetrics(...
-                        dtw_reranked_ids_traj, gt_traj_ids, num_gt_traj, K);
+                        dtw_reranked_ids_traj, gt_traj_ids, gt_traj_similarities, num_gt_traj, K);
                     
                     % Get Baseline DTW GT Metrics (Trajectory)
                     metric_key = sprintf('%s_%s_q%s', dtw_mode_curr, pool_name, query_id);
@@ -1219,10 +1348,58 @@ for emb_idx = 1:num_embeddings
                             gt_seg_ids_curr = {};
                             num_gt_seg_curr = 0;
                         end
+
+                        % ========================================================
+                        % GET GT SEGMENT SIMILARITIES
+                        % ========================================================
+                        if num_gt_seg_curr > 0
+                            if base_config.has_ground_truth && isfield(ground_truth_map, query_field)
+                                % Real GT - get segment similarities
+                                seg_sim_field = sprintf('segment_similarities_%s', dtw_mode_curr);
+                                
+                                if isfield(ground_truth_map.(query_field), seg_sim_field)
+                                    seg_sims_all = ground_truth_map.(query_field).(seg_sim_field);
+                                    
+                                    if seg_idx <= length(seg_sims_all) && ~isempty(seg_sims_all{seg_idx})
+                                        gt_seg_similarities_curr = seg_sims_all{seg_idx};
+                                    else
+                                        gt_seg_similarities_curr = ones(num_gt_seg_curr, 1);
+                                    end
+                                else
+                                    gt_seg_similarities_curr = ones(num_gt_seg_curr, 1);
+                                end
+                                
+                            elseif base_config.has_proxy_gt
+                                % Proxy GT - get segment similarities
+                                proxy_field = sprintf('%s_%s', query_field, dtw_mode_curr);
+                                largest_pool_name = sprintf('db_%d', max(database_sizes));
+                                
+                                if isfield(base_config.proxy_gt_map, largest_pool_name) && ...
+                                   isfield(base_config.proxy_gt_map.(largest_pool_name), proxy_field) && ...
+                                   isfield(base_config.proxy_gt_map.(largest_pool_name).(proxy_field), 'segment_similarities')
+                                    
+                                    seg_sims_all = base_config.proxy_gt_map.(largest_pool_name).(proxy_field).segment_similarities;
+                                    
+                                    if seg_idx <= length(seg_sims_all) && ~isempty(seg_sims_all{seg_idx})
+                                        gt_seg_similarities_curr = seg_sims_all{seg_idx};
+                                    else
+                                        gt_seg_similarities_curr = ones(num_gt_seg_curr, 1);
+                                    end
+                                else
+                                    gt_seg_similarities_curr = ones(num_gt_seg_curr, 1);
+                                end
+                            else
+                                gt_seg_similarities_curr = ones(num_gt_seg_curr, 1);
+                            end
+                        else
+                            gt_seg_similarities_curr = [];
+                        end
+
+
                         
                         % Embedding-Only Metrics (Segment)
                         seg_emb_only_metrics = computeEmbeddingOnlyMetrics(...
-                            top_k_ids_seg, gt_seg_ids_curr, num_gt_seg_curr, K);
+                            top_k_ids_seg, gt_seg_ids_curr, gt_seg_similarities_curr, num_gt_seg_curr, K);
                         seg_emb_only_metrics_all = [seg_emb_only_metrics_all; seg_emb_only_metrics];
                         
                         % STAGE 2: Segment DTW Reranking
@@ -1243,7 +1420,7 @@ for emb_idx = 1:num_embeddings
                         
                         % Two-Stage Metrics (Segment)
                         seg_twostage_metrics = computeTwoStageMetrics(...
-                            dtw_reranked_ids_seg, gt_seg_ids_curr, num_gt_seg_curr, K);
+                            dtw_reranked_ids_seg, gt_seg_ids_curr, gt_seg_similarities_curr, num_gt_seg_curr, K);
                         seg_twostage_metrics_all = [seg_twostage_metrics_all; seg_twostage_metrics];
                     end
                     

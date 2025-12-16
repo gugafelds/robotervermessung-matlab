@@ -49,7 +49,7 @@ fprintf('╚══════════════════════�
 % === Best Configurations (from previous analysis) ===
 % TODO: Fill in your top 2 embedding configs from Figure 1
 embedding_configs = {
-    'Multi-Balanced-25',      5,  20,   true;   % Best overall
+    %'Multi-Balanced-25',      5,  20,   true;   % Best overall
     'Single-Coarse-15',     0,    15,   false;  % Best single-scale
 };
 
@@ -57,35 +57,36 @@ embedding_configs = {
 weight_mode_configs = {
     % Motion (Joint States)
     'Joint only',           'joint_states',  [0, 1, 0, 0, 0];  % Baseline
-    'Joint + Pos',         'joint_states',  [1, 1, 0, 0, 0];  % Best (from Figure 2)
+    %'Joint + Pos',         'joint_states',  [1, 1, 0, 0, 0];  % Best (from Figure 2)
     
     % Space (Cartesian/Position)
     'Position only',        'position',      [1, 0, 0, 0, 0];  % Baseline
-    'Pos + Joint',            'position',      [1, 1, 0, 0, 0];  % Best (from Figure 2)
+    %'Pos + Joint',            'position',      [1, 1, 0, 0, 0];  % Best (from Figure 2)
 };
 
 % === Two-Stage Parameters ===
 %k_candidates = [10, 50, 100, 200, 500];  % Stage 1 output sizes
 %database_sizes = [100, 500, 1000, 2000]; % Database sizes to test
-k_candidates = [50, 100, 200];  % Stage 1 output sizes
-database_sizes = [5000]; % Database sizes to test
+k_candidates = [50];  % Stage 1 output sizes
+database_sizes = [1000]; % Database sizes to test
 k_final = 10;                             % Final Top-K (fixed)
 
 % === Query Trajectories ===
 query_ids = {
-    '1764766034'; % Good query
-    '1765473159'; % Noisy
-    '1765473166'; % Noisy
-    '1765473097'; % Noisy
-    '1765473008'; % Noisy
-    '1765472956'; % Noisy
+    %'1764766034'; % Good query
+    '1764167686'; % Noisy hard
+    %'1765473159'; % Noisy
+    %'1765473166'; % Noisy
+    %'1765473097'; % Noisy
+    %'1765473008'; % Noisy
+    %'1765472956'; % Noisy
 };
 
 % === Base Configuration ===
 base_config = struct();
 base_config.random_seed = 42;
 base_config.top_k_trajectories = max(k_candidates);  % Buffer for DTW !!!!!!!!!!!!!!!!!!!!!!!!! WICHTIG!!!!
-use_ground_truth = false;
+use_ground_truth = true;
 
 % === Calculate Total Experiments ===
 num_embeddings = size(embedding_configs, 1);        % 2
@@ -241,6 +242,35 @@ end
 
 fprintf('\n✓ All candidate pools created\n\n');
 
+% === Validate GT presence in all pools ===
+if use_ground_truth && base_config.has_ground_truth
+    fprintf('=== Validating GT Presence in All Pools ===\n');
+    all_valid = true;
+    
+    for i = 1:length(database_sizes)
+        db_size = database_sizes(i);
+        pool_name = sprintf('db_%d', db_size);
+        pool = candidate_pools.(pool_name);
+        
+        % Check if all GTs are present
+        missing_gt = setdiff(ground_truth_ids, pool);
+        
+        if ~isempty(missing_gt)
+            fprintf('  ✗ %s: %d GTs MISSING!\n', pool_name, length(missing_gt));
+            all_valid = false;
+        else
+            num_gt_present = length(intersect(ground_truth_ids, pool));
+            fprintf('  ✓ %s: All %d GTs present\n', pool_name, num_gt_present);
+        end
+    end
+    
+    if ~all_valid
+        error('GT validation failed! Some GTs are missing from candidate pools.');
+    end
+    
+    fprintf('✓ GT validation passed for all pools\n\n');
+end
+
 % Store in base_config
 base_config.candidate_pools = candidate_pools;
 base_config.max_candidate_ids = max_candidate_ids;
@@ -326,7 +356,7 @@ dtw_tic = tic;
 dtw_config = struct();
 dtw_config.top_k_trajectories = base_config.top_k_trajectories;
 dtw_config.lb_kim_keep_ratio = 0.9;      % Keep 80% after LB_Kim
-dtw_config.lb_keogh_candidates = 400;     % Further reduce to 400 with LB_Keogh
+dtw_config.lb_keogh_candidates = 700;     % Further reduce to 400 with LB_Keogh
 dtw_config.cdtw_window = 0.2;
 dtw_config.normalize_dtw = false;
 dtw_config.use_rotation_alignment = false;
@@ -406,70 +436,66 @@ for db_idx = 1:length(database_sizes)
         fprintf('    %s: %.2f sec/query\n', dtw_mode, dtw_time_per_query);
     end
     fprintf('\n');
+
+    % ========== PROXY GT FÜR DIESEN DB SIZE ==========
+    if ~base_config.has_ground_truth
+        fprintf('  Creating Proxy GT for %s...\n', pool_name);
+        
+        % Initialize proxy GT for this DB size if not exists
+        if ~isfield(base_config, 'proxy_gt_map')
+            base_config.proxy_gt_map = struct();
+        end
+        
+        base_config.proxy_gt_map.(pool_name) = struct();
+        
+        for q_idx = 1:num_queries
+            query_id = query_ids{q_idx};
+            query_field = sprintf('q_%s', strrep(query_id, '-', '_'));
+            
+            % For each DTW mode
+            for mode_idx = 1:length(unique_dtw_modes)
+                dtw_mode = unique_dtw_modes{mode_idx};
+                
+                if isfield(dtw_cache_curr, query_field) && ...
+                   isfield(dtw_cache_curr.(query_field), dtw_mode)
+                    
+                    % === TRAJECTORY RANKING ===
+                    dtw_traj_ranking = dtw_cache_curr.(query_field).(dtw_mode).trajectory_ranking;
+                    proxy_k_traj = min(50, height(dtw_traj_ranking));
+                    proxy_gt_traj_ids = dtw_traj_ranking.bahn_id(1:proxy_k_traj);
+                    
+                    % === SEGMENT RANKINGS ===
+                    dtw_seg_rankings = dtw_cache_curr.(query_field).(dtw_mode).segment_rankings;
+                    num_query_segments = length(dtw_seg_rankings);
+                    proxy_gt_seg_ids = cell(num_query_segments, 1);
+                    
+                    for seg_idx = 1:num_query_segments
+                        seg_ranking_table = dtw_seg_rankings{seg_idx};
+                        proxy_k_seg = min(50, height(seg_ranking_table));
+                        proxy_gt_seg_ids{seg_idx} = seg_ranking_table.segment_id(1:proxy_k_seg);
+                    end
+                    
+                    % Store both
+                    proxy_field = sprintf('%s_%s', query_field, dtw_mode);
+                    base_config.proxy_gt_map.(pool_name).(proxy_field).trajectories = proxy_gt_traj_ids;
+                    base_config.proxy_gt_map.(pool_name).(proxy_field).segments = proxy_gt_seg_ids;
+                    base_config.proxy_gt_map.(pool_name).(proxy_field).num_trajectories = length(proxy_gt_traj_ids);
+                    base_config.proxy_gt_map.(pool_name).(proxy_field).num_query_segments = num_query_segments;
+                end
+            end
+        end
+        
+        fprintf('  ✓ Proxy GT created for %s\n\n', pool_name);
+    end
+    % ========== END PROXY GT ==========
 end
 
 dtw_total_time = toc(dtw_tic);
 
-% After DTW computation, store as proxy GT:
 if ~base_config.has_ground_truth
-    fprintf('=== Using DTW Rankings as Proxy Ground Truth ===\n\n');
-    
-    % Create proxy GT map from DTW rankings
-    proxy_gt_map = struct();
-    
-    for q_idx = 1:num_queries
-        query_id = query_ids{q_idx};
-        query_field = sprintf('q_%s', strrep(query_id, '-', '_'));
-        
-        % For each DTW mode
-        for mode_idx = 1:length(unique_dtw_modes)
-            dtw_mode = unique_dtw_modes{mode_idx};
-            
-            if isfield(dtw_cache_curr, query_field) && ...
-               isfield(dtw_cache_curr.(query_field), dtw_mode)
-                
-                % === TRAJECTORY RANKING ===
-                dtw_traj_ranking = dtw_cache_curr.(query_field).(dtw_mode).trajectory_ranking;
-                
-                % Take Top-50 trajectories as "proxy GT"
-                proxy_k_traj = min(50, height(dtw_traj_ranking));
-                proxy_gt_traj_ids = dtw_traj_ranking.bahn_id(1:proxy_k_traj);
-                
-                % === SEGMENT RANKINGS (per query segment) ===
-                dtw_seg_rankings = dtw_cache_curr.(query_field).(dtw_mode).segment_rankings;
-                num_query_segments = length(dtw_seg_rankings);
-                
-                % Store Top-50 for EACH query segment
-                proxy_gt_seg_ids = cell(num_query_segments, 1);
-                
-                for seg_idx = 1:num_query_segments
-                    seg_ranking_table = dtw_seg_rankings{seg_idx};
-                    
-                    % Take Top-50 from this segment ranking
-                    proxy_k_seg = min(50, height(seg_ranking_table));
-                    proxy_gt_seg_ids{seg_idx} = seg_ranking_table.segment_id(1:proxy_k_seg);
-                end
-                
-                % Store both
-                proxy_field = sprintf('%s_%s', query_field, dtw_mode);
-                proxy_gt_map.(proxy_field).trajectories = proxy_gt_traj_ids;
-                proxy_gt_map.(proxy_field).segments = proxy_gt_seg_ids;  % Cell array!
-                proxy_gt_map.(proxy_field).num_trajectories = length(proxy_gt_traj_ids);
-                proxy_gt_map.(proxy_field).num_query_segments = num_query_segments;
-                
-                fprintf('  %s - %s: Top-%d trajectories, %d query segments (Top-50 each)\n', ...
-                    query_id, dtw_mode, proxy_k_traj, num_query_segments);
-            end
-        end
-    end
-    
-    % Store proxy GT
-    base_config.proxy_gt_map = proxy_gt_map;
     base_config.has_proxy_gt = true;
-    
-    fprintf('\n✓ Proxy GT created from DTW Top-50 (trajectories + segment rankings)\n\n');
+    fprintf('\n✓ Proxy GT created for all DB sizes\n\n');
 else
-    base_config.proxy_gt_map = [];
     base_config.has_proxy_gt = false;
 end
 
@@ -521,16 +547,24 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                     gt_ids_for_query = ground_truth_map.(query_field).trajectories;
                     num_gt = length(gt_ids_for_query);
                 elseif base_config.has_proxy_gt
-                    % Use proxy GT (DTW Top-50)
+                    % Use proxy GT (DTW Top-50) - per DB size!
                     proxy_field = sprintf('%s_%s', query_field, dtw_mode_curr);
-                    if isfield(base_config.proxy_gt_map, proxy_field)
-                        gt_ids_for_query = base_config.proxy_gt_map.(proxy_field).trajectories;
+                    if isfield(base_config.proxy_gt_map, pool_name) && ...
+                       isfield(base_config.proxy_gt_map.(pool_name), proxy_field)
+                        gt_ids_for_query = base_config.proxy_gt_map.(pool_name).(proxy_field).trajectories;
                         num_gt = length(gt_ids_for_query);
                     else
-                        continue;  % No proxy GT for this query/mode
+                        gt_ids_for_query = {};
+                        num_gt = 0;
                     end
                 else
-                    continue;  % No GT at all
+                    gt_ids_for_query = {};
+                    num_gt = 0;
+                end
+                
+                % Skip if no GT
+                if num_gt == 0
+                    continue;
                 end
                 
                 % Get DTW ranking
@@ -642,8 +676,9 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                     elseif base_config.has_proxy_gt
                         % Proxy GT segments
                         proxy_field = sprintf('%s_%s', query_field, dtw_mode_curr);
-                        if isfield(base_config.proxy_gt_map, proxy_field)
-                            gt_seg_ids_for_query = base_config.proxy_gt_map.(proxy_field).segments;
+                        if isfield(base_config.proxy_gt_map, pool_name) && ...
+                           isfield(base_config.proxy_gt_map.(pool_name), proxy_field)
+                            gt_seg_ids_for_query = base_config.proxy_gt_map.(pool_name).(proxy_field).segments;
                             has_segment_gt = true;
                         else
                             gt_seg_ids_for_query = {};
@@ -987,8 +1022,9 @@ for emb_idx = 1:num_embeddings
                         gt_type = 'real';
                     elseif base_config.has_proxy_gt
                         proxy_field = sprintf('%s_%s', query_field, dtw_mode_curr);
-                        if isfield(base_config.proxy_gt_map, proxy_field)
-                            gt_traj_ids = base_config.proxy_gt_map.(proxy_field).trajectories;
+                        if isfield(base_config.proxy_gt_map, pool_name) && ...
+                               isfield(base_config.proxy_gt_map.(pool_name), proxy_field)
+                                gt_traj_ids = base_config.proxy_gt_map.(pool_name).(proxy_field).trajectories;
                             num_gt_traj = length(gt_traj_ids);
                             gt_type = 'proxy_dtw';
                         else
@@ -1072,6 +1108,17 @@ for emb_idx = 1:num_embeddings
                     % ====================================================
                     
                     experiment_counter = experiment_counter + 1;
+
+                    fprintf('\n╔════════════════════════════════════════════════════════════════╗\n');
+                    fprintf('║  EXPERIMENT %4d/%4d (SEGMENT LEVEL)                              ║\n', ...
+                        experiment_counter, total_experiments * 2);
+                    fprintf('╠════════════════════════════════════════════════════════════════╣\n');
+                    fprintf('║  Embedding:  %-48s ║\n', emb_name);
+                    fprintf('║  Weight:     %-48s ║\n', weight_mode_name);
+                    fprintf('║  K:          %-48d ║\n', K);
+                    fprintf('║  DB Size:    %-48d ║\n', db_size);
+                    fprintf('║  Query:      %-48s ║\n', query_id);
+                    fprintf('╚════════════════════════════════════════════════════════════════╝\n');
                     
                     % Get segment embeddings
                     segment_embeddings = query_emb_data.(emb_field_name).segment_embeddings;
@@ -1121,10 +1168,11 @@ for emb_idx = 1:num_embeddings
                     elseif base_config.has_proxy_gt
                         % Proxy GT segments (from DTW Top-50)
                         proxy_field = sprintf('%s_%s', query_field, dtw_mode_curr);
-                        
-                        if isfield(base_config.proxy_gt_map, proxy_field)
-                            gt_seg_ids = base_config.proxy_gt_map.(proxy_field).segments;  % Cell array!
-                            num_gt_seg = length(base_config.proxy_gt_map.(proxy_field).segments{1});
+    
+                        if isfield(base_config.proxy_gt_map, pool_name) && ...
+                           isfield(base_config.proxy_gt_map.(pool_name), proxy_field)
+                            gt_seg_ids = base_config.proxy_gt_map.(pool_name).(proxy_field).segments;  % Cell array!
+                            num_gt_seg = length(base_config.proxy_gt_map.(pool_name).(proxy_field).segments{1});  % ✅ RICHTIG!
                             gt_type_seg = 'proxy_dtw';
                         else
                             gt_seg_ids = {};
@@ -1280,7 +1328,7 @@ if ~exist(results_dir, 'dir')
     mkdir(results_dir);
 end
 
-timestamp = datestr(now, 'yyyy-mm-dd_HH-MM');
+timestamp = char(datetime('now', 'Format', 'yyyy-MM-dd''T''HHmmss'));
 
 % ========================================================================
 %% CSV 1: MAIN RESULTS (All Metrics with Level)

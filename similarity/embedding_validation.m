@@ -1145,7 +1145,7 @@ if ~isempty(matlab_project_idx)
 else
     % Fallback: use current directory
     warning('Could not find robotervermessung-matlab in path, using current directory');
-    output_dir = fullfile(pwd, 'similarity');
+    output_dir = fullfile(pwd, 'similarity/results/');
 end
 
 % Create directory if it doesn't exist

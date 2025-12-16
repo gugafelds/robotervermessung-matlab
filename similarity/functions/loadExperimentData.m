@@ -46,7 +46,7 @@ fprintf('Scanning folder: %s\n', csv_folder);
 %  FIND ALL CSV FILES
 %  ========================================================================
 
-csv_files = dir(fullfile(csv_folder, '*.csv'));
+csv_files = dir(fullfile(csv_folder, 'embedding_validation_*.csv'));
 
 if isempty(csv_files)
     error('No CSV files found in: %s', csv_folder);

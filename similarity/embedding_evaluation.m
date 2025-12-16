@@ -25,7 +25,7 @@ fprintf('STEP 1: Loading experiment data...\n');
 fprintf('────────────────────────────────────────\n\n');
 
 % Load all CSV files from current directory
-data = loadExperimentData('.');
+data = loadExperimentData('results/');
 
 %% STEP 1.5: Smart Excel Export - Append Only New Data
 % ========================================================================
@@ -33,15 +33,8 @@ data = loadExperimentData('.');
 fprintf('\nSTEP 1.5: Smart Excel Export (Append New Data Only)...\n');
 fprintf('────────────────────────────────────────\n\n');
 
-% Create export folder if it doesn't exist
-export_folder = 'exports';
-if ~exist(export_folder, 'dir')
-    mkdir(export_folder);
-    fprintf('Created folder: %s\n', export_folder);
-end
-
 % Fixed filename
-export_filename = fullfile(export_folder, 'experiment_data.xlsx');
+export_filename = 'experiment_data.xlsx';
 
 % Get the new data to potentially add
 new_data = data.combined;
@@ -184,8 +177,8 @@ fprintf('\n');
 % ========================================================================
 
 % File paths
-excel_file = 'exports/experiment_data.xlsx';
-output_folder = 'exports';
+excel_file = 'results/experiment_data.xlsx';
+output_folder = 'results';
 
 % Queries to exclude (trivial 1:1 duplicates)
 exclude_queries = [];

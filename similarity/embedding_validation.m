@@ -42,9 +42,9 @@ use_ground_truth = true;  % Set to false to disable
 
 % === Base Configuration ===
 base_config = struct();
-base_config.database_sample_size = 1000;  % Fixed for fair comparison
-base_config.random_seed = 999;
-base_config.top_k_trajectories = 100;     % Fixed
+base_config.database_sample_size = 120;  % Fixed for fair comparison
+base_config.random_seed = 42;
+base_config.top_k_trajectories = 50;     % Fixed
 
 % === DIMENSION 1: Embedding Architectures ===
 embedding_configs = {
@@ -68,51 +68,55 @@ embedding_configs = {
 
 % === DIMENSION 2: Query Trajectories ===
 query_ids = {
-    '1764766034'; % np = 2 / p = 843
-    %'1764766001'; % np = 2 / p = 861
-    %'1764765958'; % np = 2 / p = 1077
-    %'1764765635'; % np = 2 / p = 1278
-    %'1764765776'; % np = 2 / p = 1851
-    %'1763567277'; % np = 3 / p = 1188
-    %'1763567148'; % np = 3 / p = 1482  
-    %'1763567026'; % np = 3 / p = 1434
-    %'1764763889'; % np = 3 / p = 1392
-    %'1764763510'; % np = 3 / p = 1554
-    %'1764762584'; % np = 4 / p = 2034
-    %'1764763238'; % np = 4 / p = 1341
-    %'1764762971'; % np = 4 / p = 1353
-    %'1764762831'; % np = 4 / p = 1326
-    %'1764762655'; % np = 4 / p = 1539
-    %'1764765476'; % np = 5 / p = 1398
-    %'1764764632'; % np = 5 / p = 2430
-    %'1764764821'; % np = 5 / p = 1944
-    %'1764765396'; % np = 5 / p = 1692
-    %'1764765286'; % np = 5 / p = 1377
-    %'1764863841'; % np = 4 / p = 1332 / noisy
-    '1765473159'; % noisy
-    '1765473166'; % noisy
-    '1765473097'; % noisy
-    '1765473008'; % noisy
-    '1765472956'; % noisy
+    '1764766034'; % np = 2 / p = 843 / 9 GT
+
+    %%%% NEW QUERIES %%%%
+
+    %'1765987078'; % clean, np = 4 / 10 GT
+    %'1765987155'; % clean, np = 4 / 20 GT
+    %'1765987310'; % clean, np = 4 / 30 GT
+
+    %% clean
+    %'1765989370'; % clean, np = 3 / 10 GT
+    %'1765989294'; % clean, np = 3 / 20 GT
+    %'1765988821'; % clean, np = 3 / 30 GT
+    %'1765988920'; % clean; np = 3 / 40 GT
+    %'1765989411'; % clean; np = 3 / 50 GT
+    
+    %% noisy - 2 mm
+
+    %'1765990630'; % noisy; np = 3 / 10 GT
+    %'1765990747'; % noisy; np = 3 / 20 GT
+    %'1765990822'; % noisy; np = 3 / 30 GT
+    %'1765991047'; % noisy; np = 3 / 40 GT
+    %'1765991234'; % noisy; np = 3 / 50 GT
+    
+    %% noisy - 5 mm
+
+    %'1765991190'; % noisy; np = 3 / 10 GT
+    %'1765991445'; % noisy; np = 3 / 20 GT
+    %'1765991515'; % noisy; np = 3 / 30 GT
+    %'1765991949'; % noisy; np = 3 / 40 GT %%alternativ 1765992404
+    %'1765991743'; % noisy; np = 3 / 50 GT
 };
 
 % === DIMENSION 3: DTW Mode + Weight Combinations ===
 weight_mode_configs = {
     % Joint space
     'Joint only',           'joint_states',  [0, 1, 0, 0, 0];
-    'Joint + Position',     'joint_states',  [1, 1, 0, 0, 0];
-    'Joint + Orient',       'joint_states',  [0, 1, 1, 0, 0];
-    'Joint + Velocity',     'joint_states',  [0, 1, 0, 1, 0];
-    'Joint + Meta',         'joint_states',  [0, 1, 0, 0, 1];
-    'Joint + All',          'joint_states',  [1, 1, 1, 1, 1];
+    %'Joint + Position',     'joint_states',  [1, 1, 0, 0, 0];
+    %'Joint + Orient',       'joint_states',  [0, 1, 1, 0, 0];
+    %'Joint + Velocity',     'joint_states',  [0, 1, 0, 1, 0];
+    %'Joint + Meta',         'joint_states',  [0, 1, 0, 0, 1];
+    %'Joint + All',          'joint_states',  [1, 1, 1, 1, 1];
     
     % Position space
-    'Position only',        'position',      [1, 0, 0, 0, 0];
-    'Pos + Joint',          'position',      [1, 1, 0, 0, 0];
-    'Pos + Orient',         'position',      [1, 0, 1, 0, 0];
-    'Pos + Velocity',       'position',      [1, 0, 0, 1, 0];
-    'Pos + Meta',           'position',      [1, 0, 0, 0, 1];
-    'Pos + All',            'position',      [1, 1, 1, 1, 1];
+    %'Position only',        'position',      [1, 0, 0, 0, 0];
+    %'Pos + Joint',          'position',      [1, 1, 0, 0, 0];
+    %'Pos + Orient',         'position',      [1, 0, 1, 0, 0];
+    %'Pos + Velocity',       'position',      [1, 0, 0, 1, 0];
+    %'Pos + Meta',           'position',      [1, 0, 0, 0, 1];
+    %'Pos + All',            'position',      [1, 1, 1, 1, 1];
 };
 
 % === Calculate Total Experiments ===
@@ -255,8 +259,8 @@ dtw_tic = tic;
 % Prepare config for DTW pre-computation
 dtw_config = struct();
 dtw_config.top_k_trajectories = base_config.top_k_trajectories;
-dtw_config.lb_kim_keep_ratio = 0.8;
-dtw_config.lb_keogh_candidates = 400;
+dtw_config.lb_kim_keep_ratio = 0.9;
+dtw_config.lb_keogh_candidates = 500;
 dtw_config.cdtw_window = 0.2;
 dtw_config.normalize_dtw = false;
 dtw_config.use_rotation_alignment = false;
@@ -473,6 +477,67 @@ if use_ground_truth && ~isempty(ground_truth_ids)
             dtw_gt_metrics.(query_field).(dtw_mode).r5_gt = r5_gt_dtw;
             dtw_gt_metrics.(query_field).(dtw_mode).r3_gt = r3_gt_dtw;
             dtw_gt_metrics.(query_field).(dtw_mode).r1_gt = r1_gt_dtw;
+
+            % ============================================================
+            % NDCG METRICS FOR DTW BASELINE (Trajectory) - NEW!
+            % ============================================================
+            
+            fprintf('  Computing DTW baseline NDCG metrics (trajectory)...\n');
+            
+            if num_gt > 0 && ~isempty(valid_ranks)
+                % Extract GT similarities from DTW ranking
+                gt_dtw_similarities = zeros(num_gt, 1);
+                
+                for gt_idx = 1:num_gt
+                    gt_id = gt_ids_for_query{gt_idx};
+                    rank_idx = find(strcmp(dtw_ranking.bahn_id, gt_id), 1);
+                    
+                    if ~isempty(rank_idx)
+                        % Get DTW distance
+                        dtw_distance = dtw_ranking.dtw_distance(rank_idx);
+                        gt_dtw_similarities(gt_idx) = dtw_distance;
+                    else
+                        gt_dtw_similarities(gt_idx) = inf;
+                    end
+                end
+                
+                % Normalize distances to [0, 1] and convert to similarities
+                % (Same logic as extractGTSimilarities)
+                valid_dists = gt_dtw_similarities(gt_dtw_similarities < inf);
+                
+                if ~isempty(valid_dists)
+                    max_dist = max(valid_dists);
+                    if max_dist > 0
+                        normalized_dists = gt_dtw_similarities / max_dist;
+                    else
+                        normalized_dists = gt_dtw_similarities;
+                    end
+                    gt_dtw_similarities = 1 ./ (1 + normalized_dists);
+                    gt_dtw_similarities(gt_dtw_similarities == inf) = 0;
+                else
+                    gt_dtw_similarities = zeros(num_gt, 1);
+                end
+                
+                % Compute NDCG metrics using DTW ranking
+                top_k_ids_dtw = dtw_ranking.bahn_id;
+                K = dtw_config.top_k_trajectories;
+                
+                dtw_ndcg_metrics = computeEmbeddingOnlyMetrics(...
+                    top_k_ids_dtw, gt_ids_for_query, gt_dtw_similarities, num_gt, K);
+                
+                % Store DTW NDCG metrics
+                dtw_gt_metrics.(query_field).(dtw_mode).ndcg_10 = dtw_ndcg_metrics.ndcg10;
+                dtw_gt_metrics.(query_field).(dtw_mode).ndcg_50 = dtw_ndcg_metrics.ndcg50;
+                dtw_gt_metrics.(query_field).(dtw_mode).mrr = dtw_ndcg_metrics.mrr;
+                
+                fprintf('    DTW NDCG@10: %.4f, NDCG@50: %.4f, MRR: %.4f\n', ...
+                    dtw_ndcg_metrics.ndcg10, dtw_ndcg_metrics.ndcg50, dtw_ndcg_metrics.mrr);
+            else
+                % No GTs or not found
+                dtw_gt_metrics.(query_field).(dtw_mode).ndcg_10 = NaN;
+                dtw_gt_metrics.(query_field).(dtw_mode).ndcg_50 = NaN;
+                dtw_gt_metrics.(query_field).(dtw_mode).mrr = NaN;
+            end
             
             % Segment metrics
             dtw_gt_metrics.(query_field).(dtw_mode).seg_p_gt = seg_p_gt_dtw;
@@ -482,6 +547,104 @@ if use_ground_truth && ~isempty(ground_truth_ids)
             dtw_gt_metrics.(query_field).(dtw_mode).seg_r5_gt = seg_r5_gt_dtw;
             dtw_gt_metrics.(query_field).(dtw_mode).seg_r3_gt = seg_r3_gt_dtw;
             dtw_gt_metrics.(query_field).(dtw_mode).seg_r1_gt = seg_r1_gt_dtw;
+
+            % ============================================================
+            % NDCG METRICS FOR DTW BASELINE (Segment) - NEW!
+            % ============================================================
+            
+            fprintf('  Computing DTW baseline NDCG metrics (segments)...\n');
+            
+            % Calculate GT coverage for EACH segment separately
+            segment_ndcg_results = cell(num_segments, 1);
+            
+            for seg_idx = 1:num_segments
+                if isempty(segment_rankings{seg_idx})
+                    continue;
+                end
+                
+                seg_ranking = segment_rankings{seg_idx};
+                
+                % Extract GT similarities for this segment
+                seg_gt_similarities = zeros(num_gt, 1);
+                seg_gt_found = 0;
+                
+                for gt_idx = 1:num_gt
+                    gt_id = gt_ids_for_query{gt_idx};
+                    rank_idx = find(strcmp(seg_ranking.bahn_id, gt_id), 1);
+                    
+                    if ~isempty(rank_idx)
+                        dtw_distance = seg_ranking.dtw_distance(rank_idx);
+                        seg_gt_similarities(gt_idx) = dtw_distance;
+                        seg_gt_found = seg_gt_found + 1;
+                    else
+                        seg_gt_similarities(gt_idx) = inf;
+                    end
+                end
+                
+                if seg_gt_found == 0
+                    % No GTs found in this segment
+                    segment_ndcg_results{seg_idx} = [];
+                    continue;
+                end
+                
+                % Normalize similarities
+                valid_dists = seg_gt_similarities(seg_gt_similarities < inf);
+                
+                if ~isempty(valid_dists)
+                    max_dist = max(valid_dists);
+                    if max_dist > 0
+                        normalized_dists = seg_gt_similarities / max_dist;
+                    else
+                        normalized_dists = seg_gt_similarities;
+                    end
+                    seg_gt_similarities = 1 ./ (1 + normalized_dists);
+                    seg_gt_similarities(seg_gt_similarities == inf) = 0;
+                end
+                
+                % Compute NDCG for this segment
+                top_k_seg_ids = seg_ranking.bahn_id;
+                K_seg = dtw_config.top_k_trajectories;
+                
+                seg_ndcg = computeEmbeddingOnlyMetrics(...
+                    top_k_seg_ids, gt_ids_for_query, seg_gt_similarities, num_gt, K_seg);
+                
+                segment_ndcg_results{seg_idx} = seg_ndcg;
+            end
+            
+            % Average across valid segments
+            valid_seg_ndcg = segment_ndcg_results(~cellfun(@isempty, segment_ndcg_results));
+            
+            if isempty(valid_seg_ndcg)
+                seg_ndcg_10_dtw = NaN;
+                seg_ndcg_50_dtw = NaN;
+                seg_mrr_dtw = NaN;
+            else
+                % Average NDCG values
+                ndcg10_sum = 0;
+                ndcg50_sum = 0;
+                mrr_sum = 0;
+                count = 0;
+                
+                for i = 1:length(valid_seg_ndcg)
+                    seg = valid_seg_ndcg{i};
+                    ndcg10_sum = ndcg10_sum + seg.ndcg10;
+                    ndcg50_sum = ndcg50_sum + seg.ndcg50;
+                    mrr_sum = mrr_sum + seg.mrr;
+                    count = count + 1;
+                end
+                
+                seg_ndcg_10_dtw = ndcg10_sum / count;
+                seg_ndcg_50_dtw = ndcg50_sum / count;
+                seg_mrr_dtw = mrr_sum / count;
+            end
+            
+            % Store segment DTW NDCG metrics
+            dtw_gt_metrics.(query_field).(dtw_mode).seg_ndcg_10 = seg_ndcg_10_dtw;
+            dtw_gt_metrics.(query_field).(dtw_mode).seg_ndcg_50 = seg_ndcg_50_dtw;
+            dtw_gt_metrics.(query_field).(dtw_mode).seg_mrr = seg_mrr_dtw;
+            
+            fprintf('    Segment Avg - NDCG@10: %.4f, NDCG@50: %.4f, MRR: %.4f\n', ...
+                seg_ndcg_10_dtw, seg_ndcg_50_dtw, seg_mrr_dtw);
             
             % Common
             dtw_gt_metrics.(query_field).(dtw_mode).num_gt = num_gt;
@@ -639,200 +802,137 @@ end
 total_time = toc(experiment_start);
 
 % ========================================================================
-%%  CREATE RESULTS TABLES (TRAJECTORY + SEGMENT LEVEL)
-%  ========================================================================
+%% SIMPLIFIED CSV EXPORT (Two-Stage Style)
+%% Replace the entire "CREATE RESULTS TABLES" section with this
+% ========================================================================
 
-fprintf('\n=== Creating Results Tables ===\n');
+fprintf('\n=== Creating Results Tables (Simplified) ===\n');
 
-% Preallocate matrices (MORE COLUMNS NOW!)
-traj_results_matrix = zeros(total_experiments, 7);  % Spearman + 6 R@K metrics
-seg_results_matrix = zeros(total_experiments, 7);   % Same for segments
+% Count valid results (should be total_experiments)
+num_results = length(all_results);
+fprintf('  Total results: %d\n', num_results);
 
-% Metadata arrays
-embedding_names = cell(total_experiments, 1);
-query_bahn_ids = cell(total_experiments, 1);
-weight_modes = cell(total_experiments, 1);
-dtw_modes = cell(total_experiments, 1);
-n_coarse_arr = zeros(total_experiments, 1);
-n_fine_arr = zeros(total_experiments, 1);
-total_dims_arr = zeros(total_experiments, 1);
-multi_scale_arr = false(total_experiments, 1);
-runtimes = zeros(total_experiments, 1);
+% ========================================================================
+% PRE-ALLOCATE ARRAYS FOR ALL COLUMNS
+% ========================================================================
 
-% Weights arrays
-w_pos = zeros(total_experiments, 1);
-w_joint = zeros(total_experiments, 1);
-w_orient = zeros(total_experiments, 1);
-w_vel = zeros(total_experiments, 1);
-w_meta = zeros(total_experiments, 1);
+% Configuration
+levels = cell(num_results, 1);
+query_ids_arr = cell(num_results, 1);
+embedding_configs_arr = cell(num_results, 1);
+n_coarse_vals = zeros(num_results, 1);
+n_fine_vals = zeros(num_results, 1);
+total_dims_vals = zeros(num_results, 1);
+multi_scale_vals = zeros(num_results, 1);
+weight_modes = cell(num_results, 1);
+dtw_modes = cell(num_results, 1);
+w_pos_vals = zeros(num_results, 1);
+w_joint_vals = zeros(num_results, 1);
+w_orient_vals = zeros(num_results, 1);
+w_vel_vals = zeros(num_results, 1);
+w_meta_vals = zeros(num_results, 1);
 
-% DTW vs Embedding Coverage metrics (trajectory level)
-p_dtw_vs_eb_traj = zeros(total_experiments, 1);
-recall_dtw_vs_eb_50 = zeros(total_experiments, 1);
-recall_dtw_vs_eb_10 = zeros(total_experiments, 1);
-recall_dtw_vs_eb_5 = zeros(total_experiments, 1);
-recall_dtw_vs_eb_3 = zeros(total_experiments, 1);
-recall_dtw_vs_eb_1 = zeros(total_experiments, 1);
+% Spearman & Coverage (DTW vs EB)
+spearman_dtw_eb = zeros(num_results, 1);
+rk_dtw_eb = zeros(num_results, 1);
+r50_dtw_eb = zeros(num_results, 1);
+r10_dtw_eb = zeros(num_results, 1);
+r5_dtw_eb = zeros(num_results, 1);
+r3_dtw_eb = zeros(num_results, 1);
+r1_dtw_eb = zeros(num_results, 1);
+p_dtw_eb = zeros(num_results, 1);
 
-% DTW vs Embedding Coverage metrics (segment level)
-p_dtw_vs_eb_seg = zeros(total_experiments, 1);
-seg_recall_dtw_vs_eb_50 = zeros(total_experiments, 1);
-seg_recall_dtw_vs_eb_10 = zeros(total_experiments, 1);
-seg_recall_dtw_vs_eb_5 = zeros(total_experiments, 1);
-seg_recall_dtw_vs_eb_3 = zeros(total_experiments, 1);
-seg_recall_dtw_vs_eb_1 = zeros(total_experiments, 1);
+% GT vs Embedding
+r50_gt_eb = zeros(num_results, 1);
+r10_gt_eb = zeros(num_results, 1);
+r5_gt_eb = zeros(num_results, 1);
+r3_gt_eb = zeros(num_results, 1);
+r1_gt_eb = zeros(num_results, 1);
+p_gt_eb = zeros(num_results, 1);
+mean_rank_gt_eb = zeros(num_results, 1);
+ndcg10_gt_eb = zeros(num_results, 1);
+ndcg50_gt_eb = zeros(num_results, 1);
+mrr_gt_eb = zeros(num_results, 1);
 
-% GT vs Embedding metrics (trajectory level)
-p_gt_vs_eb_traj = zeros(total_experiments, 1);
-mean_gt_vs_eb_rank_traj = zeros(total_experiments, 1);
-recall_gt_vs_eb_50_traj = zeros(total_experiments, 1);
-recall_gt_vs_eb_10_traj = zeros(total_experiments, 1);
-recall_gt_vs_eb_5_traj = zeros(total_experiments, 1);
-recall_gt_vs_eb_3_traj = zeros(total_experiments, 1);
-recall_gt_vs_eb_1_traj = zeros(total_experiments, 1);
+% GT vs DTW (Baseline)
+r50_gt_dtw = zeros(num_results, 1);
+r10_gt_dtw = zeros(num_results, 1);
+r5_gt_dtw = zeros(num_results, 1);
+r3_gt_dtw = zeros(num_results, 1);
+r1_gt_dtw = zeros(num_results, 1);
+p_gt_dtw = zeros(num_results, 1);
+mean_rank_gt_dtw = zeros(num_results, 1);
+ndcg10_gt_dtw = zeros(num_results, 1);
+ndcg50_gt_dtw = zeros(num_results, 1);
+mrr_gt_dtw = zeros(num_results, 1);
 
-% GT vs Embedding metrics (segment level)
-p_gt_vs_eb_seg = zeros(total_experiments, 1);
-mean_gt_vs_eb_rank_seg = zeros(total_experiments, 1);
-recall_gt_vs_eb_50_seg = zeros(total_experiments, 1);
-recall_gt_vs_eb_10_seg = zeros(total_experiments, 1);
-recall_gt_vs_eb_5_seg = zeros(total_experiments, 1);
-recall_gt_vs_eb_3_seg = zeros(total_experiments, 1);
-recall_gt_vs_eb_1_seg = zeros(total_experiments, 1);
+% GT Info
+num_gt_vals = zeros(num_results, 1);
 
-% GT vs DTW metrics (trajectory level) - NEW!
-p_gt_vs_dtw_traj = zeros(total_experiments, 1);
-mean_gt_vs_dtw_rank_traj = zeros(total_experiments, 1);
-recall_gt_vs_dtw_50_traj = zeros(total_experiments, 1);
-recall_gt_vs_dtw_10_traj = zeros(total_experiments, 1);
-recall_gt_vs_dtw_5_traj = zeros(total_experiments, 1);
-recall_gt_vs_dtw_3_traj = zeros(total_experiments, 1);
-recall_gt_vs_dtw_1_traj = zeros(total_experiments, 1);
+% Timing
+runtimes = zeros(num_results, 1);
 
-% GT vs DTW metrics (segment level) - NEW!
-p_gt_vs_dtw_seg = zeros(total_experiments, 1);
-mean_gt_vs_dtw_rank_seg = zeros(total_experiments, 1);
-recall_gt_vs_dtw_50_seg = zeros(total_experiments, 1);
-recall_gt_vs_dtw_10_seg = zeros(total_experiments, 1);
-recall_gt_vs_dtw_5_seg = zeros(total_experiments, 1);
-recall_gt_vs_dtw_3_seg = zeros(total_experiments, 1);
-recall_gt_vs_dtw_1_seg = zeros(total_experiments, 1);
+% ========================================================================
+% FILL ARRAYS FROM RESULTS (TRAJECTORY LEVEL)
+% ========================================================================
 
-% Num_GT (same for all levels)
-num_gt_arr = zeros(total_experiments, 1);
+fprintf('Extracting trajectory-level results...\n');
 
-% Extract data from results
 for i = 1:total_experiments
     r = all_results{i};
     
-    % Metadata
-    embedding_names{i} = r.embedding_config;
-    query_bahn_ids{i} = r.query_id;
+    % Configuration
+    levels{i} = 'Trajectory';
+    query_ids_arr{i} = r.query_id;
+    embedding_configs_arr{i} = r.embedding_config;
+    n_coarse_vals(i) = r.n_coarse;
+    n_fine_vals(i) = r.n_fine;
+    total_dims_vals(i) = r.total_dims;
+    multi_scale_vals(i) = (r.n_coarse > 0);
     weight_modes{i} = r.weight_mode;
     dtw_modes{i} = r.dtw_mode;
-    n_coarse_arr(i) = r.n_coarse;
-    n_fine_arr(i) = r.n_fine;
-    total_dims_arr(i) = r.total_dims;
-    multi_scale_arr(i) = (r.n_coarse > 0);
-    runtimes(i) = r.exp_runtime / 60;
+    w_pos_vals(i) = r.weight_pos;
+    w_joint_vals(i) = r.weight_joint;
+    w_orient_vals(i) = r.weight_orient;
+    w_vel_vals(i) = r.weight_vel;
+    w_meta_vals(i) = r.weight_meta;
     
-    % Weights
-    w_pos(i) = r.weight_pos;
-    w_joint(i) = r.weight_joint;
-    w_orient(i) = r.weight_orient;
-    w_vel(i) = r.weight_vel;
-    w_meta(i) = r.weight_meta;
+    % Spearman & Coverage (DTW vs EB)
+    spearman_dtw_eb(i) = r.spearman;
+    rk_dtw_eb(i) = r.p_at_k;
+    r50_dtw_eb(i) = r.recall_at_50;
+    r10_dtw_eb(i) = r.recall_at_10;
+    r5_dtw_eb(i) = r.recall_at_5;
+    r3_dtw_eb(i) = r.recall_at_3;
+    r1_dtw_eb(i) = r.recall_at_1;
+    p_dtw_eb(i) = r.p_all_traj;
     
-    % Trajectory-level: Spearman + DTW vs EB Coverage
-    traj_results_matrix(i, :) = [
-        r.spearman, r.p_at_k, r.p_at_10, r.p_at_5, r.p_at_3, r.p_at_1, r.p_at_1
-    ];
-    
-    % Segment-level: Spearman + DTW vs EB Coverage
-    seg_results_matrix(i, :) = [
-        r.seg_spearman, r.seg_p_at_k, r.seg_p_at_10, ...
-        r.seg_p_at_5, r.seg_p_at_3, r.seg_p_at_1, r.seg_p_at_1
-    ];
-    
-    % ====================================================================
-    % DTW vs Embedding Coverage (trajectory)
-    % ====================================================================
-    if isfield(r, 'p_all_traj')
-        p_dtw_vs_eb_traj(i) = r.p_all_traj;
-        recall_dtw_vs_eb_50(i) = r.recall_at_50;
-        recall_dtw_vs_eb_10(i) = r.recall_at_10;
-        recall_dtw_vs_eb_5(i) = r.recall_at_5;
-        recall_dtw_vs_eb_3(i) = r.recall_at_3;
-        recall_dtw_vs_eb_1(i) = r.recall_at_1;
+    % GT vs Embedding
+    if isfield(r, 'gt_recall_at_50')
+        r50_gt_eb(i) = r.gt_recall_at_50;
+        r10_gt_eb(i) = r.gt_recall_at_10;
+        r5_gt_eb(i) = r.gt_recall_at_5;
+        r3_gt_eb(i) = r.gt_recall_at_3;
+        r1_gt_eb(i) = r.gt_recall_at_1;
+        p_gt_eb(i) = r.p_gt_traj;
+        mean_rank_gt_eb(i) = r.mean_gt_rank;
+        ndcg10_gt_eb(i) = r.ndcg_10_traj;
+        ndcg50_gt_eb(i) = r.ndcg_50_traj;
+        mrr_gt_eb(i) = r.mrr_traj;
     else
-        p_dtw_vs_eb_traj(i) = NaN;
-        recall_dtw_vs_eb_50(i) = NaN;
-        recall_dtw_vs_eb_10(i) = NaN;
-        recall_dtw_vs_eb_5(i) = NaN;
-        recall_dtw_vs_eb_3(i) = NaN;
-        recall_dtw_vs_eb_1(i) = NaN;
+        r50_gt_eb(i) = NaN;
+        r10_gt_eb(i) = NaN;
+        r5_gt_eb(i) = NaN;
+        r3_gt_eb(i) = NaN;
+        r1_gt_eb(i) = NaN;
+        p_gt_eb(i) = NaN;
+        mean_rank_gt_eb(i) = NaN;
+        ndcg10_gt_eb(i) = NaN;
+        ndcg50_gt_eb(i) = NaN;
+        mrr_gt_eb(i) = NaN;
     end
     
-    % DTW vs Embedding Coverage (segment)
-    if isfield(r, 'p_all_seg')
-        p_dtw_vs_eb_seg(i) = r.p_all_seg;
-        seg_recall_dtw_vs_eb_50(i) = r.seg_recall_at_50;
-        seg_recall_dtw_vs_eb_10(i) = r.seg_recall_at_10;
-        seg_recall_dtw_vs_eb_5(i) = r.seg_recall_at_5;
-        seg_recall_dtw_vs_eb_3(i) = r.seg_recall_at_3;
-        seg_recall_dtw_vs_eb_1(i) = r.seg_recall_at_1;
-    else
-        p_dtw_vs_eb_seg(i) = NaN;
-        seg_recall_dtw_vs_eb_50(i) = NaN;
-        seg_recall_dtw_vs_eb_10(i) = NaN;
-        seg_recall_dtw_vs_eb_5(i) = NaN;
-        seg_recall_dtw_vs_eb_3(i) = NaN;
-        seg_recall_dtw_vs_eb_1(i) = NaN;
-    end
-    
-    % ====================================================================
-    % GT vs Embedding (trajectory)
-    % ====================================================================
-    if isfield(r, 'p_gt_traj')
-        p_gt_vs_eb_traj(i) = r.p_gt_traj;
-        mean_gt_vs_eb_rank_traj(i) = r.mean_gt_rank;
-        recall_gt_vs_eb_50_traj(i) = r.gt_recall_at_50;
-        recall_gt_vs_eb_10_traj(i) = r.gt_recall_at_10;
-        recall_gt_vs_eb_5_traj(i) = r.gt_recall_at_5;
-        recall_gt_vs_eb_3_traj(i) = r.gt_recall_at_3;
-        recall_gt_vs_eb_1_traj(i) = r.gt_recall_at_1;
-    else
-        p_gt_vs_eb_traj(i) = NaN;
-        mean_gt_vs_eb_rank_traj(i) = NaN;
-        recall_gt_vs_eb_50_traj(i) = NaN;
-        recall_gt_vs_eb_10_traj(i) = NaN;
-        recall_gt_vs_eb_5_traj(i) = NaN;
-        recall_gt_vs_eb_3_traj(i) = NaN;
-        recall_gt_vs_eb_1_traj(i) = NaN;
-    end
-    
-    % GT vs Embedding (segment)
-    if isfield(r, 'p_gt_seg')
-        p_gt_vs_eb_seg(i) = r.p_gt_seg;
-        mean_gt_vs_eb_rank_seg(i) = r.seg_mean_gt_rank;
-        recall_gt_vs_eb_50_seg(i) = r.seg_gt_recall_at_50;
-        recall_gt_vs_eb_10_seg(i) = r.seg_gt_recall_at_10;
-        recall_gt_vs_eb_5_seg(i) = r.seg_gt_recall_at_5;
-        recall_gt_vs_eb_3_seg(i) = r.seg_gt_recall_at_3;
-        recall_gt_vs_eb_1_seg(i) = r.seg_gt_recall_at_1;
-    else
-        p_gt_vs_eb_seg(i) = NaN;
-        mean_gt_vs_eb_rank_seg(i) = NaN;
-        recall_gt_vs_eb_50_seg(i) = NaN;
-        recall_gt_vs_eb_10_seg(i) = NaN;
-        recall_gt_vs_eb_5_seg(i) = NaN;
-        recall_gt_vs_eb_3_seg(i) = NaN;
-        recall_gt_vs_eb_1_seg(i) = NaN;
-    end
-    
-    % ====================================================================
-    % GT vs DTW (from base_config.dtw_gt_metrics) - NEW!
-    % ====================================================================
+    % GT vs DTW (Baseline)
     if isfield(base_config, 'dtw_gt_metrics')
         query_field = sprintf('q_%s', strrep(r.query_id, '-', '_'));
         dtw_mode = r.dtw_mode;
@@ -842,229 +942,288 @@ for i = 1:total_experiments
             
             dtw_gt = base_config.dtw_gt_metrics.(query_field).(dtw_mode);
             
-            % Trajectory level
-            p_gt_vs_dtw_traj(i) = dtw_gt.p_gt;
-            mean_gt_vs_dtw_rank_traj(i) = dtw_gt.mean_gt_rank;
-            recall_gt_vs_dtw_50_traj(i) = dtw_gt.r50_gt;
-            recall_gt_vs_dtw_10_traj(i) = dtw_gt.r10_gt;
-            recall_gt_vs_dtw_5_traj(i) = dtw_gt.r5_gt;
-            recall_gt_vs_dtw_3_traj(i) = dtw_gt.r3_gt;
-            recall_gt_vs_dtw_1_traj(i) = dtw_gt.r1_gt;
+            r50_gt_dtw(i) = dtw_gt.r50_gt;
+            r10_gt_dtw(i) = dtw_gt.r10_gt;
+            r5_gt_dtw(i) = dtw_gt.r5_gt;
+            r3_gt_dtw(i) = dtw_gt.r3_gt;
+            r1_gt_dtw(i) = dtw_gt.r1_gt;
+            p_gt_dtw(i) = dtw_gt.p_gt;
+            mean_rank_gt_dtw(i) = dtw_gt.mean_gt_rank;
             
-            % Segment level (same as trajectory for DTW)
-            p_gt_vs_dtw_seg(i) = dtw_gt.seg_p_gt;
-            mean_gt_vs_dtw_rank_seg(i) = dtw_gt.seg_mean_gt_rank;
-            recall_gt_vs_dtw_50_seg(i) = dtw_gt.seg_r50_gt;
-            recall_gt_vs_dtw_10_seg(i) = dtw_gt.seg_r10_gt;
-            recall_gt_vs_dtw_5_seg(i) = dtw_gt.seg_r5_gt;
-            recall_gt_vs_dtw_3_seg(i) = dtw_gt.seg_r3_gt;
-            recall_gt_vs_dtw_1_seg(i) = dtw_gt.seg_r1_gt;
+            % NDCG DTW Baseline (NEW!)
+            if isfield(dtw_gt, 'ndcg_10')
+                ndcg10_gt_dtw(i) = dtw_gt.ndcg_10;
+                ndcg50_gt_dtw(i) = dtw_gt.ndcg_50;
+                mrr_gt_dtw(i) = dtw_gt.mrr;
+            else
+                ndcg10_gt_dtw(i) = NaN;
+                ndcg50_gt_dtw(i) = NaN;
+                mrr_gt_dtw(i) = NaN;
+            end
         else
-            % No DTW GT metrics available
-            p_gt_vs_dtw_traj(i) = NaN;
-            mean_gt_vs_dtw_rank_traj(i) = NaN;
-            recall_gt_vs_dtw_50_traj(i) = NaN;
-            recall_gt_vs_dtw_10_traj(i) = NaN;
-            recall_gt_vs_dtw_5_traj(i) = NaN;
-            recall_gt_vs_dtw_3_traj(i) = NaN;
-            recall_gt_vs_dtw_1_traj(i) = NaN;
-            
-            p_gt_vs_dtw_seg(i) = NaN;
-            mean_gt_vs_dtw_rank_seg(i) = NaN;
-            recall_gt_vs_dtw_50_seg(i) = NaN;
-            recall_gt_vs_dtw_10_seg(i) = NaN;
-            recall_gt_vs_dtw_5_seg(i) = NaN;
-            recall_gt_vs_dtw_3_seg(i) = NaN;
-            recall_gt_vs_dtw_1_seg(i) = NaN;
+            r50_gt_dtw(i) = NaN;
+            r10_gt_dtw(i) = NaN;
+            r5_gt_dtw(i) = NaN;
+            r3_gt_dtw(i) = NaN;
+            r1_gt_dtw(i) = NaN;
+            p_gt_dtw(i) = NaN;
+            mean_rank_gt_dtw(i) = NaN;
+            ndcg10_gt_dtw(i) = NaN;
+            ndcg50_gt_dtw(i) = NaN;
+            mrr_gt_dtw(i) = NaN;
         end
     else
-        % No DTW GT metrics computed
-        p_gt_vs_dtw_traj(i) = NaN;
-        mean_gt_vs_dtw_rank_traj(i) = NaN;
-        recall_gt_vs_dtw_50_traj(i) = NaN;
-        recall_gt_vs_dtw_10_traj(i) = NaN;
-        recall_gt_vs_dtw_5_traj(i) = NaN;
-        recall_gt_vs_dtw_3_traj(i) = NaN;
-        recall_gt_vs_dtw_1_traj(i) = NaN;
-        
-        p_gt_vs_dtw_seg(i) = NaN;
-        mean_gt_vs_dtw_rank_seg(i) = NaN;
-        recall_gt_vs_dtw_50_seg(i) = NaN;
-        recall_gt_vs_dtw_10_seg(i) = NaN;
-        recall_gt_vs_dtw_5_seg(i) = NaN;
-        recall_gt_vs_dtw_3_seg(i) = NaN;
-        recall_gt_vs_dtw_1_seg(i) = NaN;
+        r50_gt_dtw(i) = NaN;
+        r10_gt_dtw(i) = NaN;
+        r5_gt_dtw(i) = NaN;
+        r3_gt_dtw(i) = NaN;
+        r1_gt_dtw(i) = NaN;
+        p_gt_dtw(i) = NaN;
+        mean_rank_gt_dtw(i) = NaN;
+        ndcg10_gt_dtw(i) = NaN;
+        ndcg50_gt_dtw(i) = NaN;
+        mrr_gt_dtw(i) = NaN;
     end
     
-    % Num_GT (same for all)
+    % GT Info
     if isfield(r, 'num_gt')
-        num_gt_arr(i) = r.num_gt;
+        num_gt_vals(i) = r.num_gt;
     else
-        num_gt_arr(i) = NaN;
+        num_gt_vals(i) = NaN;
     end
+    
+    % Timing
+    runtimes(i) = r.exp_runtime / 60;  % Convert to minutes
 end
 
-% ========================================================================
-%%  BUILD TRAJECTORY-LEVEL TABLE
-%  ========================================================================
-
-traj_table = array2table(traj_results_matrix, ...
-    'VariableNames', {'Spearman_DTWvsEB', ...
-                      sprintf('R@K_DTWvsEB'), ...
-                      'R@10_DTWvsEB', 'R@5_DTWvsEB', 'R@3_DTWvsEB', 'R@1_DTWvsEB', 'R@1_DTWvsEB_dup'});
-
-% Remove duplicate R@1 column (was added twice in matrix)
-traj_table = removevars(traj_table, 'R@1_DTWvsEB_dup');
-
-% Add R@50_DTWvsEB and P_DTWvsEB
-traj_table = addvars(traj_table, recall_dtw_vs_eb_50, 'After', sprintf('R@K_DTWvsEB'), ...
-    'NewVariableNames', 'R@50_DTWvsEB');
-traj_table = addvars(traj_table, p_dtw_vs_eb_traj, 'After', 'R@1_DTWvsEB', ...
-    'NewVariableNames', 'P_DTWvsEB');
-
-% Add GT vs Embedding metrics
-traj_table = addvars(traj_table, recall_gt_vs_eb_50_traj, 'After', 'P_DTWvsEB', ...
-    'NewVariableNames', 'R@50_GTvsEB');
-traj_table = addvars(traj_table, recall_gt_vs_eb_10_traj, 'After', 'R@50_GTvsEB', ...
-    'NewVariableNames', 'R@10_GTvsEB');
-traj_table = addvars(traj_table, recall_gt_vs_eb_5_traj, 'After', 'R@10_GTvsEB', ...
-    'NewVariableNames', 'R@5_GTvsEB');
-traj_table = addvars(traj_table, recall_gt_vs_eb_3_traj, 'After', 'R@5_GTvsEB', ...
-    'NewVariableNames', 'R@3_GTvsEB');
-traj_table = addvars(traj_table, recall_gt_vs_eb_1_traj, 'After', 'R@3_GTvsEB', ...
-    'NewVariableNames', 'R@1_GTvsEB');
-traj_table = addvars(traj_table, p_gt_vs_eb_traj, 'After', 'R@1_GTvsEB', ...
-    'NewVariableNames', 'P_GTvsEB');
-traj_table = addvars(traj_table, mean_gt_vs_eb_rank_traj, 'After', 'P_GTvsEB', ...
-    'NewVariableNames', 'Mean_GTvsEB_Rank');
-
-% Add GT vs DTW metrics
-traj_table = addvars(traj_table, recall_gt_vs_dtw_50_traj, 'After', 'Mean_GTvsEB_Rank', ...
-    'NewVariableNames', 'R@50_GTvsDTW');
-traj_table = addvars(traj_table, recall_gt_vs_dtw_10_traj, 'After', 'R@50_GTvsDTW', ...
-    'NewVariableNames', 'R@10_GTvsDTW');
-traj_table = addvars(traj_table, recall_gt_vs_dtw_5_traj, 'After', 'R@10_GTvsDTW', ...
-    'NewVariableNames', 'R@5_GTvsDTW');
-traj_table = addvars(traj_table, recall_gt_vs_dtw_3_traj, 'After', 'R@5_GTvsDTW', ...
-    'NewVariableNames', 'R@3_GTvsDTW');
-traj_table = addvars(traj_table, recall_gt_vs_dtw_1_traj, 'After', 'R@3_GTvsDTW', ...
-    'NewVariableNames', 'R@1_GTvsDTW');
-traj_table = addvars(traj_table, p_gt_vs_dtw_traj, 'After', 'R@1_GTvsDTW', ...
-    'NewVariableNames', 'P_GTvsDTW');
-traj_table = addvars(traj_table, mean_gt_vs_dtw_rank_traj, 'After', 'P_GTvsDTW', ...
-    'NewVariableNames', 'Mean_GTvsDTW_Rank');
-
-% Add Num_GT
-traj_table = addvars(traj_table, num_gt_arr, 'After', 'Mean_GTvsDTW_Rank', ...
-    'NewVariableNames', 'Num_GT');
-
-% Add configuration columns BEFORE Spearman_DTWvsEB (from right to left)
-traj_table = addvars(traj_table, dtw_modes, 'Before', 'Spearman_DTWvsEB', ...
-    'NewVariableNames', 'DTW_Mode');
-traj_table = addvars(traj_table, total_dims_arr, 'Before', 'DTW_Mode', ...
-    'NewVariableNames', 'Total_Dims');
-traj_table = addvars(traj_table, n_fine_arr, 'Before', 'Total_Dims', ...
-    'NewVariableNames', 'N_Fine');
-traj_table = addvars(traj_table, n_coarse_arr, 'Before', 'N_Fine', ...
-    'NewVariableNames', 'N_Coarse');
-traj_table = addvars(traj_table, weight_modes, 'Before', 'N_Coarse', ...
-    'NewVariableNames', 'Weight_Mode');
-traj_table = addvars(traj_table, embedding_names, 'Before', 'Weight_Mode', ...
-    'NewVariableNames', 'Embedding_Config');
-
-% Add level identifier
-level_traj = repmat({'Trajectory'}, total_experiments, 1);
-traj_table = addvars(traj_table, level_traj, 'Before', 'Embedding_Config', ...
-    'NewVariableNames', 'Level');
-
-% Add Query_Bahn_ID
-traj_table = addvars(traj_table, query_bahn_ids, 'Before', 'Level', ...
-    'NewVariableNames', 'Query_Bahn_ID');
+fprintf('✓ Trajectory-level: %d experiments\n', total_experiments);
 
 % ========================================================================
-%%  BUILD SEGMENT-LEVEL TABLE
-%  ========================================================================
+% FILL ARRAYS FROM RESULTS (SEGMENT LEVEL)
+% ========================================================================
 
-seg_table = array2table(seg_results_matrix, ...
-    'VariableNames', {'Spearman_DTWvsEB', ...
-                      sprintf('R@K_DTWvsEB'), ...
-                      'R@10_DTWvsEB', 'R@5_DTWvsEB', 'R@3_DTWvsEB', 'R@1_DTWvsEB', 'R@1_DTWvsEB_dup'});
+fprintf('Extracting segment-level results...\n');
 
-% Remove duplicate
-seg_table = removevars(seg_table, 'R@1_DTWvsEB_dup');
+seg_offset = total_experiments;
 
-% Add R@50_DTWvsEB and P_DTWvsEB
-seg_table = addvars(seg_table, seg_recall_dtw_vs_eb_50, 'After', sprintf('R@K_DTWvsEB'), ...
-    'NewVariableNames', 'R@50_DTWvsEB');
-seg_table = addvars(seg_table, p_dtw_vs_eb_seg, 'After', 'R@1_DTWvsEB', ...
-    'NewVariableNames', 'P_DTWvsEB');
+for i = 1:total_experiments
+    idx = seg_offset + i;
+    r = all_results{i};
+    
+    % Configuration (same as trajectory)
+    levels{idx} = 'Segment';
+    query_ids_arr{idx} = r.query_id;
+    embedding_configs_arr{idx} = r.embedding_config;
+    n_coarse_vals(idx) = r.n_coarse;
+    n_fine_vals(idx) = r.n_fine;
+    total_dims_vals(idx) = r.total_dims;
+    multi_scale_vals(idx) = (r.n_coarse > 0);
+    weight_modes{idx} = r.weight_mode;
+    dtw_modes{idx} = r.dtw_mode;
+    w_pos_vals(idx) = r.weight_pos;
+    w_joint_vals(idx) = r.weight_joint;
+    w_orient_vals(idx) = r.weight_orient;
+    w_vel_vals(idx) = r.weight_vel;
+    w_meta_vals(idx) = r.weight_meta;
+    
+    % Spearman & Coverage (DTW vs EB) - SEGMENT
+    spearman_dtw_eb(idx) = r.seg_spearman;
+    rk_dtw_eb(idx) = r.seg_p_at_k;
+    r50_dtw_eb(idx) = r.seg_recall_at_50;
+    r10_dtw_eb(idx) = r.seg_recall_at_10;
+    r5_dtw_eb(idx) = r.seg_recall_at_5;
+    r3_dtw_eb(idx) = r.seg_recall_at_3;
+    r1_dtw_eb(idx) = r.seg_recall_at_1;
+    p_dtw_eb(idx) = r.p_all_seg;
+    
+    % GT vs Embedding - SEGMENT
+    if isfield(r, 'seg_gt_recall_at_50')
+        r50_gt_eb(idx) = r.seg_gt_recall_at_50;
+        r10_gt_eb(idx) = r.seg_gt_recall_at_10;
+        r5_gt_eb(idx) = r.seg_gt_recall_at_5;
+        r3_gt_eb(idx) = r.seg_gt_recall_at_3;
+        r1_gt_eb(idx) = r.seg_gt_recall_at_1;
+        p_gt_eb(idx) = r.p_gt_seg;
+        mean_rank_gt_eb(idx) = r.seg_mean_gt_rank;
+        ndcg10_gt_eb(idx) = r.ndcg_10_seg;
+        ndcg50_gt_eb(idx) = r.ndcg_50_seg;
+        mrr_gt_eb(idx) = r.mrr_seg;
+    else
+        r50_gt_eb(idx) = NaN;
+        r10_gt_eb(idx) = NaN;
+        r5_gt_eb(idx) = NaN;
+        r3_gt_eb(idx) = NaN;
+        r1_gt_eb(idx) = NaN;
+        p_gt_eb(idx) = NaN;
+        mean_rank_gt_eb(idx) = NaN;
+        ndcg10_gt_eb(idx) = NaN;
+        ndcg50_gt_eb(idx) = NaN;
+        mrr_gt_eb(idx) = NaN;
+    end
+    
+    % GT vs DTW - SEGMENT
+    if isfield(base_config, 'dtw_gt_metrics')
+        query_field = sprintf('q_%s', strrep(r.query_id, '-', '_'));
+        dtw_mode = r.dtw_mode;
+        
+        if isfield(base_config.dtw_gt_metrics, query_field) && ...
+           isfield(base_config.dtw_gt_metrics.(query_field), dtw_mode)
+            
+            dtw_gt = base_config.dtw_gt_metrics.(query_field).(dtw_mode);
+            
+            r50_gt_dtw(idx) = dtw_gt.seg_r50_gt;
+            r10_gt_dtw(idx) = dtw_gt.seg_r10_gt;
+            r5_gt_dtw(idx) = dtw_gt.seg_r5_gt;
+            r3_gt_dtw(idx) = dtw_gt.seg_r3_gt;
+            r1_gt_dtw(idx) = dtw_gt.seg_r1_gt;
+            p_gt_dtw(idx) = dtw_gt.seg_p_gt;
+            mean_rank_gt_dtw(idx) = dtw_gt.seg_mean_gt_rank;
+            
+            % NDCG DTW Baseline - SEGMENT (NEW!)
+            if isfield(dtw_gt, 'seg_ndcg_10')
+                ndcg10_gt_dtw(idx) = dtw_gt.seg_ndcg_10;
+                ndcg50_gt_dtw(idx) = dtw_gt.seg_ndcg_50;
+                mrr_gt_dtw(idx) = dtw_gt.seg_mrr;
+            else
+                ndcg10_gt_dtw(idx) = NaN;
+                ndcg50_gt_dtw(idx) = NaN;
+                mrr_gt_dtw(idx) = NaN;
+            end
+        else
+            r50_gt_dtw(idx) = NaN;
+            r10_gt_dtw(idx) = NaN;
+            r5_gt_dtw(idx) = NaN;
+            r3_gt_dtw(idx) = NaN;
+            r1_gt_dtw(idx) = NaN;
+            p_gt_dtw(idx) = NaN;
+            mean_rank_gt_dtw(idx) = NaN;
+            ndcg10_gt_dtw(idx) = NaN;
+            ndcg50_gt_dtw(idx) = NaN;
+            mrr_gt_dtw(idx) = NaN;
+        end
+    else
+        r50_gt_dtw(idx) = NaN;
+        r10_gt_dtw(idx) = NaN;
+        r5_gt_dtw(idx) = NaN;
+        r3_gt_dtw(idx) = NaN;
+        r1_gt_dtw(idx) = NaN;
+        p_gt_dtw(idx) = NaN;
+        mean_rank_gt_dtw(idx) = NaN;
+        ndcg10_gt_dtw(idx) = NaN;
+        ndcg50_gt_dtw(idx) = NaN;
+        mrr_gt_dtw(idx) = NaN;
+    end
+    
+    % GT Info (same as trajectory)
+    num_gt_vals(idx) = num_gt_vals(i);
+    
+    % Timing (same as trajectory)
+    runtimes(idx) = runtimes(i);
+end
 
-% Add GT vs Embedding metrics
-seg_table = addvars(seg_table, recall_gt_vs_eb_50_seg, 'After', 'P_DTWvsEB', ...
-    'NewVariableNames', 'R@50_GTvsEB');
-seg_table = addvars(seg_table, recall_gt_vs_eb_10_seg, 'After', 'R@50_GTvsEB', ...
-    'NewVariableNames', 'R@10_GTvsEB');
-seg_table = addvars(seg_table, recall_gt_vs_eb_5_seg, 'After', 'R@10_GTvsEB', ...
-    'NewVariableNames', 'R@5_GTvsEB');
-seg_table = addvars(seg_table, recall_gt_vs_eb_3_seg, 'After', 'R@5_GTvsEB', ...
-    'NewVariableNames', 'R@3_GTvsEB');
-seg_table = addvars(seg_table, recall_gt_vs_eb_1_seg, 'After', 'R@3_GTvsEB', ...
-    'NewVariableNames', 'R@1_GTvsEB');
-seg_table = addvars(seg_table, p_gt_vs_eb_seg, 'After', 'R@1_GTvsEB', ...
-    'NewVariableNames', 'P_GTvsEB');
-seg_table = addvars(seg_table, mean_gt_vs_eb_rank_seg, 'After', 'P_GTvsEB', ...
-    'NewVariableNames', 'Mean_GTvsEB_Rank');
-
-% Add GT vs DTW metrics
-seg_table = addvars(seg_table, recall_gt_vs_dtw_50_seg, 'After', 'Mean_GTvsEB_Rank', ...
-    'NewVariableNames', 'R@50_GTvsDTW');
-seg_table = addvars(seg_table, recall_gt_vs_dtw_10_seg, 'After', 'R@50_GTvsDTW', ...
-    'NewVariableNames', 'R@10_GTvsDTW');
-seg_table = addvars(seg_table, recall_gt_vs_dtw_5_seg, 'After', 'R@10_GTvsDTW', ...
-    'NewVariableNames', 'R@5_GTvsDTW');
-seg_table = addvars(seg_table, recall_gt_vs_dtw_3_seg, 'After', 'R@5_GTvsDTW', ...
-    'NewVariableNames', 'R@3_GTvsDTW');
-seg_table = addvars(seg_table, recall_gt_vs_dtw_1_seg, 'After', 'R@3_GTvsDTW', ...
-    'NewVariableNames', 'R@1_GTvsDTW');
-seg_table = addvars(seg_table, p_gt_vs_dtw_seg, 'After', 'R@1_GTvsDTW', ...
-    'NewVariableNames', 'P_GTvsDTW');
-seg_table = addvars(seg_table, mean_gt_vs_dtw_rank_seg, 'After', 'P_GTvsDTW', ...
-    'NewVariableNames', 'Mean_GTvsDTW_Rank');
-
-% Add Num_GT
-seg_table = addvars(seg_table, num_gt_arr, 'After', 'Mean_GTvsDTW_Rank', ...
-    'NewVariableNames', 'Num_GT');
-
-% Add configuration columns
-seg_table = addvars(seg_table, dtw_modes, 'Before', 'Spearman_DTWvsEB', ...
-    'NewVariableNames', 'DTW_Mode');
-seg_table = addvars(seg_table, total_dims_arr, 'Before', 'DTW_Mode', ...
-    'NewVariableNames', 'Total_Dims');
-seg_table = addvars(seg_table, n_fine_arr, 'Before', 'Total_Dims', ...
-    'NewVariableNames', 'N_Fine');
-seg_table = addvars(seg_table, n_coarse_arr, 'Before', 'N_Fine', ...
-    'NewVariableNames', 'N_Coarse');
-seg_table = addvars(seg_table, weight_modes, 'Before', 'N_Coarse', ...
-    'NewVariableNames', 'Weight_Mode');
-seg_table = addvars(seg_table, embedding_names, 'Before', 'Weight_Mode', ...
-    'NewVariableNames', 'Embedding_Config');
-
-% Add level identifier
-level_seg = repmat({'Segment'}, total_experiments, 1);
-seg_table = addvars(seg_table, level_seg, 'Before', 'Embedding_Config', ...
-    'NewVariableNames', 'Level');
-
-% Add Query_Bahn_ID
-seg_table = addvars(seg_table, query_bahn_ids, 'Before', 'Level', ...
-    'NewVariableNames', 'Query_Bahn_ID');
+fprintf('✓ Segment-level: %d experiments\n', total_experiments);
 
 % ========================================================================
-%%  COMBINE TABLES
-%  ========================================================================
+% CREATE COMBINED TABLE
+% ========================================================================
 
-combined_table = [traj_table; seg_table];
+fprintf('Creating combined table...\n');
 
-fprintf('✓ Tables created with new column structure\n\n');
+combined_table = table(...
+    levels, ...
+    query_ids_arr, ...
+    embedding_configs_arr, ...
+    n_coarse_vals, ...
+    n_fine_vals, ...
+    total_dims_vals, ...
+    multi_scale_vals, ...
+    weight_modes, ...
+    dtw_modes, ...
+    w_pos_vals, ...
+    w_joint_vals, ...
+    w_orient_vals, ...
+    w_vel_vals, ...
+    w_meta_vals, ...
+    spearman_dtw_eb, ...
+    rk_dtw_eb, ...
+    r50_dtw_eb, ...
+    r10_dtw_eb, ...
+    r5_dtw_eb, ...
+    r3_dtw_eb, ...
+    r1_dtw_eb, ...
+    p_dtw_eb, ...
+    r50_gt_eb, ...
+    r10_gt_eb, ...
+    r5_gt_eb, ...
+    r3_gt_eb, ...
+    r1_gt_eb, ...
+    p_gt_eb, ...
+    mean_rank_gt_eb, ...
+    ndcg10_gt_eb, ...
+    ndcg50_gt_eb, ...
+    mrr_gt_eb, ...
+    r50_gt_dtw, ...
+    r10_gt_dtw, ...
+    r5_gt_dtw, ...
+    r3_gt_dtw, ...
+    r1_gt_dtw, ...
+    p_gt_dtw, ...
+    mean_rank_gt_dtw, ...
+    ndcg10_gt_dtw, ...
+    ndcg50_gt_dtw, ...
+    mrr_gt_dtw, ...
+    num_gt_vals, ...
+    runtimes, ...
+    'VariableNames', {...
+    'Level', ...
+    'Query_Bahn_ID', ...
+    'Embedding_Config', ...
+    'N_Coarse', ...
+    'N_Fine', ...
+    'Total_Dims', ...
+    'Multi_Scale', ...
+    'Weight_Mode', ...
+    'DTW_Mode', ...
+    'W_Pos', ...
+    'W_Joint', ...
+    'W_Orient', ...
+    'W_Vel', ...
+    'W_Meta', ...
+    'Spearman_DTWvsEB', ...
+    'R@K_DTWvsEB', ...
+    'R@50_DTWvsEB', ...
+    'R@10_DTWvsEB', ...
+    'R@5_DTWvsEB', ...
+    'R@3_DTWvsEB', ...
+    'R@1_DTWvsEB', ...
+    'P_DTWvsEB', ...
+    'R@50_GTvsEB', ...
+    'R@10_GTvsEB', ...
+    'R@5_GTvsEB', ...
+    'R@3_GTvsEB', ...
+    'R@1_GTvsEB', ...
+    'P_GTvsEB', ...
+    'Mean_GTvsEB_Rank', ...
+    'NDCG@10_GTvsEB', ...
+    'NDCG@50_GTvsEB', ...
+    'MRR_GTvsEB', ...
+    'R@50_GTvsDTW', ...
+    'R@10_GTvsDTW', ...
+    'R@5_GTvsDTW', ...
+    'R@3_GTvsDTW', ...
+    'R@1_GTvsDTW', ...
+    'P_GTvsDTW', ...
+    'Mean_GTvsDTW_Rank', ...
+    'NDCG@10_GTvsDTW', ...
+    'NDCG@50_GTvsDTW', ...
+    'MRR_GTvsDTW', ...
+    'Num_GT', ...
+    'Runtime_min'});
+
+fprintf('✓ Combined table created: %d rows × %d columns\n', ...
+    height(combined_table), width(combined_table));
+
+fprintf('✓ Tables created successfully\n\n');
 
 % ========================================================================
 %%  ADD CONFIGURATION COLUMNS
@@ -1141,7 +1300,7 @@ if ~isempty(matlab_project_idx)
     else  % Linux/Mac
         project_root = fullfile(filesep, path_parts{1:matlab_project_idx});
     end
-    output_dir = fullfile(project_root, 'similarity');
+    output_dir = fullfile(project_root, 'similarity/results/');
 else
     % Fallback: use current directory
     warning('Could not find robotervermessung-matlab in path, using current directory');

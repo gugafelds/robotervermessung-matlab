@@ -473,6 +473,57 @@ else
 end
 
 % ========================================================================
+% NDCG METRICS (Trajectory Level) - NEW!
+% ========================================================================
+
+if exist('gt_coverage_traj', 'var') && ~isempty(gt_coverage_traj) && gt_coverage_traj.num_gt > 0
+    fprintf('  Computing NDCG metrics (trajectory)...\n');
+    
+    % Get GT IDs from ground_truth_map
+    query_field = sprintf('q_%s', strrep(query_bahn_id, '-', '_'));
+    
+    if isfield(config, 'ground_truth_map') && isfield(config.ground_truth_map, query_field)
+        gt_ids = config.ground_truth_map.(query_field).trajectories;
+        
+        % Extract GT similarities from DTW cache
+        gt_similarities = extractGTSimilarities(...
+            config.dtw_cache, query_bahn_id, config.dtw_mode, gt_ids);
+        
+        if ~isempty(gt_similarities)
+            % Get top-K IDs from embedding ranking
+            top_k_ids = fused_ranking.bahn_id;
+            K = config.top_k_trajectories;  % Usually 100
+            
+            % Compute NDCG metrics using existing function
+            embedding_metrics = computeEmbeddingOnlyMetrics(...
+                top_k_ids, gt_ids, gt_similarities, gt_coverage_traj.num_gt, K);
+            
+            % Store in results
+            results.ndcg_10_traj = embedding_metrics.ndcg10;
+            results.ndcg_50_traj = embedding_metrics.ndcg50;
+            results.mrr_traj = embedding_metrics.mrr;
+            
+            fprintf('    NDCG@10 (Traj): %.4f\n', results.ndcg_10_traj);
+            fprintf('    NDCG@50 (Traj): %.4f\n', results.ndcg_50_traj);
+            fprintf('    MRR (Traj):     %.4f\n', results.mrr_traj);
+        else
+            results.ndcg_10_traj = NaN;
+            results.ndcg_50_traj = NaN;
+            results.mrr_traj = NaN;
+        end
+    else
+        results.ndcg_10_traj = NaN;
+        results.ndcg_50_traj = NaN;
+        results.mrr_traj = NaN;
+    end
+else
+    results.ndcg_10_traj = NaN;
+    results.ndcg_50_traj = NaN;
+    results.mrr_traj = NaN;
+end
+
+
+% ========================================================================
 % GT Coverage Metrics (Segment Level) - NEW!
 % ========================================================================
 
@@ -531,6 +582,93 @@ else
     
     % Additional segment GT statistics
     results.seg_mean_gt_rank = NaN;
+end
+
+% ========================================================================
+% NDCG METRICS (Segment Level) - NEW!
+% ========================================================================
+
+if exist('gt_coverage_seg_avg', 'var') && ~isempty(gt_coverage_seg_avg)
+    fprintf('  Computing NDCG metrics (segments)...\n');
+    
+    query_field = sprintf('q_%s', strrep(query_bahn_id, '-', '_'));
+    
+    % Check if we have segment GT data
+    if isfield(config, 'ground_truth_map') && ...
+       isfield(config.ground_truth_map, query_field) && ...
+       isfield(config.ground_truth_map.(query_field), 'segments')
+        
+        num_query_segments = length(segment_embedding_results);
+        gt_seg_struct = config.ground_truth_map.(query_field).segments;
+        seg_fields = fieldnames(gt_seg_struct);
+        
+        ndcg_10_segments = [];
+        ndcg_50_segments = [];
+        mrr_segments = [];
+        
+        for seg_idx = 1:num_query_segments
+            % Get segment ranking
+            seg_fused_ranking = segment_embedding_results{seg_idx};
+            
+            if isempty(seg_fused_ranking)
+                continue;
+            end
+            
+            % Get GT segment IDs for this query segment
+            if seg_idx <= length(seg_fields)
+                gt_seg_ids_curr = gt_seg_struct.(seg_fields{seg_idx});
+                
+                if ~iscell(gt_seg_ids_curr)
+                    gt_seg_ids_curr = {gt_seg_ids_curr};
+                end
+                
+                num_gt_seg = length(gt_seg_ids_curr);
+                
+                if num_gt_seg > 0
+                    % Extract segment similarities from DTW cache
+                    gt_seg_similarities = extractSegmentSimilarities(...
+                        config.dtw_cache, query_bahn_id, config.dtw_mode, ...
+                        seg_idx, gt_seg_ids_curr);
+                    
+                    if ~isempty(gt_seg_similarities)
+                        % Compute NDCG for this segment
+                        top_k_seg_ids = seg_fused_ranking.segment_id;
+                        K_seg = config.top_k_trajectories;
+                        
+                        seg_metrics = computeEmbeddingOnlyMetrics(...
+                            top_k_seg_ids, gt_seg_ids_curr, gt_seg_similarities, num_gt_seg, K_seg);
+                        
+                        ndcg_10_segments = [ndcg_10_segments; seg_metrics.ndcg10];
+                        ndcg_50_segments = [ndcg_50_segments; seg_metrics.ndcg50];
+                        mrr_segments = [mrr_segments; seg_metrics.mrr];
+                    end
+                end
+            end
+        end
+        
+        % Average across valid segments
+        if ~isempty(ndcg_10_segments)
+            results.ndcg_10_seg = mean(ndcg_10_segments);
+            results.ndcg_50_seg = mean(ndcg_50_segments);
+            results.mrr_seg = mean(mrr_segments);
+            
+            fprintf('    NDCG@10 (Seg Avg): %.4f\n', results.ndcg_10_seg);
+            fprintf('    NDCG@50 (Seg Avg): %.4f\n', results.ndcg_50_seg);
+            fprintf('    MRR (Seg Avg):     %.4f\n', results.mrr_seg);
+        else
+            results.ndcg_10_seg = NaN;
+            results.ndcg_50_seg = NaN;
+            results.mrr_seg = NaN;
+        end
+    else
+        results.ndcg_10_seg = NaN;
+        results.ndcg_50_seg = NaN;
+        results.mrr_seg = NaN;
+    end
+else
+    results.ndcg_10_seg = NaN;
+    results.ndcg_50_seg = NaN;
+    results.mrr_seg = NaN;
 end
 
 end

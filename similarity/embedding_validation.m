@@ -42,7 +42,7 @@ use_ground_truth = true;  % Set to false to disable
 
 % === Base Configuration ===
 base_config = struct();
-base_config.database_sample_size = 120;  % Fixed for fair comparison
+base_config.database_sample_size = 1500;  % Fixed for fair comparison
 base_config.random_seed = 42;
 base_config.top_k_trajectories = 50;     % Fixed
 
@@ -68,55 +68,54 @@ embedding_configs = {
 
 % === DIMENSION 2: Query Trajectories ===
 query_ids = {
-    '1764766034'; % np = 2 / p = 843 / 9 GT
-
     %%%% NEW QUERIES %%%%
+    %'1764766034'; % np = 2 / p = 843 / 9 GT
 
     %'1765987078'; % clean, np = 4 / 10 GT
     %'1765987155'; % clean, np = 4 / 20 GT
     %'1765987310'; % clean, np = 4 / 30 GT
 
     %% clean
-    %'1765989370'; % clean, np = 3 / 10 GT
-    %'1765989294'; % clean, np = 3 / 20 GT
-    %'1765988821'; % clean, np = 3 / 30 GT
-    %'1765988920'; % clean; np = 3 / 40 GT
-    %'1765989411'; % clean; np = 3 / 50 GT
+    '1765989370'; % clean, np = 3 / 10 GT
+    '1765989294'; % clean, np = 3 / 20 GT
+    '1765988821'; % clean, np = 3 / 30 GT
+    '1765988920'; % clean; np = 3 / 40 GT
+    '1765989411'; % clean; np = 3 / 50 GT
     
     %% noisy - 2 mm
 
-    %'1765990630'; % noisy; np = 3 / 10 GT
-    %'1765990747'; % noisy; np = 3 / 20 GT
-    %'1765990822'; % noisy; np = 3 / 30 GT
-    %'1765991047'; % noisy; np = 3 / 40 GT
-    %'1765991234'; % noisy; np = 3 / 50 GT
+    '1765990630'; % noisy; np = 3 / 10 GT
+    '1765990747'; % noisy; np = 3 / 20 GT
+    '1765990822'; % noisy; np = 3 / 30 GT
+    '1765991047'; % noisy; np = 3 / 40 GT
+    '1765991234'; % noisy; np = 3 / 50 GT
     
     %% noisy - 5 mm
 
-    %'1765991190'; % noisy; np = 3 / 10 GT
-    %'1765991445'; % noisy; np = 3 / 20 GT
-    %'1765991515'; % noisy; np = 3 / 30 GT
-    %'1765991949'; % noisy; np = 3 / 40 GT %%alternativ 1765992404
-    %'1765991743'; % noisy; np = 3 / 50 GT
+    '1765991190'; % noisy; np = 3 / 10 GT
+    '1765991445'; % noisy; np = 3 / 20 GT
+    '1765991515'; % noisy; np = 3 / 30 GT
+    '1765991949'; % noisy; np = 3 / 40 GT %%alternativ 1765992404
+    '1765991743'; % noisy; np = 3 / 50 GT
 };
 
 % === DIMENSION 3: DTW Mode + Weight Combinations ===
 weight_mode_configs = {
     % Joint space
     'Joint only',           'joint_states',  [0, 1, 0, 0, 0];
-    %'Joint + Position',     'joint_states',  [1, 1, 0, 0, 0];
-    %'Joint + Orient',       'joint_states',  [0, 1, 1, 0, 0];
-    %'Joint + Velocity',     'joint_states',  [0, 1, 0, 1, 0];
-    %'Joint + Meta',         'joint_states',  [0, 1, 0, 0, 1];
-    %'Joint + All',          'joint_states',  [1, 1, 1, 1, 1];
+    'Joint + Position',     'joint_states',  [1, 1, 0, 0, 0];
+    'Joint + Orient',       'joint_states',  [0, 1, 1, 0, 0];
+    'Joint + Velocity',     'joint_states',  [0, 1, 0, 1, 0];
+    'Joint + Meta',         'joint_states',  [0, 1, 0, 0, 1];
+    'Joint + All',          'joint_states',  [1, 1, 1, 1, 1];
     
     % Position space
-    %'Position only',        'position',      [1, 0, 0, 0, 0];
-    %'Pos + Joint',          'position',      [1, 1, 0, 0, 0];
-    %'Pos + Orient',         'position',      [1, 0, 1, 0, 0];
-    %'Pos + Velocity',       'position',      [1, 0, 0, 1, 0];
-    %'Pos + Meta',           'position',      [1, 0, 0, 0, 1];
-    %'Pos + All',            'position',      [1, 1, 1, 1, 1];
+    'Position only',        'position',      [1, 0, 0, 0, 0];
+    'Pos + Joint',          'position',      [1, 1, 0, 0, 0];
+    'Pos + Orient',         'position',      [1, 0, 1, 0, 0];
+    'Pos + Velocity',       'position',      [1, 0, 0, 1, 0];
+    'Pos + Meta',           'position',      [1, 0, 0, 0, 1];
+    'Pos + All',            'position',      [1, 1, 1, 1, 1];
 };
 
 % === Calculate Total Experiments ===

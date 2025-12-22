@@ -49,7 +49,7 @@ fprintf('╚══════════════════════�
 % === Best Configurations (from previous analysis) ===
 % TODO: Fill in your top 2 embedding configs from Figure 1
 embedding_configs = {
-    %'Multi-Balanced-25',      5,  20,   true;   % Best overall
+    'Multi-Balanced-25',      5,  20,   true;   % Best overall
     'Single-Coarse-15',     0,    15,   false;  % Best single-scale
 };
 
@@ -57,11 +57,11 @@ embedding_configs = {
 weight_mode_configs = {
     % Motion (Joint States)
     'Joint only',           'joint_states',  [0, 1, 0, 0, 0];  % Baseline
-    %'Joint + Pos',         'joint_states',  [1, 1, 0, 0, 0];  % Best (from Figure 2)
+    'Joint + Pos',         'joint_states',  [1, 1, 0, 0, 0];  % Best (from Figure 2)
     
     % Space (Cartesian/Position)
     'Position only',        'position',      [1, 0, 0, 0, 0];  % Baseline
-    %'Pos + Joint',            'position',      [1, 1, 0, 0, 0];  % Best (from Figure 2)
+    'Pos + Joint',            'position',      [1, 1, 0, 0, 0];  % Best (from Figure 2)
 };
 
 % === Two-Stage Parameters ===
@@ -72,13 +72,28 @@ database_sizes = [250]; % Database sizes to test
 
 % === Query Trajectories ===
 query_ids = {
-    %'1764766034'; % Good query
-    %'1764167686'; % Noisy hard
-    %'1765473159'; % Noisy
-    %'1765473166'; % Noisy
-    %'1765473097'; % Noisy
-    '1765473008'; % Noisy
-    %'1765472956'; % Noisy
+    %% clean
+    '1765989370'; % clean, np = 3 / 10 GT
+    '1765989294'; % clean, np = 3 / 20 GT
+    '1765988821'; % clean, np = 3 / 30 GT
+    '1765988920'; % clean; np = 3 / 40 GT
+    '1765989411'; % clean; np = 3 / 50 GT
+    
+    %% noisy - 2 mm
+
+    '1765990630'; % noisy; np = 3 / 10 GT
+    '1765990747'; % noisy; np = 3 / 20 GT
+    '1765990822'; % noisy; np = 3 / 30 GT
+    '1765991047'; % noisy; np = 3 / 40 GT
+    '1765991234'; % noisy; np = 3 / 50 GT
+    
+    %% noisy - 5 mm
+
+    '1765991190'; % noisy; np = 3 / 10 GT
+    '1765991445'; % noisy; np = 3 / 20 GT
+    '1765991515'; % noisy; np = 3 / 30 GT
+    '1765991949'; % noisy; np = 3 / 40 GT %%alternativ 1765992404
+    '1765991743'; % noisy; np = 3 / 50 GT
 };
 
 % === Base Configuration ===

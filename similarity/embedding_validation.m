@@ -42,8 +42,8 @@ use_ground_truth = true;  % Set to false to disable
 
 % === Base Configuration ===
 base_config = struct();
-base_config.database_sample_size = 1500;  % Fixed for fair comparison
-base_config.random_seed = 42;
+base_config.database_sample_size = 1000;  % Fixed for fair comparison
+base_config.random_seed = 21;
 base_config.top_k_trajectories = 50;     % Fixed
 
 % === DIMENSION 1: Embedding Architectures ===
@@ -76,11 +76,11 @@ query_ids = {
     %'1765987310'; % clean, np = 4 / 30 GT
 
     %% clean
-    '1765989370'; % clean, np = 3 / 10 GT
-    '1765989294'; % clean, np = 3 / 20 GT
-    '1765988821'; % clean, np = 3 / 30 GT
-    '1765988920'; % clean; np = 3 / 40 GT
-    '1765989411'; % clean; np = 3 / 50 GT
+    %'1765989370'; % clean, np = 3 / 10 GT
+    %'1765989294'; % clean, np = 3 / 20 GT
+    %'1765988821'; % clean, np = 3 / 30 GT
+    %'1765988920'; % clean; np = 3 / 40 GT
+    %'1765989411'; % clean; np = 3 / 50 GT
     
     %% noisy - 2 mm
 
@@ -92,11 +92,11 @@ query_ids = {
     
     %% noisy - 5 mm
 
-    '1765991190'; % noisy; np = 3 / 10 GT
-    '1765991445'; % noisy; np = 3 / 20 GT
-    '1765991515'; % noisy; np = 3 / 30 GT
-    '1765991949'; % noisy; np = 3 / 40 GT %%alternativ 1765992404
-    '1765991743'; % noisy; np = 3 / 50 GT
+    %'1765991190'; % noisy; np = 3 / 10 GT
+    %'1765991445'; % noisy; np = 3 / 20 GT
+    %'1765991515'; % noisy; np = 3 / 30 GT
+    %'1765991949'; % noisy; np = 3 / 40 GT %%alternativ 1765992404
+    %'1765991743'; % noisy; np = 3 / 50 GT
 };
 
 % === DIMENSION 3: DTW Mode + Weight Combinations ===

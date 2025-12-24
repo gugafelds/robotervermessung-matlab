@@ -1,25 +1,22 @@
-function [dtw_reranked_ids, time_stage2, num_dtw_calls] = performDTWReranking(...
+function [dtw_reranked_ids, time_stage2, num_dtw_calls, used_lb_kim, used_lb_keogh] = performDTWReranking(...
     top_k_ids, query_seq, data_cache, dtw_mode, dtw_config, K)
     % Perform DTW reranking on trajectory-level candidates
+    % 
+    % UPDATED: Now returns used_lb_kim and used_lb_keogh flags
     
     tic_stage2 = tic;
     
     % Adaptive LB Strategy
-    if K <= 50
+    if K <= 500
         use_lb_kim = false;
         use_lb_keogh = false;
         lb_kim_keep = K;
         lb_keogh_keep = K;
-    elseif K <= 200
-        use_lb_kim = true;
-        use_lb_keogh = false;
-        lb_kim_keep = round(K * 0.6);
-        lb_keogh_keep = K;
     else
         use_lb_kim = true;
         use_lb_keogh = true;
-        lb_kim_keep = round(K * 0.7);
-        lb_keogh_keep = round(K * 0.3);
+        lb_kim_keep = round(K * 0.9);
+        lb_keogh_keep = 500;
     end
     
     % PHASE 1: LB_Kim
@@ -102,4 +99,8 @@ function [dtw_reranked_ids, time_stage2, num_dtw_calls] = performDTWReranking(..
     dtw_reranked_ids = top_k_ids(sort_idx);
     
     time_stage2 = toc(tic_stage2);
+    
+    % Return lower bound usage flags
+    used_lb_kim = use_lb_kim;
+    used_lb_keogh = use_lb_keogh;
 end

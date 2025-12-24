@@ -49,7 +49,7 @@ fprintf('╚══════════════════════�
 % === Best Configurations (from previous analysis) ===
 % TODO: Fill in your top 2 embedding configs from Figure 1
 embedding_configs = {
-    'Multi-Balanced-25',      5,  20,   true;   % Best overall
+    %'Multi-Balanced-25',      5,  20,   true;   % Best overall
     'Single-Fine-20',     0,    20,   false;  % Best single-scale
 };
 
@@ -67,8 +67,8 @@ weight_mode_configs = {
 % === Two-Stage Parameters ===
 %k_candidates = [10, 50, 100, 200, 500];  % Stage 1 output sizes
 %database_sizes = [100, 500, 1000, 2000]; % Database sizes to test
-k_candidates = [50, 100, 150];  % Stage 1 output sizes
-database_sizes = [1000, 2500, 5000]; % Database sizes to test
+k_candidates = [50,100,150,200];  % Stage 1 output sizes
+database_sizes = [500,1000,2500,5000]; % Database sizes to test
 
 % === Query Trajectories ===
 query_ids = {
@@ -200,7 +200,7 @@ if use_ground_truth
         
         % Store for later use
         base_config.ground_truth_map = ground_truth_map;
-        base_config.has_ground_truth = false;
+        base_config.has_ground_truth = true;
         base_config.ground_truth_ids = ground_truth_ids;
     else
         fprintf('⚠ No ground truth found - continuing without GT evaluation\n\n');
@@ -475,7 +475,7 @@ for db_idx = 1:length(database_sizes)
                     
                     % === TRAJECTORY RANKING ===
                     dtw_traj_ranking = dtw_cache_curr.(query_field).(dtw_mode).trajectory_ranking;
-                    proxy_k_traj = min(50, height(dtw_traj_ranking));
+                    proxy_k_traj = min(min(k_candidates), height(dtw_traj_ranking));
                     proxy_gt_traj_ids = dtw_traj_ranking.bahn_id(1:proxy_k_traj);
                     
                     % === SEGMENT RANKINGS ===
@@ -485,7 +485,7 @@ for db_idx = 1:length(database_sizes)
                     
                     for seg_idx = 1:num_query_segments
                         seg_ranking_table = dtw_seg_rankings{seg_idx};
-                        proxy_k_seg = min(50, height(seg_ranking_table));
+                        proxy_k_seg = min(min(k_candidates), height(seg_ranking_table));
                         proxy_gt_seg_ids{seg_idx} = seg_ranking_table.segment_id(1:proxy_k_seg);
                     end
                     
@@ -622,6 +622,7 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                     r5_gt_dtw = sum(valid_ranks <= 5) / min(5, num_gt);
                     r3_gt_dtw = sum(valid_ranks <= 3) / min(3, num_gt);
                     r1_gt_dtw = sum(valid_ranks <= 1) / min(1, num_gt);
+                    rk_gt_dtw = sum(valid_ranks <= length(valid_ranks)) / num_gt;
                     mean_gt_rank_dtw = mean(valid_ranks);
                     p_gt_dtw = max(valid_ranks);
                 else
@@ -630,6 +631,7 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                     r5_gt_dtw = 0;
                     r3_gt_dtw = 0;
                     r1_gt_dtw = 0;
+                    rk_gt_dtw = 0;
                     mean_gt_rank_dtw = inf;
                     p_gt_dtw = inf;
                 end
@@ -749,6 +751,7 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                         seg_r5_gt_dtw = NaN;
                         seg_r10_gt_dtw = NaN;
                         seg_r50_gt_dtw = NaN;
+                        seg_rk_gt_dtw = NaN;
                         seg_mean_gt_rank_dtw = NaN;
                         seg_p_gt_dtw = NaN;
                     else
@@ -759,6 +762,7 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                         seg_gt_recalls.r5 = [];
                         seg_gt_recalls.r10 = [];
                         seg_gt_recalls.r50 = [];
+                        seg_gt_recalls.rk = [];
                         seg_gt_recalls.mean_rank = [];
                         seg_gt_recalls.p_gt = [];
                         
@@ -819,6 +823,7 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                                 seg_gt_recalls.r5 = [seg_gt_recalls.r5; sum(valid_seg_ranks <= 5) / min(5, num_gt_seg_curr)];
                                 seg_gt_recalls.r10 = [seg_gt_recalls.r10; sum(valid_seg_ranks <= 10) / min(10, num_gt_seg_curr)];
                                 seg_gt_recalls.r50 = [seg_gt_recalls.r50; sum(valid_seg_ranks <= 50) / min(50, num_gt_seg_curr)];
+                                seg_gt_recalls.rk = [seg_gt_recalls.rk; sum(valid_seg_ranks <= length(valid_seg_ranks)) / num_gt_seg_curr];
                                 seg_gt_recalls.mean_rank = [seg_gt_recalls.mean_rank; mean(valid_seg_ranks)];
                                 seg_gt_recalls.p_gt = [seg_gt_recalls.p_gt; max(valid_seg_ranks)];
                             end
@@ -859,6 +864,7 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                             seg_r5_gt_dtw = mean(seg_gt_recalls.r5);
                             seg_r10_gt_dtw = mean(seg_gt_recalls.r10);
                             seg_r50_gt_dtw = mean(seg_gt_recalls.r50);
+                            seg_rk_gt_dtw = mean(seg_gt_recalls.rk);
                             seg_mean_gt_rank_dtw = mean(seg_gt_recalls.mean_rank);
                             seg_p_gt_dtw = mean(seg_gt_recalls.p_gt);
                         else
@@ -867,6 +873,7 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                             seg_r5_gt_dtw = 0;
                             seg_r10_gt_dtw = 0;
                             seg_r50_gt_dtw = 0;
+                            seg_rk_gt_dtw = 0;
                             seg_mean_gt_rank_dtw = inf;
                             seg_p_gt_dtw = inf;
                         end
@@ -889,6 +896,7 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                     seg_r5_gt_dtw = NaN;
                     seg_r10_gt_dtw = NaN;
                     seg_r50_gt_dtw = NaN;
+                    seg_rk_gt_dtw = NaN;
                     seg_mean_gt_rank_dtw = NaN;
                     seg_p_gt_dtw = NaN;
                 end
@@ -901,6 +909,7 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                 dtw_gt_metrics.(metric_key).r5_gt = r5_gt_dtw;
                 dtw_gt_metrics.(metric_key).r10_gt = r10_gt_dtw;
                 dtw_gt_metrics.(metric_key).r50_gt = r50_gt_dtw;
+                dtw_gt_metrics.(metric_key).rk_gt = rk_gt_dtw;
                 dtw_gt_metrics.(metric_key).mean_rank = mean_gt_rank_dtw;
                 dtw_gt_metrics.(metric_key).p_gt = p_gt_dtw;
                 dtw_gt_metrics.(metric_key).seg_r1_gt = seg_r1_gt_dtw;
@@ -908,6 +917,7 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                 dtw_gt_metrics.(metric_key).seg_r5_gt = seg_r5_gt_dtw;
                 dtw_gt_metrics.(metric_key).seg_r10_gt = seg_r10_gt_dtw;
                 dtw_gt_metrics.(metric_key).seg_r50_gt = seg_r50_gt_dtw;
+                dtw_gt_metrics.(metric_key).seg_rk_gt = seg_rk_gt_dtw;
                 dtw_gt_metrics.(metric_key).seg_mean_rank = seg_mean_gt_rank_dtw;
                 dtw_gt_metrics.(metric_key).seg_p_gt = seg_p_gt_dtw;
                 dtw_gt_metrics.(metric_key).num_gt = num_gt;
@@ -1218,7 +1228,8 @@ for emb_idx = 1:num_embeddings
                         top_k_ids_traj, gt_traj_ids, gt_traj_similarities, num_gt_traj, K);
                     
                     % STAGE 2: Trajectory DTW Reranking
-                    [dtw_reranked_ids_traj, time_stage2_traj, num_dtw_calls_traj] = ...
+                    [dtw_reranked_ids_traj, time_stage2_traj, num_dtw_calls_traj, ...
+                     used_lb_kim_traj, used_lb_keogh_traj] = ...
                         performDTWReranking(top_k_ids_traj, query_seq, data_cache_curr, ...
                         dtw_mode_curr, dtw_config, K);
                     
@@ -1239,11 +1250,12 @@ for emb_idx = 1:num_embeddings
                     
                     % Store Trajectory Result
                     result_traj = createResultStruct('Trajectory', emb_name, n_coarse, n_fine, ...
-                        total_dims, multi_scale, weight_mode_name, dtw_mode_curr, K, db_size, ...
-                        query_id, time_stage1_traj, time_stage2_traj, time_dtw_baseline, ...
-                        num_dtw_calls_traj, emb_only_metrics_traj, twostage_metrics_traj, ...
-                        baseline_metrics_traj, gt_type, num_gt_traj, 0, ...
-                        top_k_ids_traj, dtw_reranked_ids_traj);
+                    total_dims, multi_scale, weight_mode_name, dtw_mode_curr, K, db_size, ...
+                    query_id, time_stage1_traj, time_stage2_traj, time_dtw_baseline, ...
+                    num_dtw_calls_traj, emb_only_metrics_traj, twostage_metrics_traj, ...
+                    baseline_metrics_traj, gt_type, num_gt_traj, 0, ...
+                    top_k_ids_traj, dtw_reranked_ids_traj, ...
+                    used_lb_kim_traj, used_lb_keogh_traj);
                     
                     all_results{experiment_counter} = result_traj;
                     
@@ -1337,6 +1349,8 @@ for emb_idx = 1:num_embeddings
                     time_stage1_seg_total = 0;
                     time_stage2_seg_total = 0;
                     num_dtw_calls_seg_total = 0;
+                    seg_lb_kim_flags = false(num_query_segments, 1);
+                    seg_lb_keogh_flags = false(num_query_segments, 1);
                     
                     % Process EACH query segment
                     for seg_idx = 1:num_query_segments
@@ -1426,9 +1440,13 @@ for emb_idx = 1:num_embeddings
                             query_seg_seq = query_seg_data;
                         end
                         
-                        [dtw_reranked_ids_seg, time_stage2_seg, num_dtw_calls_seg] = ...
+                        [dtw_reranked_ids_seg, time_stage2_seg, num_dtw_calls_seg, ...
+                         used_lb_kim_curr, used_lb_keogh_curr] = ...
                             performSegmentDTWReranking(top_k_ids_seg, query_seg_seq, ...
                             data_cache_curr, dtw_mode_curr, dtw_config, K);
+
+                        seg_lb_kim_flags(seg_idx) = used_lb_kim_curr;
+                        seg_lb_keogh_flags(seg_idx) = used_lb_keogh_curr;
                         
                         time_stage2_seg_total = time_stage2_seg_total + time_stage2_seg;
                         num_dtw_calls_seg_total = num_dtw_calls_seg_total + num_dtw_calls_seg;
@@ -1445,27 +1463,39 @@ for emb_idx = 1:num_embeddings
                     time_stage1_seg = time_stage1_seg_total / num_query_segments;
                     time_stage2_seg = time_stage2_seg_total / num_query_segments;
                     num_dtw_calls_seg = round(num_dtw_calls_seg_total / num_query_segments);
+
+                    used_lb_kim_seg_agg = any(seg_lb_kim_flags);
+                    used_lb_keogh_seg_agg = any(seg_lb_keogh_flags);
                     
                     % Baseline DTW Segment Metrics
                     if isfield(base_config.dtw_gt_metrics, metric_key)
                         baseline_metrics_seg = struct();
+                        baseline_metrics_seg.r1_gt = base_config.dtw_gt_metrics.(metric_key).seg_r1_gt;
+                        baseline_metrics_seg.r3_gt = base_config.dtw_gt_metrics.(metric_key).seg_r3_gt;
+                        baseline_metrics_seg.r5_gt = base_config.dtw_gt_metrics.(metric_key).seg_r5_gt;
                         baseline_metrics_seg.r10_gt = base_config.dtw_gt_metrics.(metric_key).seg_r10_gt;
                         baseline_metrics_seg.r50_gt = base_config.dtw_gt_metrics.(metric_key).seg_r50_gt;
+                        baseline_metrics_seg.rk_gt = base_config.dtw_gt_metrics.(metric_key).seg_rk_gt;
                         baseline_metrics_seg.mean_rank = base_config.dtw_gt_metrics.(metric_key).seg_mean_rank;
                     else
                         baseline_metrics_seg = struct();
+                        baseline_metrics_seg.r1_gt = NaN;
+                        baseline_metrics_seg.r3_gt = NaN;
+                        baseline_metrics_seg.r5_gt = NaN;
                         baseline_metrics_seg.r10_gt = NaN;
                         baseline_metrics_seg.r50_gt = NaN;
+                        baseline_metrics_seg.rk_gt = NaN;
                         baseline_metrics_seg.mean_rank = NaN;
                     end
                     
                     % Store Segment Result
                     result_seg = createResultStruct('Segment', emb_name, n_coarse, n_fine, ...
-                        total_dims, multi_scale, weight_mode_name, dtw_mode_curr, K, db_size, ...
-                        query_id, time_stage1_seg, time_stage2_seg, time_dtw_baseline, ...
-                        num_dtw_calls_seg, emb_only_metrics_seg, twostage_metrics_seg, ...
-                        baseline_metrics_seg, gt_type, 0, num_gt_seg, ...
-                        {}, {});  % No rankings stored for segments (optional)
+                    total_dims, multi_scale, weight_mode_name, dtw_mode_curr, K, db_size, ...
+                    query_id, time_stage1_seg, time_stage2_seg, time_dtw_baseline, ...
+                    num_dtw_calls_seg, emb_only_metrics_seg, twostage_metrics_seg, ...
+                    baseline_metrics_seg, gt_type, 0, num_gt_seg, ...
+                    {}, {}, ...
+                    used_lb_kim_seg_agg, used_lb_keogh_seg_agg);
                     
                     all_results{experiment_counter} = result_seg;
                     

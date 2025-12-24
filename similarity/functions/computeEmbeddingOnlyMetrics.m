@@ -8,6 +8,7 @@ function metrics = computeEmbeddingOnlyMetrics(top_k_ids, gt_ids, gt_similaritie
         metrics.r5 = NaN;
         metrics.r10 = NaN;
         metrics.r50 = NaN;
+        metrics.rk = NaN;
         metrics.mrr = NaN;
         metrics.mean_rank = NaN;
         metrics.ndcg10 = NaN;
@@ -20,6 +21,7 @@ function metrics = computeEmbeddingOnlyMetrics(top_k_ids, gt_ids, gt_similaritie
         metrics.r5 = NaN;
         metrics.r10 = NaN;
         metrics.r50 = NaN;
+        metrics.rk = NaN;
         metrics.mrr = NaN;
         metrics.mean_rank = NaN;
         metrics.ndcg10 = NaN;
@@ -45,6 +47,7 @@ function metrics = computeEmbeddingOnlyMetrics(top_k_ids, gt_ids, gt_similaritie
         metrics.r5 = 0;
         metrics.r10 = 0;
         metrics.r50 = 0;
+        metrics.rk = 0;
         metrics.mrr = 0;
         metrics.mean_rank = inf;
         metrics.ndcg10 = 0;
@@ -57,6 +60,7 @@ function metrics = computeEmbeddingOnlyMetrics(top_k_ids, gt_ids, gt_similaritie
     metrics.r5 = sum(valid_ranks <= 5) / min(5, num_gt);
     metrics.r10 = sum(valid_ranks <= 10) / min(10, num_gt);
     metrics.r50 = sum(valid_ranks <= 50) / min(50, num_gt);
+    metrics.rk = sum(valid_ranks <= K) / min(K, num_gt);
     
     % MRR (unchanged - binary)
     metrics.mrr = mean(1 ./ valid_ranks);

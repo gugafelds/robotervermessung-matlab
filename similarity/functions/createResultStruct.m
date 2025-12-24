@@ -2,8 +2,12 @@ function result = createResultStruct(level, emb_name, n_coarse, n_fine, ...
     total_dims, multi_scale, weight_mode, dtw_mode, K, db_size, query_id, ...
     time_stage1, time_stage2, time_dtw_baseline, num_dtw_calls, ...
     emb_only_metrics, twostage_metrics, baseline_metrics, gt_type, ...
-    num_gt_traj, num_gt_seg, embedding_only_ranking, twostage_final_ranking)
+    num_gt_traj, num_gt_seg, embedding_only_ranking, twostage_final_ranking, ...
+    used_lb_kim, used_lb_keogh)
     % Create standardized result struct
+    %
+    % UPDATED: Now accepts used_lb_kim and used_lb_keogh as parameters
+    %          instead of computing them internally
     
     result = struct();
     
@@ -40,6 +44,7 @@ function result = createResultStruct(level, emb_name, n_coarse, n_fine, ...
     result.embedding_only_r5 = emb_only_metrics.r5;
     result.embedding_only_r10 = emb_only_metrics.r10;
     result.embedding_only_r50 = emb_only_metrics.r50;
+    result.embedding_only_rk = emb_only_metrics.rk;
     result.embedding_only_mrr = emb_only_metrics.mrr;
     result.embedding_only_mean_rank = emb_only_metrics.mean_rank;
     result.embedding_only_ndcg10 = emb_only_metrics.ndcg10;
@@ -50,14 +55,18 @@ function result = createResultStruct(level, emb_name, n_coarse, n_fine, ...
     result.recall_at_5 = twostage_metrics.r5;
     result.recall_at_10 = twostage_metrics.r10;
     result.recall_at_50 = twostage_metrics.r50;
+    result.recall_at_k = twostage_metrics.rk;
     result.mrr = twostage_metrics.mrr;
     result.mean_rank = twostage_metrics.mean_rank;
     result.ndcg_10 = twostage_metrics.ndcg10;
     result.ndcg_50 = twostage_metrics.ndcg50;
     
     % Baseline Metrics
+    result.baseline_r1 = baseline_metrics.r1_gt;
+    result.baseline_r5 = baseline_metrics.r5_gt;
     result.baseline_r10 = baseline_metrics.r10_gt;
     result.baseline_r50 = baseline_metrics.r50_gt;
+    result.baseline_rk = baseline_metrics.rk_gt;
     result.baseline_mean_rank = baseline_metrics.mean_rank;
     
     % GT Info
@@ -71,15 +80,7 @@ function result = createResultStruct(level, emb_name, n_coarse, n_fine, ...
         result.twostage_final_ranking = twostage_final_ranking;
     end
     
-    % Lower bounds usage
-    if K <= 50
-        result.used_lb_kim = false;
-        result.used_lb_keogh = false;
-    elseif K <= 200
-        result.used_lb_kim = true;
-        result.used_lb_keogh = false;
-    else
-        result.used_lb_kim = true;
-        result.used_lb_keogh = true;
-    end
+    % Lower bounds usage (now from actual DTW reranking functions!)
+    result.used_lb_kim = used_lb_kim;
+    result.used_lb_keogh = used_lb_keogh;
 end

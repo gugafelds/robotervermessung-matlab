@@ -3,7 +3,7 @@ function result = createResultStruct(level, emb_name, n_coarse, n_fine, ...
     time_stage1, time_stage2, time_dtw_baseline, num_dtw_calls, ...
     emb_only_metrics, twostage_metrics, baseline_metrics, gt_type, ...
     num_gt_traj, num_gt_seg, embedding_only_ranking, twostage_final_ranking, ...
-    used_lb_kim, used_lb_keogh)
+    used_lb_kim, used_lb_keogh, baseline_dtw_calls)
     % Create standardized result struct
     %
     % UPDATED: Now accepts used_lb_kim and used_lb_keogh as parameters
@@ -23,6 +23,7 @@ function result = createResultStruct(level, emb_name, n_coarse, n_fine, ...
     result.k_candidates = K;
     result.db_size = db_size;
     result.query_id = query_id;
+
     
     % Timing
     result.time_stage1 = time_stage1;
@@ -37,7 +38,7 @@ function result = createResultStruct(level, emb_name, n_coarse, n_fine, ...
     end
     
     result.dtw_calls_made = num_dtw_calls;
-    result.dtw_calls_saved_pct = (db_size - num_dtw_calls) / db_size * 100;
+    result.dtw_calls_saved_pct = (baseline_dtw_calls - num_dtw_calls) / baseline_dtw_calls * 100;
     
     % Embedding-Only Metrics
     result.embedding_only_r1 = emb_only_metrics.r1;

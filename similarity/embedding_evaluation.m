@@ -49,8 +49,8 @@ if exist(export_filename, 'file')
     
     % Read existing data from "All Data" sheet
     try
-        fprintf('  Reading existing data from sheet "All Data"...\n');
-        existing_data = readtable(export_filename, 'Sheet', 'All Data', 'VariableNamingRule', 'preserve');
+        fprintf('  Reading existing data from sheet "All Data - Phase 1"...\n');
+        existing_data = readtable(export_filename, 'Sheet', 'All Data - Phase 1', 'VariableNamingRule', 'preserve');
         fprintf('  ✓ Existing data: %d rows\n', height(existing_data));
         
         % Check which timestamps are already in the file
@@ -97,7 +97,7 @@ if exist(export_filename, 'file')
                 
                 % Write back to Excel
                 fprintf('  Writing updated data back to Excel...\n');
-                writetable(combined_data, export_filename, 'Sheet', 'All Data', 'WriteRowNames', false);
+                writetable(combined_data, export_filename, 'Sheet', 'All Data - Phase 1', 'WriteRowNames', false);
                 fprintf('  ✓ Successfully appended new data!\n\n');
                 
                 fprintf('╔════════════════════════════════════════════════════════════════╗\n');
@@ -119,7 +119,7 @@ if exist(export_filename, 'file')
         fprintf('  Will create new file instead\n\n');
         
         % Create new file (fallback)
-        writetable(new_data, export_filename, 'Sheet', 'All Data', 'WriteRowNames', false);
+        writetable(new_data, export_filename, 'Sheet', 'All Data - Phase 1', 'WriteRowNames', false);
         fprintf('  ✓ Created new Excel file with %d rows\n\n', height(new_data));
     end
     
@@ -129,7 +129,7 @@ else
     fprintf('  Location: %s\n\n', export_filename);
     
     try
-        writetable(new_data, export_filename, 'Sheet', 'All Data', 'WriteRowNames', false);
+        writetable(new_data, export_filename, 'Sheet', 'All Data - Phase 1', 'WriteRowNames', false);
         fprintf('  ✓ Successfully created new file with %d rows\n\n', height(new_data));
         
         fprintf('╔════════════════════════════════════════════════════════════════╗\n');
@@ -144,11 +144,137 @@ else
     end
 end
 
-fprintf('Note: File contains ONLY "All Data" sheet.\n');
+fprintf('Note: File contains ONLY "All Data - Phase 1" sheet.\n');
 fprintf('      Trajectory/Segment filtering can be done in Excel.\n\n');
 
+%% STEP 1.6: Smart Excel Export - Phase 2 (Two-Stage Retrieval)
 % ========================================================================
-%% FINAL CORRECTED PAPER ANALYSIS
+
+fprintf('\nSTEP 1.6: Smart Excel Export - Phase 2 (Two-Stage)...\n');
+fprintf('────────────────────────────────────────\n\n');
+
+% Load Phase 2 CSV files
+phase2_files = dir('results/two_stage_results_*.csv');
+
+if isempty(phase2_files)
+    fprintf('ℹ No Phase 2 CSV files found - skipping\n\n');
+else
+    fprintf('Found %d Phase 2 CSV file(s)\n', length(phase2_files));
+    
+    % Load and combine all Phase 2 CSVs
+    phase2_data_all = [];
+    for i = 1:length(phase2_files)
+        filepath = fullfile(phase2_files(i).folder, phase2_files(i).name);
+        temp_data = readtable(filepath, 'VariableNamingRule', 'preserve');
+        
+        % Extract timestamp from filename (two_stage_results_TIMESTAMP.csv)
+        filename = phase2_files(i).name;
+        timestamp_match = regexp(filename, 'two_stage_results_(.+)\.csv', 'tokens');
+        if ~isempty(timestamp_match)
+            timestamp_str = timestamp_match{1}{1};
+            temp_data.Timestamp = repmat({timestamp_str}, height(temp_data), 1);
+        end
+        
+        phase2_data_all = [phase2_data_all; temp_data];
+        fprintf('  Loaded: %s (%d rows)\n', phase2_files(i).name, height(temp_data));
+    end
+    
+    fprintf('\nTotal Phase 2 data loaded: %d rows\n', height(phase2_data_all));
+    
+    % Sheet name for Phase 2
+    sheet_name_phase2 = 'All Data - Phase 2';
+    
+    %% Check if Phase 2 sheet exists
+    if exist(export_filename, 'file')
+        try
+            fprintf('\n  Reading existing Phase 2 data from sheet "%s"...\n', sheet_name_phase2);
+            existing_data_p2 = readtable(export_filename, 'Sheet', sheet_name_phase2, 'VariableNamingRule', 'preserve');
+            fprintf('  ✓ Existing Phase 2 data: %d rows\n', height(existing_data_p2));
+            
+            % Check timestamps
+            if ismember('Timestamp', existing_data_p2.Properties.VariableNames) && ...
+               ismember('Timestamp', phase2_data_all.Properties.VariableNames)
+                
+                existing_timestamps_p2 = unique(existing_data_p2.Timestamp);
+                new_timestamps_p2 = unique(phase2_data_all.Timestamp);
+                
+                fprintf('\n  Existing Phase 2 timestamps: %d unique\n', length(existing_timestamps_p2));
+                fprintf('  New Phase 2 timestamps: %d unique\n', length(new_timestamps_p2));
+                
+                % Find new timestamps
+                timestamps_to_add_p2 = setdiff(new_timestamps_p2, existing_timestamps_p2);
+                
+                if isempty(timestamps_to_add_p2)
+                    fprintf('\n  ℹ All Phase 2 data already exists - nothing to add!\n\n');
+                else
+                    fprintf('\n  → Found %d NEW Phase 2 timestamp(s) to add:\n', length(timestamps_to_add_p2));
+                    for i = 1:length(timestamps_to_add_p2)
+                        fprintf('      %d. %s\n', i, char(timestamps_to_add_p2(i)));
+                    end
+                    
+                    % Filter new data
+                    if iscellstr(timestamps_to_add_p2) || isstring(timestamps_to_add_p2)
+                        mask_to_add_p2 = ismember(phase2_data_all.Timestamp, timestamps_to_add_p2);
+                    else
+                        mask_to_add_p2 = false(height(phase2_data_all), 1);
+                        for i = 1:length(timestamps_to_add_p2)
+                            mask_to_add_p2 = mask_to_add_p2 | strcmp(phase2_data_all.Timestamp, timestamps_to_add_p2(i));
+                        end
+                    end
+                    
+                    data_to_add_p2 = phase2_data_all(mask_to_add_p2, :);
+                    
+                    fprintf('  → Rows to add: %d\n\n', height(data_to_add_p2));
+                    
+                    % Append
+                    combined_data_p2 = [existing_data_p2; data_to_add_p2];
+                    
+                    fprintf('  Combined Phase 2 data: %d rows (was %d, added %d)\n\n', ...
+                        height(combined_data_p2), height(existing_data_p2), height(data_to_add_p2));
+                    
+                    % Write
+                    fprintf('  Writing updated Phase 2 data to Excel...\n');
+                    writetable(combined_data_p2, export_filename, 'Sheet', sheet_name_phase2, 'WriteRowNames', false);
+                    fprintf('  ✓ Successfully appended Phase 2 data!\n\n');
+                    
+                    fprintf('╔════════════════════════════════════════════════════════════════╗\n');
+                    fprintf('║  PHASE 2 DATA APPENDED                                         ║\n');
+                    fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
+                    fprintf('Sheet: %s\n', sheet_name_phase2);
+                    fprintf('  Previous rows: %d\n', height(existing_data_p2));
+                    fprintf('  Added rows: %d\n', height(data_to_add_p2));
+                    fprintf('  Total rows now: %d\n\n', height(combined_data_p2));
+                end
+                
+            else
+                fprintf('  ⚠ Timestamp column not found - cannot determine new data\n\n');
+            end
+            
+        catch ME
+            fprintf('  ℹ Sheet "%s" does not exist yet - creating new\n', sheet_name_phase2);
+            
+            % Create new sheet
+            writetable(phase2_data_all, export_filename, 'Sheet', sheet_name_phase2, 'WriteRowNames', false);
+            fprintf('  ✓ Created new Phase 2 sheet with %d rows\n\n', height(phase2_data_all));
+            
+            fprintf('╔════════════════════════════════════════════════════════════════╗\n');
+            fprintf('║  PHASE 2 SHEET CREATED                                         ║\n');
+            fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
+            fprintf('Sheet: %s\n', sheet_name_phase2);
+            fprintf('  Total rows: %d\n\n', height(phase2_data_all));
+        end
+        
+    else
+        fprintf('  ⚠ Excel file does not exist - Phase 1 must run first\n\n');
+    end
+end
+
+fprintf('Note: Excel file now contains:\n');
+fprintf('  • All Data - Phase 1: Embedding Validation)\n');
+fprintf('  • All Data - Phase 2: (Phase 2: Two-Stage Retrieval)\n\n');
+
+% ========================================================================
+%% FINAL CORRECTED PAPER ANALYSIS - PHASE 1
 % ========================================================================
 % Figure 1: Dimensionality Invariance - ONLY BASELINES (Joint only, Pos only)
 % Figure 2: Weight Mode Contribution - ALL modes sorted by composite
@@ -177,7 +303,7 @@ figure_format = 'both';
 % ========================================================================
 
 fprintf('Loading data...\n');
-data_table = readtable(excel_file, 'Sheet', 'All Data', 'VariableNamingRule', 'preserve');
+data_table = readtable(excel_file, 'Sheet', 'All Data - Phase 1', 'VariableNamingRule', 'preserve');
 
 if use_trajectory_only
     data_table = data_table(strcmp(data_table.Level, 'Trajectory'), :);

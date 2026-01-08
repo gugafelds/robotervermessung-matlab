@@ -56,7 +56,7 @@ embedding_configs = {
 % Best weight mode (from Figure 2)
 weight_mode_configs = {
     % Motion (Joint States)
-    'Joint only',           'joint_states',  [0, 1, 0, 0, 0];  % Baseline
+    %'Joint only',           'joint_states',  [0, 1, 0, 0, 0];  % Baseline
     %'Joint + All',         'joint_states',  [1, 1, 1, 1, 1];  % Best (from Figure 2)
     
     % Space (Cartesian/Position)
@@ -67,8 +67,8 @@ weight_mode_configs = {
 % === Two-Stage Parameters ===
 %k_candidates = [10, 50, 100, 200, 500];  % Stage 1 output sizes
 %database_sizes = [100, 500, 1000, 2000]; % Database sizes to test
-k_candidates = [50];  % Stage 1 output sizes
-database_sizes = [500]; % Database sizes to test
+k_candidates = [100, 150];  % Stage 1 output sizes
+database_sizes = [300]; % Database sizes to test
 
 % === Query Trajectories ===
 query_ids = {
@@ -98,9 +98,9 @@ query_ids = {
 
 % === Base Configuration ===
 base_config = struct();
-base_config.random_seed = 42;
+base_config.random_seed = 242;
 base_config.top_k_trajectories = max(k_candidates);  % Buffer for DTW !!!!!!!!!!!!!!!!!!!!!!!!! WICHTIG!!!!
-use_ground_truth = true;
+use_ground_truth = false;
 
 % === Calculate Total Experiments ===
 num_embeddings = size(embedding_configs, 1);        % 2
@@ -457,9 +457,9 @@ for db_idx = 1:length(database_sizes)
     end
     fprintf('\n');
 
-    % ========== PROXY GT FÜR DIESEN DB SIZE ==========
+    % ========== PROXY GT FÜR DIESEN DB SIZE (K-SPEZIFISCH) ==========
     if ~base_config.has_ground_truth
-        fprintf('  Creating Proxy GT for %s...\n', pool_name);
+        fprintf('  Creating K-specific Proxy GT for %s...\n', pool_name);
         
         % Initialize proxy GT for this DB size if not exists
         if ~isfield(base_config, 'proxy_gt_map')
@@ -479,33 +479,43 @@ for db_idx = 1:length(database_sizes)
                 if isfield(dtw_cache_curr, query_field) && ...
                    isfield(dtw_cache_curr.(query_field), dtw_mode)
                     
-                    % === TRAJECTORY RANKING ===
                     dtw_traj_ranking = dtw_cache_curr.(query_field).(dtw_mode).trajectory_ranking;
-                    proxy_k_traj = min(min(k_candidates), height(dtw_traj_ranking));
-                    proxy_gt_traj_ids = dtw_traj_ranking.bahn_id(1:proxy_k_traj);
-                    
-                    % === SEGMENT RANKINGS ===
                     dtw_seg_rankings = dtw_cache_curr.(query_field).(dtw_mode).segment_rankings;
                     num_query_segments = length(dtw_seg_rankings);
-                    proxy_gt_seg_ids = cell(num_query_segments, 1);
                     
-                    for seg_idx = 1:num_query_segments
-                        seg_ranking_table = dtw_seg_rankings{seg_idx};
-                        proxy_k_seg = min(min(k_candidates), height(seg_ranking_table));
-                        proxy_gt_seg_ids{seg_idx} = seg_ranking_table.segment_id(1:proxy_k_seg);
+                    % ✅ CREATE PROXY GT FOR EACH K VALUE
+                    for k_idx = 1:length(k_candidates)
+                        K_curr = k_candidates(k_idx);
+                        
+                        % === TRAJECTORY PROXY GT ===
+                        proxy_k_traj = min(K_curr, height(dtw_traj_ranking));
+                        proxy_gt_traj_ids = dtw_traj_ranking.bahn_id(1:proxy_k_traj);
+                        
+                        % === SEGMENT PROXY GT ===
+                        proxy_gt_seg_ids = cell(num_query_segments, 1);
+                        
+                        for seg_idx = 1:num_query_segments
+                            seg_ranking_table = dtw_seg_rankings{seg_idx};
+                            proxy_k_seg = min(K_curr, height(seg_ranking_table));
+                            proxy_gt_seg_ids{seg_idx} = seg_ranking_table.segment_id(1:proxy_k_seg);
+                        end
+                        
+                        % ✅ STORE WITH K-SPECIFIC KEY
+                        proxy_field = sprintf('%s_%s_K%d', query_field, dtw_mode, K_curr);
+                        
+                        base_config.proxy_gt_map.(pool_name).(proxy_field).trajectories = proxy_gt_traj_ids;
+                        base_config.proxy_gt_map.(pool_name).(proxy_field).segments = proxy_gt_seg_ids;
+                        base_config.proxy_gt_map.(pool_name).(proxy_field).num_trajectories = length(proxy_gt_traj_ids);
+                        base_config.proxy_gt_map.(pool_name).(proxy_field).num_query_segments = num_query_segments;
+                        base_config.proxy_gt_map.(pool_name).(proxy_field).K_value = K_curr;
                     end
-                    
-                    % Store both
-                    proxy_field = sprintf('%s_%s', query_field, dtw_mode);
-                    base_config.proxy_gt_map.(pool_name).(proxy_field).trajectories = proxy_gt_traj_ids;
-                    base_config.proxy_gt_map.(pool_name).(proxy_field).segments = proxy_gt_seg_ids;
-                    base_config.proxy_gt_map.(pool_name).(proxy_field).num_trajectories = length(proxy_gt_traj_ids);
-                    base_config.proxy_gt_map.(pool_name).(proxy_field).num_query_segments = num_query_segments;
                 end
             end
         end
         
-        fprintf('  ✓ Proxy GT created for %s\n\n', pool_name);
+        fprintf('  ✓ K-specific Proxy GT created for %s\n', pool_name);
+        fprintf('    K values: %s\n', mat2str(k_candidates));
+        fprintf('    Modes: %s\n\n', strjoin(unique_dtw_modes, ', '));
     end
     % ========== END PROXY GT ==========
 end
@@ -572,7 +582,8 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                     num_gt = length(gt_ids_for_query);
                 elseif base_config.has_proxy_gt
                     % Use proxy GT (DTW Top-50) - per DB size!
-                    proxy_field = sprintf('%s_%s', query_field, dtw_mode_curr);
+                    K_for_gt = max(k_candidates);
+                    proxy_field = sprintf('%s_%s_K%d', query_field, dtw_mode_curr, K_for_gt);
                     if isfield(base_config.proxy_gt_map, pool_name) && ...
                        isfield(base_config.proxy_gt_map.(pool_name), proxy_field)
                         gt_ids_for_query = base_config.proxy_gt_map.(pool_name).(proxy_field).trajectories;
@@ -672,15 +683,25 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                         gt_similarities = zeros(num_gt, 1);
                     end
                     
-                    % ✅ STORE
-                    sim_field = sprintf('similarities_%s', dtw_mode_curr);
-                    
+                    % ✅ STORE SIMILARITIES FOR EACH K
                     if base_config.has_ground_truth
+                        % Real GT: Store once (K-independent)
+                        sim_field = sprintf('similarities_%s', dtw_mode_curr);
                         ground_truth_map.(query_field).(sim_field) = gt_similarities;
+                        
                     elseif base_config.has_proxy_gt
-                        % Store per DB size!
-                        proxy_field = sprintf('%s_%s', query_field, dtw_mode_curr);
-                        base_config.proxy_gt_map.(pool_name).(proxy_field).(sim_field) = gt_similarities;
+                        % Proxy GT: Store for EACH K value
+                        for k_idx = 1:length(k_candidates)
+                            K_curr = k_candidates(k_idx);
+                            proxy_field = sprintf('%s_%s_K%d', query_field, dtw_mode_curr, K_curr);
+                            
+                            % Trim similarities to K
+                            num_sims_for_k = min(K_curr, length(gt_similarities));
+                            sim_field = sprintf('similarities_%s', dtw_mode_curr);
+                            
+                            base_config.proxy_gt_map.(pool_name).(proxy_field).(sim_field) = ...
+                                gt_similarities(1:num_sims_for_k);
+                        end
                     end
                 end
                 
@@ -737,7 +758,8 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                         end
                         
                     elseif base_config.has_proxy_gt
-                        proxy_field = sprintf('%s_%s', query_field, dtw_mode_curr);
+                        K_for_gt = max(k_candidates); 
+                        proxy_field = sprintf('%s_%s_K%d', query_field, dtw_mode_curr, K_for_gt);
                         if isfield(base_config.proxy_gt_map, pool_name) && ...
                            isfield(base_config.proxy_gt_map.(pool_name), proxy_field)
                             gt_seg_ids_for_query = base_config.proxy_gt_map.(pool_name).(proxy_field).segments;
@@ -859,6 +881,7 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                                     gt_seg_sims = zeros(num_gt_seg_curr, 1);
                                 end
                                 
+                                % Store in temporary array (will be saved below)
                                 gt_seg_similarities_all{seg_idx} = gt_seg_sims;
                             end
                         end
@@ -885,14 +908,32 @@ if base_config.has_ground_truth || base_config.has_proxy_gt
                         end
                         
                         % ✅ STORE segment similarities (only for LARGEST DB)
-                        if strcmp(pool_name, largest_pool_name)
+                        if strcmp(pool_name, largest_pool_name) || base_config.has_proxy_gt
                             seg_sim_field = sprintf('segment_similarities_%s', dtw_mode_curr);
                             
                             if base_config.has_ground_truth
+                                % Real GT: Store once
                                 ground_truth_map.(query_field).(seg_sim_field) = gt_seg_similarities_all;
+                                
                             elseif base_config.has_proxy_gt
-                                proxy_field = sprintf('%s_%s', query_field, dtw_mode_curr);
-                                base_config.proxy_gt_map.(pool_name).(proxy_field).(seg_sim_field) = gt_seg_similarities_all;
+                                % ✅ Proxy GT: Store for EACH K
+                                for k_idx = 1:length(k_candidates)
+                                    K_curr = k_candidates(k_idx);
+                                    proxy_field = sprintf('%s_%s_K%d', query_field, dtw_mode_curr, K_curr);
+                                    
+                                    % Trim each segment's similarities to K
+                                    trimmed_seg_sims = cell(size(gt_seg_similarities_all));
+                                    for seg_idx = 1:length(gt_seg_similarities_all)
+                                        if ~isempty(gt_seg_similarities_all{seg_idx})
+                                            num_sims = min(K_curr, length(gt_seg_similarities_all{seg_idx}));
+                                            trimmed_seg_sims{seg_idx} = gt_seg_similarities_all{seg_idx}(1:num_sims);
+                                        else
+                                            trimmed_seg_sims{seg_idx} = [];
+                                        end
+                                    end
+                                    
+                                    base_config.proxy_gt_map.(pool_name).(proxy_field).(seg_sim_field) = trimmed_seg_sims;
+                                end
                             end
                         end
                     end
@@ -1144,12 +1185,14 @@ for emb_idx = 1:num_embeddings
                         num_gt_traj = length(gt_traj_ids);
                         gt_type = 'real';
                     elseif base_config.has_proxy_gt
-                        proxy_field = sprintf('%s_%s', query_field, dtw_mode_curr);
+                        % ✅ USE K-SPECIFIC PROXY GT
+                        proxy_field = sprintf('%s_%s_K%d', query_field, dtw_mode_curr, K);  % K ist bereits in der Loop definiert!
+                        
                         if isfield(base_config.proxy_gt_map, pool_name) && ...
-                               isfield(base_config.proxy_gt_map.(pool_name), proxy_field)
-                                gt_traj_ids = base_config.proxy_gt_map.(pool_name).(proxy_field).trajectories;
+                           isfield(base_config.proxy_gt_map.(pool_name), proxy_field)
+                            gt_traj_ids = base_config.proxy_gt_map.(pool_name).(proxy_field).trajectories;
                             num_gt_traj = length(gt_traj_ids);
-                            gt_type = 'proxy_dtw';
+                            gt_type = sprintf('proxy_dtw_K%d', K);  % Zeigt K im GT Type!
                         else
                             gt_traj_ids = {};
                             num_gt_traj = 0;
@@ -1161,9 +1204,9 @@ for emb_idx = 1:num_embeddings
                         gt_type = 'none';
                     end
 
-                    % ========================================================
+                    % ====================================================
                     % GET GT SIMILARITIES (for NDCG calculation)
-                    % ========================================================
+                    % ====================================================
                     if num_gt_traj > 0
                         if base_config.has_ground_truth && isfield(ground_truth_map, query_field)
                             % Real GT - get similarities for this DTW mode
@@ -1172,30 +1215,27 @@ for emb_idx = 1:num_embeddings
                             if isfield(ground_truth_map.(query_field), sim_field)
                                 gt_traj_similarities = ground_truth_map.(query_field).(sim_field);
                             else
-                                % Fallback: uniform relevance
                                 gt_traj_similarities = ones(num_gt_traj, 1);
-                                fprintf('  [DEBUG] Looking for field: %s\n', sim_field);
-                                fprintf('  [DEBUG] Available fields in ground_truth_map.%s:\n', query_field);
-                                available_fields = fieldnames(ground_truth_map.(query_field));
-                                for dbg_idx = 1:length(available_fields)
-                                    fprintf('    - %s\n', available_fields{dbg_idx});
-                                end
-                                warning('No DTW similarities found for %s.%s - using uniform relevance', query_field, sim_field);
                             end
                             
                         elseif base_config.has_proxy_gt
-                            % Proxy GT - similarities stored per mode
-                            proxy_field = sprintf('%s_%s', query_field, dtw_mode_curr);
+                            % ✅ K-SPECIFIC PROXY GT - USE CURRENT K!
+                            proxy_field = sprintf('%s_%s_K%d', query_field, dtw_mode_curr, K);
                             
-                            % Use LARGEST DB for similarities (most accurate)
-                            largest_pool_name = sprintf('db_%d', max(database_sizes));
-                            
-                            if isfield(base_config.proxy_gt_map, largest_pool_name) && ...
-                               isfield(base_config.proxy_gt_map.(largest_pool_name), proxy_field) && ...
-                               isfield(base_config.proxy_gt_map.(largest_pool_name).(proxy_field), 'similarities')
-                                gt_traj_similarities = base_config.proxy_gt_map.(largest_pool_name).(proxy_field).similarities;
+                            if isfield(base_config.proxy_gt_map, pool_name) && ...
+                               isfield(base_config.proxy_gt_map.(pool_name), proxy_field)
+                                
+                                sim_field = sprintf('similarities_%s', dtw_mode_curr);
+                                
+                                % ✅ Get K-specific similarities
+                                if isfield(base_config.proxy_gt_map.(pool_name).(proxy_field), sim_field)
+                                    gt_traj_similarities = base_config.proxy_gt_map.(pool_name).(proxy_field).(sim_field);
+                                else
+                                    % Fallback: uniform relevance for this K
+                                    gt_traj_similarities = ones(num_gt_traj, 1);
+                                    warning('No similarities found for %s - using uniform relevance', proxy_field);
+                                end
                             else
-                                % Fallback: uniform relevance
                                 gt_traj_similarities = ones(num_gt_traj, 1);
                             end
                         else
@@ -1204,7 +1244,6 @@ for emb_idx = 1:num_embeddings
                     else
                         gt_traj_similarities = [];
                     end
-                    
                     % ====================================================
                     % LEVEL 1: TRAJECTORY-LEVEL TWO-STAGE
                     % ====================================================
@@ -1335,14 +1374,14 @@ for emb_idx = 1:num_embeddings
                     end
                         
                     elseif base_config.has_proxy_gt
-                        % Proxy GT segments (from DTW Top-50)
-                        proxy_field = sprintf('%s_%s', query_field, dtw_mode_curr);
-    
+                        % ✅ K-SPECIFIC PROXY GT FOR SEGMENTS
+                        proxy_field = sprintf('%s_%s_K%d', query_field, dtw_mode_curr, K);
+                        
                         if isfield(base_config.proxy_gt_map, pool_name) && ...
                            isfield(base_config.proxy_gt_map.(pool_name), proxy_field)
-                            gt_seg_ids = base_config.proxy_gt_map.(pool_name).(proxy_field).segments;  % Cell array!
-                            num_gt_seg = length(base_config.proxy_gt_map.(pool_name).(proxy_field).segments{1});  % ✅ RICHTIG!
-                            gt_type_seg = 'proxy_dtw';
+                            gt_seg_ids = base_config.proxy_gt_map.(pool_name).(proxy_field).segments;
+                            num_gt_seg = length(base_config.proxy_gt_map.(pool_name).(proxy_field).segments{1});
+                            gt_type_seg = sprintf('proxy_dtw_K%d', K);
                         else
                             gt_seg_ids = {};
                             num_gt_seg = 0;
@@ -1392,7 +1431,7 @@ for emb_idx = 1:num_embeddings
                         end
 
                         % ========================================================
-                        % GET GT SEGMENT SIMILARITIES
+                        % GET GT SEGMENT SIMILARITIES (K-SPECIFIC!)
                         % ========================================================
                         if num_gt_seg_curr > 0
                             if base_config.has_ground_truth && isfield(ground_truth_map, query_field)
@@ -1412,18 +1451,25 @@ for emb_idx = 1:num_embeddings
                                 end
                                 
                             elseif base_config.has_proxy_gt
-                                % Proxy GT - get segment similarities
-                                proxy_field = sprintf('%s_%s', query_field, dtw_mode_curr);
-                                largest_pool_name = sprintf('db_%d', max(database_sizes));
+                                % ✅ K-SPECIFIC PROXY GT FOR SEGMENTS
+                                proxy_field = sprintf('%s_%s_K%d', query_field, dtw_mode_curr, K);
                                 
-                                if isfield(base_config.proxy_gt_map, largest_pool_name) && ...
-                                   isfield(base_config.proxy_gt_map.(largest_pool_name), proxy_field) && ...
-                                   isfield(base_config.proxy_gt_map.(largest_pool_name).(proxy_field), 'segment_similarities')
+                                if isfield(base_config.proxy_gt_map, pool_name) && ...
+                                   isfield(base_config.proxy_gt_map.(pool_name), proxy_field)
                                     
-                                    seg_sims_all = base_config.proxy_gt_map.(largest_pool_name).(proxy_field).segment_similarities;
+                                    seg_sim_field = sprintf('segment_similarities_%s', dtw_mode_curr);
                                     
-                                    if seg_idx <= length(seg_sims_all) && ~isempty(seg_sims_all{seg_idx})
-                                        gt_seg_similarities_curr = seg_sims_all{seg_idx};
+                                    % ✅ Get K-specific segment similarities
+                                    if isfield(base_config.proxy_gt_map.(pool_name).(proxy_field), seg_sim_field)
+                                        seg_sims_all = base_config.proxy_gt_map.(pool_name).(proxy_field).(seg_sim_field);
+                                        
+                                        if seg_idx <= length(seg_sims_all) && ~isempty(seg_sims_all{seg_idx})
+                                            % ✅ Trim to current K if needed
+                                            full_sims = seg_sims_all{seg_idx};
+                                            gt_seg_similarities_curr = full_sims(1:min(K, length(full_sims)));
+                                        else
+                                            gt_seg_similarities_curr = ones(num_gt_seg_curr, 1);
+                                        end
                                     else
                                         gt_seg_similarities_curr = ones(num_gt_seg_curr, 1);
                                     end
@@ -1436,8 +1482,6 @@ for emb_idx = 1:num_embeddings
                         else
                             gt_seg_similarities_curr = [];
                         end
-
-
                         
                         % Embedding-Only Metrics (Segment)
                         seg_emb_only_metrics = computeEmbeddingOnlyMetrics(...

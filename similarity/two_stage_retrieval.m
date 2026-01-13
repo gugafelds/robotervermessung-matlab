@@ -49,31 +49,31 @@ fprintf('╚══════════════════════�
 % === Best Configurations (from previous analysis) ===
 % TODO: Fill in your top 2 embedding configs from Figure 1
 embedding_configs = {
-    %'Multi-Balanced-25',      5,  20,   true;   % Best overall
+    'Multi-Balanced-25',      5,  20,   true;   % Best overall
     'Single-Fine-20',     0,    20,   false;  % Best single-scale
 };
 
 % Best weight mode (from Figure 2)
 weight_mode_configs = {
     % Motion (Joint States)
-    %'Joint only',           'joint_states',  [0, 1, 0, 0, 0];  % Baseline
-    %'Joint + All',         'joint_states',  [1, 1, 1, 1, 1];  % Best (from Figure 2)
+    'Joint only',           'joint_states',  [0, 1, 0, 0, 0];  % Baseline
+    'Joint + All',         'joint_states',  [1, 1, 1, 1, 1];  % Best (from Figure 2)
     
     % Space (Cartesian/Position)
     'Position only',        'position',      [1, 0, 0, 0, 0];  % Baseline
-    %'Pos + All',            'position',      [1, 1, 1, 1, 1];  % Best (from Figure 2)
+    'Pos + All',            'position',      [1, 1, 1, 1, 1];  % Best (from Figure 2)
 };
 
 % === Two-Stage Parameters ===
 %k_candidates = [10, 50, 100, 200, 500];  % Stage 1 output sizes
 %database_sizes = [100, 500, 1000, 2000]; % Database sizes to test
-k_candidates = [100, 150];  % Stage 1 output sizes
-database_sizes = [300]; % Database sizes to test
+k_candidates = [100, 150, 200, 250];  % Stage 1 output sizes
+database_sizes = [1000, 2500, 5000, 7500]; % Database sizes to test
 
 % === Query Trajectories ===
 query_ids = {
     %% clean
-    '1765989370'; % clean, np = 3 / 10 GT
+    %'1765989370'; % clean, np = 3 / 10 GT
     %'1765989294'; % clean, np = 3 / 20 GT
     %'1765988821'; % clean, np = 3 / 30 GT
     %'1765988920'; % clean; np = 3 / 40 GT
@@ -89,16 +89,16 @@ query_ids = {
     
     %% noisy - 5 mm
 
-    %'1765991190'; % noisy; np = 3 / 10 GT
-    %'1765991445'; % noisy; np = 3 / 20 GT
-    %'1765991515'; % noisy; np = 3 / 30 GT
-    %'1765991949'; % noisy; np = 3 / 40 GT %%alternativ 1765992404
-    %'1765991743'; % noisy; np = 3 / 50 GT
+    '1765991190'; % noisy; np = 3 / 10 GT
+    '1765991445'; % noisy; np = 3 / 20 GT
+    '1765991515'; % noisy; np = 3 / 30 GT
+    '1765991949'; % noisy; np = 3 / 40 GT %%alternativ 1765992404
+    '1765991743'; % noisy; np = 3 / 50 GT
 };
 
 % === Base Configuration ===
 base_config = struct();
-base_config.random_seed = 242;
+base_config.random_seed = 42;
 base_config.top_k_trajectories = max(k_candidates);  % Buffer for DTW !!!!!!!!!!!!!!!!!!!!!!!!! WICHTIG!!!!
 use_ground_truth = false;
 

@@ -21,7 +21,7 @@ fprintf('╚══════════════════════�
 fprintf('═══ SECTION 1: SETUP & CONFIGURATION ═══\n\n');
 
 % === WAS SUCHEN WIR? ===
-query_id = '1766066299';
+query_id = '1761928390';
 
 % === WIE VIELE KANDIDATEN MIT EMBEDDINGS? ===
 K = 250;  % Stage 1: Hole 50 Kandidaten mit Embeddings
@@ -34,14 +34,14 @@ weights = [1.0; 1.0; 1.0; 1.0; 1.0];  % position, joint, orientation, velocity, 
 weights = weights / sum(weights);     % Normalisieren
 
 % === DTW EINSTELLUNGEN ===
-dtw_mode = 'joint_states';  % 'position' oder 'joint_states'
+dtw_mode = 'position';  % 'position' oder 'joint_states'
 dtw_window = 0.2;       % 20% window
 normalize_dtw = true; %% besser für prognose bis jetzt
 use_rotation_alignment = false;
 
 % === PROGNOSE ===
 prognose = true;
-prognose_top_n = 10;  % Top-N für Prognose nutzen
+prognose_top_n = 100;  % Top-N für Prognose nutzen
 
 % Lower Bounds (für Speedup)
 lb_kim_keep_ratio = 1.0;      % 100% = alle durchlassen (kein LB_Kim)
@@ -548,62 +548,117 @@ fprintf('✓ Plots generated\n');
 if prognose
     fprintf('═══ SECTION 7: PROGNOSE ═══\n\n');
     
-    % === BAHN-LEVEL ===
+    % === BAHN-LEVEL (DIRECT) ===
     fprintf('--- BAHN-LEVEL ---\n');
     
     [s1_simple, s1_weighted] = computePrognose(stage1_bahn_results, prognose_top_n, conn, 'rrf_score');
-    fprintf('Stage 1 (Embedding):  Simple=%.4f | Weighted=%.4f\n', s1_simple, s1_weighted);
+    fprintf('Direct Stage 1:       Simple=%.4f | Weighted=%.4f\n', s1_simple, s1_weighted);
     
     [s2_simple, s2_weighted] = computePrognose(stage2_bahn_results, prognose_top_n, conn, 'dtw_dist');
-    fprintf('Stage 2 (DTW):        Simple=%.4f | Weighted=%.4f\n', s2_simple, s2_weighted);
+    fprintf('Direct Stage 2:       Simple=%.4f | Weighted=%.4f\n', s2_simple, s2_weighted);
     
+    % === BAHN-LEVEL (FROM SEGMENTS) ===
+    seg_lengths = zeros(num_segments, 1);
+    seg_prognose_s1_simple = zeros(num_segments, 1);
+    seg_prognose_s1_weighted = zeros(num_segments, 1);
+    seg_prognose_s2_simple = zeros(num_segments, 1);
+    seg_prognose_s2_weighted = zeros(num_segments, 1);
+    
+    for seg_idx = 1:num_segments
+        % Segmentlänge
+        if strcmp(dtw_mode, 'position')
+            seg_lengths(seg_idx) = size(query_segments_position{seg_idx}, 1);
+        else
+            seg_lengths(seg_idx) = size(query_segments_joint{seg_idx}, 1);
+        end
+        
+        % Prognosen holen
+        s1_table = stage1_seg_results{seg_idx};
+        s2_table = stage2_seg_results{seg_idx};
+        
+        if ~isempty(s1_table)
+            [seg_prognose_s1_simple(seg_idx), seg_prognose_s1_weighted(seg_idx)] = ...
+                computePrognose(s1_table, prognose_top_n, conn, 'rrf_score');
+        else
+            seg_prognose_s1_simple(seg_idx) = NaN;
+            seg_prognose_s1_weighted(seg_idx) = NaN;
+        end
+        
+        if ~isempty(s2_table)
+            [seg_prognose_s2_simple(seg_idx), seg_prognose_s2_weighted(seg_idx)] = ...
+                computePrognose(s2_table, prognose_top_n, conn, 'dtw_dist');
+        else
+            seg_prognose_s2_simple(seg_idx) = NaN;
+            seg_prognose_s2_weighted(seg_idx) = NaN;
+        end
+    end
+    
+    % Längengewichtete Aggregation
+    valid_s1 = ~isnan(seg_prognose_s1_simple);
+    valid_s2 = ~isnan(seg_prognose_s2_simple);
+    
+    if any(valid_s1)
+        w = seg_lengths(valid_s1) / sum(seg_lengths(valid_s1));
+        agg_s1_simple = sum(w .* seg_prognose_s1_simple(valid_s1));
+        agg_s1_weighted = sum(w .* seg_prognose_s1_weighted(valid_s1));
+    else
+        agg_s1_simple = NaN; agg_s1_weighted = NaN;
+    end
+    
+    if any(valid_s2)
+        w = seg_lengths(valid_s2) / sum(seg_lengths(valid_s2));
+        agg_s2_simple = sum(w .* seg_prognose_s2_simple(valid_s2));
+        agg_s2_weighted = sum(w .* seg_prognose_s2_weighted(valid_s2));
+    else
+        agg_s2_simple = NaN; agg_s2_weighted = NaN;
+    end
+    
+    fprintf('From Segs Stage 1:    Simple=%.4f | Weighted=%.4f\n', agg_s1_simple, agg_s1_weighted);
+    fprintf('From Segs Stage 2:    Simple=%.4f | Weighted=%.4f\n', agg_s2_simple, agg_s2_weighted);
+    
+    % Ground Truth + Errors
     gt_sql = sprintf(['SELECT sidtw_average_distance FROM auswertung.info_sidtw ' ...
                       'WHERE segment_id = ''%s'''], query_id);
     gt_result = fetch(conn, gt_sql);
     if ~isempty(gt_result)
         gt_value = gt_result.sidtw_average_distance(1);
         fprintf('\nGround Truth:         %.4f\n', gt_value);
-        fprintf('Error Stage 1:        Simple=%.4f | Weighted=%.4f\n', ...
+        fprintf('Error Direct S1:      Simple=%.4f | Weighted=%.4f\n', ...
                 abs(gt_value - s1_simple), abs(gt_value - s1_weighted));
-        fprintf('Error Stage 2:        Simple=%.4f | Weighted=%.4f\n', ...
+        fprintf('Error Direct S2:      Simple=%.4f | Weighted=%.4f\n', ...
                 abs(gt_value - s2_simple), abs(gt_value - s2_weighted));
+        fprintf('Error FromSegs S1:    Simple=%.4f | Weighted=%.4f\n', ...
+                abs(gt_value - agg_s1_simple), abs(gt_value - agg_s1_weighted));
+        fprintf('Error FromSegs S2:    Simple=%.4f | Weighted=%.4f\n', ...
+                abs(gt_value - agg_s2_simple), abs(gt_value - agg_s2_weighted));
     end
     
-    % === SEGMENT-LEVEL ===
-    fprintf('\n--- SEGMENT-LEVEL ---\n');
+    % === SEGMENT-LEVEL (Detail-Ausgabe) ===
+    fprintf('\n--- SEGMENT-LEVEL (Details) ---\n');
     
     for seg_idx = 1:num_segments
         seg_id = query_segment_ids{seg_idx};
-        fprintf('\nSegment %d: %s\n', seg_idx, seg_id);
+        fprintf('\nSegment %d: %s (Länge: %d)\n', seg_idx, seg_id, seg_lengths(seg_idx));
+        fprintf('  Stage 1:  Simple=%.4f | Weighted=%.4f\n', ...
+                seg_prognose_s1_simple(seg_idx), seg_prognose_s1_weighted(seg_idx));
+        fprintf('  Stage 2:  Simple=%.4f | Weighted=%.4f\n', ...
+                seg_prognose_s2_simple(seg_idx), seg_prognose_s2_weighted(seg_idx));
         
-        s1_table = stage1_seg_results{seg_idx};
-        s2_table = stage2_seg_results{seg_idx};
-        
-        if ~isempty(s1_table)
-            [s1_simple, s1_weighted] = computePrognose(s1_table, prognose_top_n, conn, 'rrf_score');
-            fprintf('  Stage 1:  Simple=%.4f | Weighted=%.4f\n', s1_simple, s1_weighted);
-        end
-        
-        if ~isempty(s2_table)
-            [s2_simple, s2_weighted] = computePrognose(s2_table, prognose_top_n, conn, 'dtw_dist');
-            fprintf('  Stage 2:  Simple=%.4f | Weighted=%.4f\n', s2_simple, s2_weighted);
-        end
-        
-        % Ground Truth für Segment
         gt_sql = sprintf(['SELECT sidtw_average_distance FROM auswertung.info_sidtw ' ...
                           'WHERE segment_id = ''%s'''], seg_id);
         gt_result = fetch(conn, gt_sql);
         if ~isempty(gt_result)
             gt_val = gt_result.sidtw_average_distance(1);
             fprintf('  GT=%.4f | Err S1: %.4f / %.4f | Err S2: %.4f / %.4f\n', ...
-                    gt_val, abs(gt_val - s1_simple), abs(gt_val - s1_weighted), ...
-                    abs(gt_val - s2_simple), abs(gt_val - s2_weighted));
+                    gt_val, abs(gt_val - seg_prognose_s1_simple(seg_idx)), ...
+                    abs(gt_val - seg_prognose_s1_weighted(seg_idx)), ...
+                    abs(gt_val - seg_prognose_s2_simple(seg_idx)), ...
+                    abs(gt_val - seg_prognose_s2_weighted(seg_idx)));
         end
     end
     
     fprintf('\n═══ SECTION 7 COMPLETE ═══\n\n');
 end
-
 
 
 % ========================================================================

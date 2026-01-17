@@ -73,11 +73,11 @@ database_sizes = [1000, 2500, 5000, 7500]; % Database sizes to test
 % === Query Trajectories ===
 query_ids = {
     %% clean
-    %'1765989370'; % clean, np = 3 / 10 GT
-    %'1765989294'; % clean, np = 3 / 20 GT
-    %'1765988821'; % clean, np = 3 / 30 GT
-    %'1765988920'; % clean; np = 3 / 40 GT
-    %'1765989411'; % clean; np = 3 / 50 GT
+    '1765989370'; % clean, np = 3 / 10 GT
+    '1765989294'; % clean, np = 3 / 20 GT
+    '1765988821'; % clean, np = 3 / 30 GT
+    '1765988920'; % clean; np = 3 / 40 GT
+    '1765989411'; % clean; np = 3 / 50 GT
     
     %% noisy - 2 mm
 
@@ -89,11 +89,11 @@ query_ids = {
     
     %% noisy - 5 mm
 
-    '1765991190'; % noisy; np = 3 / 10 GT
-    '1765991445'; % noisy; np = 3 / 20 GT
-    '1765991515'; % noisy; np = 3 / 30 GT
-    '1765991949'; % noisy; np = 3 / 40 GT %%alternativ 1765992404
-    '1765991743'; % noisy; np = 3 / 50 GT
+    %'1765991190'; % noisy; np = 3 / 10 GT
+    %'1765991445'; % noisy; np = 3 / 20 GT
+    %'1765991515'; % noisy; np = 3 / 30 GT
+    %'1765991949'; % noisy; np = 3 / 40 GT %%alternativ 1765992404
+    %'1765991743'; % noisy; np = 3 / 50 GT
 };
 
 % === Base Configuration ===
@@ -369,10 +369,10 @@ dtw_tic = tic;
 % === DTW Configuration ===
 dtw_config = struct();
 dtw_config.top_k_trajectories = base_config.top_k_trajectories;
-dtw_config.lb_kim_keep_ratio = 0.9;      % Keep 80% after LB_Kim
+dtw_config.lb_kim_keep_ratio = 1.0;      % Keep 80% after LB_Kim
 dtw_config.lb_keogh_candidates = 500;     % Further reduce to 400 with LB_Keogh
 dtw_config.cdtw_window = 0.2;
-dtw_config.normalize_dtw = false;
+dtw_config.normalize_dtw = true;
 dtw_config.use_rotation_alignment = false;
 
 fprintf('DTW Configuration:\n');

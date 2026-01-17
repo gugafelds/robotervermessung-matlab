@@ -46,11 +46,11 @@ fprintf('USER CONFIGURATION\n');
 fprintf('═══════════════════════════════════════════════════════════════\n');
 
 % === QUERY ===
-query_id = '1767693380';  % ← CHANGE THIS!
+query_id = '1767715170';  % ← CHANGE THIS!
 
 % === STAGE 1 PARAMETERS ===
-K_bahn = 500;       % Top-K candidates from Stage 1 (Bahn-Level)
-K_segment = 500;    % Top-K candidates per segment (Segment-Level)
+K_bahn = 50;       % Top-K candidates from Stage 1 (Bahn-Level)
+K_segment = 50;    % Top-K candidates per segment (Segment-Level)
 
 % === EMBEDDING WEIGHTS (adjust as you like!) ===
 embedding_weights = [
@@ -68,8 +68,8 @@ embedding_weights = embedding_weights / sum(embedding_weights);
 dtw_mode = 'position';  % 'position' or 'joint_states'
 
 % === FINAL OUTPUT SIZE ===
-final_limit_bahn = 100;      % Final Top-N Bahnen
-final_limit_segment = 100;   % Final Top-N Segments per segment
+final_limit_bahn = 10;      % Final Top-N Bahnen
+final_limit_segment = 10;   % Final Top-N Segments per segment
 
 % === DTW CONFIG ===
 dtw_config = struct();
@@ -156,7 +156,7 @@ query_embeddings = getQueryEmbeddings(conn, schema, query_id, 'bahn');
 
 % Perform RRF on all embedding modalities
 bahn_candidates = performRRFEmbeddingSearch(conn, schema, query_embeddings, ...
-    embedding_weights, K_bahn, 'bahn');
+    embedding_weights, K_bahn, 'bahn', query_id);
 
 stage1_bahn_time = toc(stage1_bahn_start);
 
@@ -250,7 +250,7 @@ for seg_idx = 1:num_query_segments
     
     % RRF Search
     seg_candidates = performRRFEmbeddingSearch(conn, schema, seg_embeddings, ...
-        embedding_weights, K_segment, 'segment');
+        embedding_weights, K_segment, 'segment', seg_id);
     
     segment_stage1_times(seg_idx) = toc(stage1_seg_start);
     
@@ -307,8 +307,7 @@ fprintf('  Avg DTW Calls:          %.1f / %d\n', mean(segment_dtw_calls), K_segm
 fprintf('  Avg DTW Savings:        %.1f%%\n', mean((K_segment - segment_dtw_calls) / K_segment * 100));
 fprintf('═══════════════════════════════════════════════════════════════\n\n');
 
-% Close connection
-close(conn);
+
 
 % ========================================================================
 %% SECTION 3.5: RERANKING ANALYSIS (After all timing measurements!)
@@ -346,8 +345,7 @@ end
 
 fprintf('  ✓ Analysis completed for %d segments\n\n', num_query_segments);
 
-% Close connection
-close(conn);
+
 
 % ========================================================================
 %% SECTION 3.6: PERFORMANCE PROGNOSIS (SIDTW-based)
@@ -428,28 +426,25 @@ for seg_idx = 1:num_query_segments
     if ~isempty(all_segment_results{seg_idx})
         seg_id = all_segment_results{seg_idx}.segment_id;
         seg_results = all_segment_results{seg_idx}.results;
-        
+
         fprintf('  Segment %d/%d: %s\n', seg_idx, num_query_segments, seg_id);
-        
+
         % ✅ STAGE 1: Sort by Stage 1 rank
         [~, s1_sort_idx_seg] = sort([seg_results.stage1_rank]);
         seg_results_stage1 = seg_results(s1_sort_idx_seg);
-        
+
         % ✅ STAGE 2: Already sorted by Stage 2 rank
         seg_results_stage2 = seg_results;
-        
+
         % Stage 1 prognosis
         segment_prog_stage1{seg_idx} = evaluatePerformancePrognosis(conn, seg_id, seg_results_stage1, top_k_test_values);
-        
+
         % Stage 2 prognosis
         segment_prog_stage2{seg_idx} = evaluatePerformancePrognosis(conn, seg_id, seg_results_stage2, top_k_test_values);
     end
 end
 
 fprintf('  ✓ Prognosis completed for %d segments\n\n', num_query_segments);
-
-% Close connection
-close(conn);
 
 fprintf('╔════════════════════════════════════════════════════════════════╗\n');
 fprintf('║  SECTION 3.6 COMPLETE                                          ║\n');
@@ -463,21 +458,23 @@ fprintf('╔══════════════════════�
 fprintf('║  SECTION 4: RESULTS WITH RERANKING ANALYSIS                     ║\n');
 fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
 
-% === Display Top Bahnen WITH RERANKING ===
 fprintf('═══════════════════════════════════════════════════════════════\n');
-fprintf('TOP %d SIMILAR BAHNEN (Stage 1 → Stage 2)\n', min(10, length(bahn_results)));
+fprintf('TOP %d SIMILAR BAHNEN (Stage 1 → Stage 2)\n', final_limit_bahn);  % ✅ Verwende final_limit_bahn
 fprintf('═══════════════════════════════════════════════════════════════\n');
 
-for i = 1:min(10, length(bahn_results))
-    r = bahn_results(i);
+% ✅ NEU: Filtere nur Top-N
+top_n_bahn = bahn_results([bahn_results.is_top_n]);
+
+for i = 1:min(10, length(top_n_bahn))  % ✅ Verwende top_n_bahn
+    r = top_n_bahn(i);
     
     % Rank change indicator
     if r.rank_change > 0
-        change_str = sprintf('↑%d', r.rank_change);  % Improved (moved up)
+        change_str = sprintf('↑%d', r.rank_change);
     elseif r.rank_change < 0
-        change_str = sprintf('↓%d', abs(r.rank_change));  % Degraded (moved down)
+        change_str = sprintf('↓%d', abs(r.rank_change));
     else
-        change_str = '═';  % Stable
+        change_str = '═';
     end
     
     fprintf('%2d. %s | DTW: %.4f | S1:#%d→S2:#%d %s\n', ...
@@ -622,8 +619,6 @@ end
 
 fprintf('═══════════════════════════════════════════════════════════════\n\n');
 
-
-
 % ========================================================================
 %% SECTION 5: PERFORMANCE PROGNOSIS RESULTS
 % ========================================================================
@@ -675,30 +670,30 @@ fprintf('═══════════════════════�
 % ========================================================================
 
 if ~isempty(bahn_prog_stage1) && isfield(bahn_prog_stage1, 'predictions')
-    
+
     k_fields = fieldnames(bahn_prog_stage1.predictions);
-    
+
     for k_idx = 1:length(k_fields)
         k_field = k_fields{k_idx};
         K = bahn_prog_stage1.predictions.(k_field).k;
-        
+
         fprintf('═══════════════════════════════════════════════════════════════\n');
         fprintf('TOP-%d PREDICTION\n', K);
         fprintf('═══════════════════════════════════════════════════════════════\n\n');
-        
+
         % ================================================================
         % STAGE 1: EMBEDDING-BASED
         % ================================================================
-        
+
         fprintf('STAGE 1 (Embedding-based)\n');
         fprintf('───────────────────────────────────────────────────────────────\n');
         fprintf('                   SIMPLE              WEIGHTED\n');
         fprintf('───────────────────────────────────────────────────────────────\n');
-        
+
         % Bahn
         if isfield(bahn_prog_stage1.predictions, k_field)
             s1_err = bahn_prog_stage1.predictions.(k_field).errors.average_distance;
-            
+
             fprintf('Bahn %-15s\n', query_id);
             fprintf('  Pred:  %8.4f mm       %8.4f mm\n', ...
                 s1_err.predicted_mean, s1_err.predicted_weighted);
@@ -706,31 +701,31 @@ if ~isempty(bahn_prog_stage1) && isfield(bahn_prog_stage1, 'predictions')
                 s1_err.mae_mean, s1_err.mae_weighted);
             fprintf('  Rel:   %8.1f%%         %8.1f%%\n', ...
                 s1_err.relative_error_mean, s1_err.relative_error_weighted);
-            
+
             s1_bahn_impr = s1_err.mae_mean - s1_err.mae_weighted;
             s1_bahn_impr_pct = s1_bahn_impr / s1_err.mae_mean * 100;
-            
+
             fprintf('  Improvement (Weighted vs Simple): %.4f mm (%.1f%%) %s\n', ...
                 s1_bahn_impr, s1_bahn_impr_pct, ternary(s1_bahn_impr > 0, '✓', '✗'));
             fprintf('───────────────────────────────────────────────────────────────\n');
-            
+
             % ✅ COLLECT FOR OVERVIEW
             overview_data.bahn_s1_simple = [overview_data.bahn_s1_simple; s1_err.mae_mean];
             overview_data.bahn_s1_weighted = [overview_data.bahn_s1_weighted; s1_err.mae_weighted];
         end
-        
+
         % Segments
         seg_s1_simple_errors = [];
         seg_s1_weighted_errors = [];
-        
+
         for seg_idx = 1:num_query_segments
             if ~isempty(segment_prog_stage1{seg_idx}) && ...
                isfield(segment_prog_stage1{seg_idx}, 'predictions') && ...
                isfield(segment_prog_stage1{seg_idx}.predictions, k_field)
-                
+
                 seg_id = query_data.segment_ids{seg_idx};
                 s1_seg_err = segment_prog_stage1{seg_idx}.predictions.(k_field).errors.average_distance;
-                
+
                 fprintf('Segment %-15s\n', seg_id);
                 fprintf('  Pred:  %8.4f mm       %8.4f mm\n', ...
                     s1_seg_err.predicted_mean, s1_seg_err.predicted_weighted);
@@ -738,36 +733,36 @@ if ~isempty(bahn_prog_stage1) && isfield(bahn_prog_stage1, 'predictions')
                     s1_seg_err.mae_mean, s1_seg_err.mae_weighted);
                 fprintf('  Rel:   %8.1f%%         %8.1f%%\n', ...
                     s1_seg_err.relative_error_mean, s1_seg_err.relative_error_weighted);
-                
+
                 s1_seg_impr = s1_seg_err.mae_mean - s1_seg_err.mae_weighted;
                 s1_seg_impr_pct = s1_seg_impr / s1_seg_err.mae_mean * 100;
-                
+
                 fprintf('  → Improvement: %.4f mm (%.1f%%) %s\n', ...
                     s1_seg_impr, s1_seg_impr_pct, ternary(s1_seg_impr > 0, '✓', '✗'));
                 fprintf('───────────────────────────────────────────────────────────────\n');
-                
+
                 % ✅ COLLECT FOR OVERVIEW
                 seg_s1_simple_errors = [seg_s1_simple_errors; s1_seg_err.mae_mean];
                 seg_s1_weighted_errors = [seg_s1_weighted_errors; s1_seg_err.mae_weighted];
             end
         end
-        
+
         fprintf('\n');
-        
+
         % ================================================================
         % STAGE 2: DTW-BASED
         % ================================================================
-        
+
         fprintf('STAGE 2 (DTW-based)\n');
         fprintf('───────────────────────────────────────────────────────────────\n');
         fprintf('                   SIMPLE              WEIGHTED\n');
         fprintf('───────────────────────────────────────────────────────────────\n');
-        
+
         % Bahn
         if isfield(bahn_prog_stage2.predictions, k_field)
             s1_err = bahn_prog_stage1.predictions.(k_field).errors.average_distance;
             s2_err = bahn_prog_stage2.predictions.(k_field).errors.average_distance;
-            
+
             fprintf('Bahn %-15s\n', query_id);
             fprintf('  Pred:  %8.4f mm       %8.4f mm\n', ...
                 s2_err.predicted_mean, s2_err.predicted_weighted);
@@ -775,17 +770,17 @@ if ~isempty(bahn_prog_stage1) && isfield(bahn_prog_stage1, 'predictions')
                 s2_err.mae_mean, s2_err.mae_weighted);
             fprintf('  Rel:   %8.1f%%         %8.1f%%\n', ...
                 s2_err.relative_error_mean, s2_err.relative_error_weighted);
-            
+
             % Improvements
             s2_simple_impr = s1_err.mae_mean - s2_err.mae_mean;
             s2_simple_impr_pct = s2_simple_impr / s1_err.mae_mean * 100;
-            
+
             s2_weighted_impr = s2_err.mae_mean - s2_err.mae_weighted;
             s2_weighted_impr_pct = s2_weighted_impr / s2_err.mae_mean * 100;
-            
+
             s2_stage_impr = s1_err.mae_weighted - s2_err.mae_weighted;
             s2_stage_impr_pct = s2_stage_impr / s1_err.mae_weighted * 100;
-            
+
             fprintf('  Impr vs Stage1 (Simple):      %.4f mm (%.1f%%) %s\n', ...
                 s2_simple_impr, s2_simple_impr_pct, ternary(s2_simple_impr > 0, '✓', '✗'));
             fprintf('  Impr (Weighted vs Simple):    %.4f mm (%.1f%%) %s\n', ...
@@ -793,16 +788,16 @@ if ~isempty(bahn_prog_stage1) && isfield(bahn_prog_stage1, 'predictions')
             fprintf('  Impr Stage1→2 (Weighted):     %.4f mm (%.1f%%) %s\n', ...
                 s2_stage_impr, s2_stage_impr_pct, ternary(s2_stage_impr > 0, '✓', '✗'));
             fprintf('───────────────────────────────────────────────────────────────\n');
-            
+
             % ✅ COLLECT FOR OVERVIEW
             overview_data.bahn_s2_simple = [overview_data.bahn_s2_simple; s2_err.mae_mean];
             overview_data.bahn_s2_weighted = [overview_data.bahn_s2_weighted; s2_err.mae_weighted];
         end
-        
+
         % Segments
         seg_s2_simple_errors = [];
         seg_s2_weighted_errors = [];
-        
+
         for seg_idx = 1:num_query_segments
             if ~isempty(segment_prog_stage1{seg_idx}) && ...
                ~isempty(segment_prog_stage2{seg_idx}) && ...
@@ -810,11 +805,11 @@ if ~isempty(bahn_prog_stage1) && isfield(bahn_prog_stage1, 'predictions')
                isfield(segment_prog_stage2{seg_idx}, 'predictions') && ...
                isfield(segment_prog_stage1{seg_idx}.predictions, k_field) && ...
                isfield(segment_prog_stage2{seg_idx}.predictions, k_field)
-                
+
                 seg_id = query_data.segment_ids{seg_idx};
                 s1_seg_err = segment_prog_stage1{seg_idx}.predictions.(k_field).errors.average_distance;
                 s2_seg_err = segment_prog_stage2{seg_idx}.predictions.(k_field).errors.average_distance;
-                
+
                 fprintf('Segment %-15s\n', seg_id);
                 fprintf('  Pred:  %8.4f mm       %8.4f mm\n', ...
                     s2_seg_err.predicted_mean, s2_seg_err.predicted_weighted);
@@ -822,17 +817,17 @@ if ~isempty(bahn_prog_stage1) && isfield(bahn_prog_stage1, 'predictions')
                     s2_seg_err.mae_mean, s2_seg_err.mae_weighted);
                 fprintf('  Rel:   %8.1f%%         %8.1f%%\n', ...
                     s2_seg_err.relative_error_mean, s2_seg_err.relative_error_weighted);
-                
+
                 % Improvements
                 s2_seg_simple_impr = s1_seg_err.mae_mean - s2_seg_err.mae_mean;
                 s2_seg_simple_impr_pct = s2_seg_simple_impr / s1_seg_err.mae_mean * 100;
-                
+
                 s2_seg_weighted_impr = s2_seg_err.mae_mean - s2_seg_err.mae_weighted;
                 s2_seg_weighted_impr_pct = s2_seg_weighted_impr / s2_seg_err.mae_mean * 100;
-                
+
                 s2_seg_stage_impr = s1_seg_err.mae_weighted - s2_seg_err.mae_weighted;
                 s2_seg_stage_impr_pct = s2_seg_stage_impr / s1_seg_err.mae_weighted * 100;
-                
+
                 fprintf('  → vs S1 (Simple):     %.4f mm (%.1f%%) %s\n', ...
                     s2_seg_simple_impr, s2_seg_simple_impr_pct, ternary(s2_seg_simple_impr > 0, '✓', '✗'));
                 fprintf('  → Wtd vs Simple:      %.4f mm (%.1f%%) %s\n', ...
@@ -840,13 +835,13 @@ if ~isempty(bahn_prog_stage1) && isfield(bahn_prog_stage1, 'predictions')
                 fprintf('  → S1→S2 (Weighted):   %.4f mm (%.1f%%) %s\n', ...
                     s2_seg_stage_impr, s2_seg_stage_impr_pct, ternary(s2_seg_stage_impr > 0, '✓', '✗'));
                 fprintf('───────────────────────────────────────────────────────────────\n');
-                
+
                 % ✅ COLLECT FOR OVERVIEW
                 seg_s2_simple_errors = [seg_s2_simple_errors; s2_seg_err.mae_mean];
                 seg_s2_weighted_errors = [seg_s2_weighted_errors; s2_seg_err.mae_weighted];
             end
         end
-        
+
         % ✅ STORE SEGMENT AVERAGES FOR THIS K
         if ~isempty(seg_s1_simple_errors)
             overview_data.seg_s1_simple = [overview_data.seg_s1_simple; mean(seg_s1_simple_errors)];
@@ -855,7 +850,7 @@ if ~isempty(bahn_prog_stage1) && isfield(bahn_prog_stage1, 'predictions')
             overview_data.seg_s2_weighted = [overview_data.seg_s2_weighted; mean(seg_s2_weighted_errors)];
             overview_data.k_values = [overview_data.k_values; K];
         end
-        
+
         fprintf('\n');
     end
 end
@@ -991,6 +986,98 @@ fprintf('\n');
 
 fprintf('═══════════════════════════════════════════════════════════════\n\n');
 
+
+% ========================================================================
+%% SECTION 5: VISUAL PROOF (STAGE 1 vs STAGE 2)
+% ========================================================================
+fprintf('╔════════════════════════════════════════════════════════════════╗\n');
+fprintf('║  VISUAL PROOF: STAGE 1 (Embedding) vs. STAGE 2 (DTW)           ║\n');
+fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
+
+figure('Name', 'Two-Stage Retrieval Comparison', 'Color', 'w', 'Position', [100, 100, 1400, 600]);
+
+% === Daten vorbereiten ===
+% 1. Query Normalisieren (auf 0,0,0)
+q_pos = query_data.trajectory.position;
+q_norm = q_pos - q_pos(1, :);
+
+top_n_bahn = bahn_results([bahn_results.is_top_n]);
+
+% 2. Listen vorbereiten
+% Liste A: Top-10 laut Stage 1 (Embedding Rank)
+[~, sort_idx] = sort([top_n_bahn.stage1_rank]);
+sorted_by_s1 = top_n_bahn(sort_idx);
+top10_s1 = sorted_by_s1(1:min(10, end));
+
+% Liste B: Top-10 laut Stage 2 (DTW Rank) - ist bereits sortiert
+top10_s2 = top_n_bahn(1:min(10, end));
+
+% === PLOT 1: STAGE 1 (Embedding Ranking) ===
+subplot(1, 2, 1);
+hold on; grid on; axis equal;
+title('Stage 1: Top-10 Candidates (Embedding Rank)');
+xlabel('X [mm]'); ylabel('Y [mm]'); zlabel('Z [mm]');
+view(3);
+
+% Plotte Kandidaten (Rötlich für Stage 1)
+colors_s1 = autumn(12); % Farbverlauf von Rot nach Gelb
+
+fprintf('Plotting Stage 1 (Embedding Order)...\n');
+for i = 1:length(top10_s1)
+    res = top10_s1(i);
+    
+    % Lade Daten
+    c_data = loadQueryDataHierarchical(conn, schema, res.segment_id);
+    c_pos = c_data.trajectory.position;
+    
+    % Normalisieren (Start bei 0,0,0)
+    c_norm = c_pos - c_pos(1, :);
+    
+    % Plotten
+    plot3(c_norm(:,1), c_norm(:,2), c_norm(:,3), '-', ...
+        'Color', [colors_s1(i,:), 0.6], 'LineWidth', 1.2);
+end
+
+% Plotte Query (Schwarz, Dick) OBEN DRAUF
+plot3(q_norm(:,1), q_norm(:,2), q_norm(:,3), 'k-', 'LineWidth', 2.5);
+legend({'Candidates', 'Query (Ref)'}, 'Location', 'best');
+
+
+% === PLOT 2: STAGE 2 (DTW Reranking) ===
+subplot(1, 2, 2);
+hold on; grid on; axis equal;
+title('Stage 2: Top-10 Results (After DTW Reranking)');
+xlabel('X [mm]'); ylabel('Y [mm]'); zlabel('Z [mm]');
+view(3);
+
+% Plotte Kandidaten (Grünlich/Bläulich für Stage 2 - "Besser")
+colors_s2 = winter(12); % Farbverlauf
+
+fprintf('Plotting Stage 2 (DTW Order)...\n');
+for i = 1:length(top10_s2)
+    res = top10_s2(i);
+    
+    % Lade Daten
+    c_data = loadQueryDataHierarchical(conn, schema, res.segment_id);
+    c_pos = c_data.trajectory.position;
+    
+    % Normalisieren (Start bei 0,0,0)
+    c_norm = c_pos - c_pos(1, :);
+    
+    % Plotten
+    plot3(c_norm(:,1), c_norm(:,2), c_norm(:,3), '-', ...
+        'Color', [colors_s2(i,:), 0.7], 'LineWidth', 1.2);
+end
+
+% Plotte Query (Schwarz, Dick) OBEN DRAUF
+plot3(q_norm(:,1), q_norm(:,2), q_norm(:,3), 'k-', 'LineWidth', 2.5);
+legend({'Final Results', 'Query (Ref)'}, 'Location', 'best');
+
+fprintf('✓ Visual comparison generated.\n\n');
+
+% Close connection
+close(conn);
+
 % Helper function (if not already defined)
 function result = ternary(condition, true_val, false_val)
     if condition
@@ -1000,9 +1087,6 @@ function result = ternary(condition, true_val, false_val)
     end
 end
 
-% ========================================================================
-%% HELPER FUNCTIONS
-% ========================================================================
 
 function data = loadQueryDataHierarchical(conn, schema, query_id)
     % Load query trajectory + all segments
@@ -1102,8 +1186,9 @@ function emb_vec = parseEmbedding(emb_text)
     emb_vec = emb_vec(~isnan(emb_vec));
 end
 
-function candidates = performRRFEmbeddingSearch(conn, schema, query_embeddings, weights, k, level)
+function candidates = performRRFEmbeddingSearch(conn, schema, query_embeddings, weights, k, level, exclude_id)
     % Perform RRF fusion on all embedding modalities
+    % ADDED: exclude_id to prevent self-matching!
     
     % Set level constraint
     if strcmp(level, 'bahn')
@@ -1128,9 +1213,8 @@ function candidates = performRRFEmbeddingSearch(conn, schema, query_embeddings, 
             continue;
         end
         
-        % ✅ PARSE EMBEDDING (from text to vector)
+        % Parse embedding (ensure it works for both string and vector input)
         if ischar(query_emb) || isstring(query_emb)
-            % Remove brackets and parse
             emb_text = char(query_emb);
             emb_text = strrep(strrep(emb_text, '[', ''), ']', '');
             query_emb = str2double(strsplit(emb_text, ','));
@@ -1140,18 +1224,22 @@ function candidates = performRRFEmbeddingSearch(conn, schema, query_embeddings, 
         emb_str = sprintf('[%s]', strjoin(string(query_emb), ','));
         col_name = sprintf('%s_embedding', mod);
         
-        % Query
+        % Query with EXCLUSION logic
         execute(conn, 'SET search_path = "bewegungsdaten"');
+        
+        % ✅ CHANGED SQL: Added "AND segment_id != ''%s''"
         search_sql = sprintf(['SELECT segment_id, bahn_id, ' ...
                              '%s <=> ''%s''::vector as distance ' ...
                              'FROM %s.bahn_embeddings ' ...
-                             'WHERE %s AND %s IS NOT NULL ' ...
+                             'WHERE %s ' ...                 % Level constraint
+                             'AND segment_id != ''%s'' ' ... % Exclude Query ID!
+                             'AND %s IS NOT NULL ' ...
                              'ORDER BY distance LIMIT %d'], ...
-                             col_name, emb_str, schema, level_constraint, col_name, k*2);
+                             col_name, emb_str, schema, ...
+                             level_constraint, exclude_id, col_name, k*2);
         
         try
             result = fetch(conn, search_sql);
-            
             if ~isempty(result)
                 rankings{i} = result;
             end
@@ -1168,7 +1256,7 @@ end
 function fused_ids = fuseRankingsRRF(rankings, weights, k)
     % Simple RRF implementation
     
-    rrf_k = 60;  % RRF constant
+    rrf_k = 10;  % RRF constant
     scores = containers.Map();
     
     for i = 1:length(rankings)
@@ -1252,9 +1340,6 @@ function [results, stats] = performDTWReranking(query_seq, candidate_data, dtw_m
         cand_seqs = candidate_data.joint;
     end
     
-    % ✅ STORE STAGE 1 RANKINGS (for later analysis, not computed here!)
-    stage1_ranks = (1:K)';  % Stage 1 rank = input order from RRF
-    
     % Validate candidates
     valid_mask = false(K, 1);
     for i = 1:K
@@ -1296,9 +1381,9 @@ function [results, stats] = performDTWReranking(query_seq, candidate_data, dtw_m
     % BUILD RESULTS (with Stage 1 info for later analysis)
     % ============================================================
     results = [];
-    for i = 1:min(limit, K)
+    for i = 1:K  % ✅ GEÄNDERT: Alle K statt nur limit!
         if sorted_dists(i) == inf
-            break;
+            continue;
         end
         
         idx = sort_idx(i);
@@ -1308,9 +1393,10 @@ function [results, stats] = performDTWReranking(query_seq, candidate_data, dtw_m
         result.bahn_id = candidate_data.ids{idx};
         result.dtw_distance = sorted_dists(i);
         result.similarity_score = 1 / (1 + sorted_dists(i));
-        result.stage2_rank = i;  % ✅ DTW rank (Stage 2)
-        result.stage1_rank = stage1_ranks(idx);  % ✅ Original RRF rank (Stage 1)
-        result.rank_change = result.stage1_rank - i;  % ✅ Positive = improved
+        result.stage2_rank = i;
+        result.stage1_rank = idx;
+        result.rank_change = idx - i;
+        result.is_top_n = (i <= limit);  % ✅ NEU: Markiere Top-N
         
         results = [results; result];
     end
@@ -1738,3 +1824,4 @@ function sidtw_batch = getSIDTWMetricsBatch(conn, segment_ids)
         sidtw_batch.(field_name).standard_deviation = results.sidtw_standard_deviation(i);
     end
 end
+

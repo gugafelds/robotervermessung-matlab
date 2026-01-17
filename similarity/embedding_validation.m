@@ -22,10 +22,8 @@
 
 clear; clc;
 
-% Add current directory and subdirectories
-addpath(genpath(pwd));
-
 % Or add specific folders:
+addpath(genpath(pwd));
 addpath(genpath('../main'));
 addpath(genpath('../lasertracker'));
 addpath(genpath('../methods'));
@@ -43,8 +41,8 @@ use_ground_truth = true;  % Set to false to disable
 % === Base Configuration ===
 base_config = struct();
 base_config.database_sample_size = 1000;  % Fixed for fair comparison
-base_config.random_seed = 21;
-base_config.top_k_trajectories = 50;     % Fixed
+base_config.random_seed = 42;
+base_config.top_k_trajectories = 100;     % Fixed
 
 % === DIMENSION 1: Embedding Architectures ===
 embedding_configs = {
@@ -76,11 +74,11 @@ query_ids = {
     %'1765987310'; % clean, np = 4 / 30 GT
 
     %% clean
-    '1765989370'; % clean, np = 3 / 10 GT
-    '1765989294'; % clean, np = 3 / 20 GT
-    '1765988821'; % clean, np = 3 / 30 GT
-    '1765988920'; % clean; np = 3 / 40 GT
-    '1765989411'; % clean; np = 3 / 50 GT
+    %'1765989370'; % clean, np = 3 / 10 GT
+    %'1765989294'; % clean, np = 3 / 20 GT
+    %'1765988821'; % clean, np = 3 / 30 GT
+    %'1765988920'; % clean; np = 3 / 40 GT
+    %'1765989411'; % clean; np = 3 / 50 GT
     
     %% noisy - 2 mm
 
@@ -92,11 +90,11 @@ query_ids = {
     
     %% noisy - 5 mm
 
-    '1765991190'; % noisy; np = 3 / 10 GT
-    '1765991445'; % noisy; np = 3 / 20 GT
-    '1765991515'; % noisy; np = 3 / 30 GT
-    '1765991949'; % noisy; np = 3 / 40 GT %%alternativ 1765992404
-    '1765991743'; % noisy; np = 3 / 50 GT
+    %'1765991190'; % noisy; np = 3 / 10 GT
+    %'1765991445'; % noisy; np = 3 / 20 GT
+    %'1765991515'; % noisy; np = 3 / 30 GT
+    %'1765991949'; % noisy; np = 3 / 40 GT %%alternativ 1765992404
+    %'1765991743'; % noisy; np = 3 / 50 GT
 };
 
 % === DIMENSION 3: DTW Mode + Weight Combinations ===
@@ -107,7 +105,7 @@ weight_mode_configs = {
     'Joint + Orient',       'joint_states',  [0, 1, 1, 0, 0];
     'Joint + Velocity',     'joint_states',  [0, 1, 0, 1, 0];
     'Joint + Meta',         'joint_states',  [0, 1, 0, 0, 1];
-    'Joint + All',          'joint_states',  [1, 1, 1, 1, 1];
+    'Meta only',            'joint_states',  [0, 0, 0, 0, 1];
     
     % Position space
     'Position only',        'position',      [1, 0, 0, 0, 0];
@@ -229,7 +227,7 @@ fprintf('╚══════════════════════�
 
 preload_tic = tic;
 
-chunk_size = 50;  % For batch loading
+chunk_size = 100;  % For batch loading
 
 data_cache = loadDataExperiment(conn, schema, candidate_ids, query_ids, chunk_size);
 
@@ -258,10 +256,10 @@ dtw_tic = tic;
 % Prepare config for DTW pre-computation
 dtw_config = struct();
 dtw_config.top_k_trajectories = base_config.top_k_trajectories;
-dtw_config.lb_kim_keep_ratio = 0.9;
+dtw_config.lb_kim_keep_ratio = 1;
 dtw_config.lb_keogh_candidates = 500;
 dtw_config.cdtw_window = 0.2;
-dtw_config.normalize_dtw = false;
+dtw_config.normalize_dtw = true;
 dtw_config.use_rotation_alignment = false;
 dtw_config.ground_truth_map = ground_truth_map;
 

@@ -20,9 +20,9 @@ fprintf('╚══════════════════════�
 %% USER CONFIGURATION
 % ========================================================================
 
-queries_quantity = 150;
-K_bahn = 500;
-K_segment = 500;
+queries_quantity = 250;
+K_bahn = 60;
+K_segment = 60;
 embedding_weights = [1.0; 1.0; 1.0; 1.0; 1.0];
 embedding_weights = embedding_weights / sum(embedding_weights);
 dtw_mode = 'position';
@@ -31,8 +31,8 @@ final_limit_segment = 50;
 
 dtw_config = struct();
 dtw_config.cdtw_window = 0.2;
-dtw_config.lb_kim_keep_ratio = 0.2;  % ✅ CHANGED: Now filters 10% (was 1.0 = no filter)
-dtw_config.lb_keogh_candidates = 60; % ✅ CHANGED: Reduce to 100 (was 500)
+dtw_config.lb_kim_keep_ratio = 1;  % ✅ CHANGED: Now filters 10% (was 1.0 = no filter)
+dtw_config.lb_keogh_candidates = 51; % ✅ CHANGED: Reduce to 100 (was 500)
 dtw_config.normalize_dtw = false;
 dtw_config.use_rotation_alignment = false;
 

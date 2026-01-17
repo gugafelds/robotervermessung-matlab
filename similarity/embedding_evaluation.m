@@ -269,6 +269,153 @@ else
     end
 end
 
+%% STEP 1.7: Smart Excel Export - Phase 3 (pgvector Two-Stage)
+% ========================================================================
+
+fprintf('\nSTEP 1.7: Smart Excel Export - Phase 3 (pgvector)...\n');
+fprintf('────────────────────────────────────────\n\n');
+
+% Load Phase 3 CSV files
+phase3_files = dir('results/two_stage_pgvector_*.csv');
+
+if isempty(phase3_files)
+    fprintf('ℹ No Phase 3 CSV files found - skipping\n\n');
+else
+    fprintf('Found %d Phase 3 CSV file(s)\n', length(phase3_files));
+    
+    % Load and combine all Phase 3 CSVs
+    phase3_data_all = [];
+    
+    for i = 1:length(phase3_files)
+        filepath = fullfile(phase3_files(i).folder, phase3_files(i).name);
+        temp_data = readtable(filepath, 'VariableNamingRule', 'preserve');
+        
+        % Force segment_id to be cell array (string)
+        if ismember('segment_id', temp_data.Properties.VariableNames)
+            if ~iscell(temp_data.segment_id)
+                temp_data.segment_id = cellstr(string(temp_data.segment_id));
+            end
+        end
+        
+        % Force bahn_id to be cell array (string) - falls gleiche Problem
+        if ismember('bahn_id', temp_data.Properties.VariableNames)
+            if ~iscell(temp_data.bahn_id)
+                temp_data.bahn_id = cellstr(string(temp_data.bahn_id));
+            end
+        end
+        
+        % Extract timestamp from filename
+        filename = phase3_files(i).name;
+        timestamp_match = regexp(filename, 'two_stage_pgvector_(.+)\.csv', 'tokens');
+        if ~isempty(timestamp_match)
+            timestamp_str = timestamp_match{1}{1};
+            temp_data.Timestamp = repmat({timestamp_str}, height(temp_data), 1);
+        end
+        
+        if i == 1
+            phase3_data_all = temp_data;
+        else
+            phase3_data_all = [phase3_data_all; temp_data];
+        end
+        
+        fprintf('  Loaded: %s (%d rows)\n', phase3_files(i).name, height(temp_data));
+    end
+    
+    fprintf('\nTotal Phase 3 data loaded: %d rows\n', height(phase3_data_all));
+    
+    % Sheet name for Phase 3
+    sheet_name_phase3 = 'All Data - Phase 3';
+    
+    %% Check if Phase 3 sheet exists
+    if exist(export_filename, 'file')
+        try
+            fprintf('\n  Reading existing Phase 3 data from sheet "%s"...\n', sheet_name_phase3);
+            existing_data_p3 = readtable(export_filename, 'Sheet', sheet_name_phase3, 'VariableNamingRule', 'preserve');
+            fprintf('  ✓ Existing Phase 3 data: %d rows\n', height(existing_data_p3));
+            
+            % Check timestamps
+            if ismember('Timestamp', existing_data_p3.Properties.VariableNames) && ...
+               ismember('Timestamp', phase3_data_all.Properties.VariableNames)
+                
+                existing_timestamps_p3 = unique(existing_data_p3.Timestamp);
+                new_timestamps_p3 = unique(phase3_data_all.Timestamp);
+                
+                fprintf('\n  Existing Phase 3 timestamps: %d unique\n', length(existing_timestamps_p3));
+                fprintf('  New Phase 3 timestamps: %d unique\n', length(new_timestamps_p3));
+                
+                % Find new timestamps
+                timestamps_to_add_p3 = setdiff(new_timestamps_p3, existing_timestamps_p3);
+                
+                if isempty(timestamps_to_add_p3)
+                    fprintf('\n  ℹ All Phase 3 data already exists - nothing to add!\n\n');
+                else
+                    fprintf('\n  → Found %d NEW Phase 3 timestamp(s) to add:\n', length(timestamps_to_add_p3));
+                    for i = 1:length(timestamps_to_add_p3)
+                        fprintf('      %d. %s\n', i, char(timestamps_to_add_p3(i)));
+                    end
+                    
+                    % Filter new data
+                    if iscellstr(timestamps_to_add_p3) || isstring(timestamps_to_add_p3)
+                        mask_to_add_p3 = ismember(phase3_data_all.Timestamp, timestamps_to_add_p3);
+                    else
+                        mask_to_add_p3 = false(height(phase3_data_all), 1);
+                        for i = 1:length(timestamps_to_add_p3)
+                            mask_to_add_p3 = mask_to_add_p3 | strcmp(phase3_data_all.Timestamp, timestamps_to_add_p3(i));
+                        end
+                    end
+                    
+                    data_to_add_p3 = phase3_data_all(mask_to_add_p3, :);
+                    
+                    fprintf('  → Rows to add: %d\n\n', height(data_to_add_p3));
+                    
+                    % Append
+                    combined_data_p3 = [existing_data_p3; data_to_add_p3];
+                    
+                    fprintf('  Combined Phase 3 data: %d rows (was %d, added %d)\n\n', ...
+                        height(combined_data_p3), height(existing_data_p3), height(data_to_add_p3));
+                    
+                    % Write
+                    fprintf('  Writing updated Phase 3 data to Excel...\n');
+                    writetable(combined_data_p3, export_filename, 'Sheet', sheet_name_phase3, 'WriteRowNames', false);
+                    fprintf('  ✓ Successfully appended Phase 3 data!\n\n');
+                    
+                    fprintf('╔════════════════════════════════════════════════════════════════╗\n');
+                    fprintf('║  PHASE 3 DATA APPENDED                                         ║\n');
+                    fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
+                    fprintf('Sheet: %s\n', sheet_name_phase3);
+                    fprintf('  Previous rows: %d\n', height(existing_data_p3));
+                    fprintf('  Added rows: %d\n', height(data_to_add_p3));
+                    fprintf('  Total rows now: %d\n\n', height(combined_data_p3));
+                end
+                
+            else
+                fprintf('  ⚠ Timestamp column not found - cannot determine new data\n\n');
+            end
+            
+        catch ME
+            fprintf('  ℹ Sheet "%s" does not exist yet - creating new\n', sheet_name_phase3);
+            
+            % Create new sheet
+            writetable(phase3_data_all, export_filename, 'Sheet', sheet_name_phase3, 'WriteRowNames', false);
+            fprintf('  ✓ Created new Phase 3 sheet with %d rows\n\n', height(phase3_data_all));
+            
+            fprintf('╔════════════════════════════════════════════════════════════════╗\n');
+            fprintf('║  PHASE 3 SHEET CREATED                                         ║\n');
+            fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
+            fprintf('Sheet: %s\n', sheet_name_phase3);
+            fprintf('  Total rows: %d\n\n', height(phase3_data_all));
+        end
+        
+    else
+        fprintf('  ⚠ Excel file does not exist - Phase 1 must run first\n\n');
+    end
+end
+
+fprintf('Note: Excel file now contains:\n');
+fprintf('  • All Data - Phase 1: Embedding Validation\n');
+fprintf('  • All Data - Phase 2: Two-Stage Retrieval (MATLAB)\n');
+fprintf('  • All Data - Phase 3: Two-Stage Retrieval (pgvector)\n\n');
+
 fprintf('Note: Excel file now contains:\n');
 fprintf('  • All Data - Phase 1: Embedding Validation)\n');
 fprintf('  • All Data - Phase 2: (Phase 2: Two-Stage Retrieval)\n\n');
@@ -293,9 +440,11 @@ fprintf('\n');
 % Configuration
 excel_file = 'results/experiment_data.xlsx';
 output_folder = 'results';
-use_trajectory_only = true;
+figure_folder = 'figs';
+use_trajectory_only = false;
+use_segment_only = false;
 use_non_normalized_dtw = true;
-save_figures = false;
+save_figures = true;
 figure_format = 'both';
 
 % ========================================================================
@@ -307,6 +456,9 @@ data_table = readtable(excel_file, 'Sheet', 'All Data - Phase 1', 'VariableNamin
 
 if use_trajectory_only
     data_table = data_table(strcmp(data_table.Level, 'Trajectory'), :);
+end
+if use_segment_only
+    data_table = data_table(strcmp(data_table.Level, 'Segment'), :);
 end
 if use_non_normalized_dtw
     data_table = data_table(data_table.DTW_Normalization == 0, :);
@@ -323,7 +475,6 @@ fprintf('╔══════════════════════�
 fprintf('║  CONFIG SELECTION                                              ║\n');
 fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
 
-fprintf('Composite Score: 0.4×NDCG + 0.3×(1/Rank) + 0.2×R50 + 0.1×Spearman\n\n');
 
 dtw_modes = {'joint_states', 'position'};
 mode_labels = {'MOTION (Joint)', 'SHAPE (Cartesian)'};
@@ -359,7 +510,7 @@ fprintf('╚══════════════════════�
 % Filter für Database_Size = 1000
 filtered_baselines_1000 = filtered_baselines(filtered_baselines.Database_Size == 1000, :);
 
-fig1 = figure('Position', [100, 100, 800, 500], 'Color', 'w');  % Kompakter
+fig1 = figure('Position', [100, 100, 750, 500], 'Color', 'w');
 set(fig1, 'Name', 'Figure 1: Dimensionality Invariance (Baselines) - Composite');
 
 color_motion = [0.86, 0.13, 0.15];
@@ -424,7 +575,7 @@ end
 % ========================================================================
 sweet_start = 30;
 sweet_end = 150;
-plateau_start = 300;
+plateau_start = 150;
 plateau_end = max([all_plot_data(1).actual_dims; all_plot_data(2).actual_dims]);
 
 fprintf('=== Manual Sweet Spot Configuration ===\n');
@@ -452,11 +603,11 @@ for m = 1:length(all_plot_data)
     if strcmp(all_plot_data(m).mode, 'joint_states')
         line_color = color_motion;
         marker_style = 'o';
-        legend_label = 'Motion (6×n, Joint only)';
+        legend_label = 'Motion (6×n - Joint only)';
     else
         line_color = color_shape;
         marker_style = 's';
-        legend_label = 'Space (3×n, Position only)';
+        legend_label = 'Space (3×n - Position only)';
     end
     
     h = plot(all_plot_data(m).actual_dims, all_plot_data(m).composite, ...
@@ -468,34 +619,36 @@ end
 
 % Styling mit größeren Schriften
 set(gca, 'XScale', 'log');
-xlabel('Total Embedding Dimensions (Position: 3×n, Joint: 6×n)', 'FontWeight', 'bold', 'FontSize', 14);
-ylabel('Composite Score', 'FontWeight', 'bold', 'FontSize', 14);
+xlabel('Total embedding dimensions', 'FontWeight', 'bold', 'FontSize', 20);
+ylabel('Composite score', 'FontWeight', 'bold', 'FontSize', 20);
 set(gca, 'XTick', [6, 15, 30, 75, 150, 300, 600, 1200, 3600]);
+set(gca, 'FontName', 'Courier New');
+yticks([0.67,0.68,0.69,0.70,0.71,0.72,0.73])
+yticklabels({'0.67','0.68','0.69','0.70','0.71','0.72','0.73'});
+xtickangle(0);
+set(gca, 'FontName', 'courier new', 'FontWeight', 'bold', 'FontSize', 18);
 
 % Auto-Skalierung der Y-Achse
 ylim([y_min, y_max]);
 
-grid on;
-set(gca, 'FontSize', 13);  % Größere Achsen-Ticks
 
 % Kompaktere Legend
-legend(h_lines, legend_entries, 'Location', 'southeast', 'FontSize', 13);
+legend(h_lines, legend_entries, 'Location', 'southeast', 'FontSize', 16);
 
 % Engere Margins
 ax = gca;
-ax.Position = [0.12 0.14 0.83 0.82];  % [left bottom width height] - kompakter
+ax.Position = [0.14 0.14 0.84 0.84];
+ax.LooseInset = [0, 0, 0, 0];  % Minimiert weiße Ränder
+ax.YGrid = 'on';
+ax.XGrid = 'off';
 
 hold off;
 
 % Save
 if save_figures
-    fig1_file = fullfile(output_folder, 'figure1_dimensionality_COMPOSITE');
-    if strcmp(figure_format, 'png') || strcmp(figure_format, 'both')
-        saveas(fig1, [fig1_file '.png']);
-        fprintf('✓ Saved: %s.png\n', fig1_file);
-    end
+    fig1_file = fullfile(figure_folder, 'dimensionality');
     if strcmp(figure_format, 'pdf') || strcmp(figure_format, 'both')
-        saveas(fig1, [fig1_file '.pdf']);
+        exportgraphics(gca, [fig1_file '.pdf']);
         fprintf('✓ Saved: %s.pdf\n', fig1_file);
     end
 end
@@ -505,7 +658,7 @@ fprintf('\n');
 %% TABLE 1: DIMENSIONALITY ANALYSIS (BASELINES)
 % ========================================================================
 fprintf('Creating Table 1: Dimensionality Analysis...\n');
-table1_data = cell(0, 11);  % Eine zusätzliche Spalte für Composite Score
+table1_data = cell(0, 10);  % Eine zusätzliche Spalte für Composite Score
 
 filtered_baselines_1000 = filtered_baselines(filtered_baselines.Database_Size == 1000, :);
 
@@ -547,12 +700,11 @@ for m = 1:length(dtw_modes)
         % Composite score (gleiche Gewichtung wie Tabelle 2)
         composite = calculate_composite_score(ndcg50_gt, r50_dtw, mean_rank_gt, r50_gt, spearman_mean);
 
-
         % Store
         table1_data(end+1, :) = {
             mode_label, baseline, dim, actual_dim, n, ...
-            spearman_mean, spearman_std, ...
-            r10_dtw, r50_dtw, mean_rank_gt, ...
+            spearman_mean, ...
+            r50_dtw, r50_gt, ndcg50_gt, ...
             composite
         };
     end
@@ -561,8 +713,8 @@ end
 % Create table
 T1 = cell2table(table1_data, 'VariableNames', ...
     {'Mode', 'Config', 'Dims_Per_Param', 'Actual_Dims', 'N', ...
-    'Spearman_Mean', 'Spearman_Std', ...
-    'R10_DTW', 'R50_DTW', 'MeanRank_GT', ...
+    'Spearman', ...
+    'R@50 (DTW)', 'R@50 (GT)', 'NDCG@50 (GT)', ...
     'Composite_Score'});
 
 % Sort by composite score within each mode
@@ -595,7 +747,7 @@ fprintf('╚══════════════════════�
 % Filter für Database_Size = 1000
 filtered_1000 = filtered(filtered.Database_Size == 1000, :);
 
-fig2 = figure('Position', [150, 150, 900, 500], 'Color', 'w');  % Single plot size
+fig2 = figure('Position', [100, 100, 750, 500], 'Color', 'w');
 set(fig2, 'Name', 'Figure 2: Weight Mode Contribution - Composite');
 
 hold on;
@@ -700,11 +852,11 @@ for m = 1:length(dtw_modes)
     if strcmp(mode_name, 'joint_states')
         line_color = color_motion;
         marker_style = 'o';
-        legend_label = 'Motion (Joint-based)';
+        legend_label = 'Motion';
     else
         line_color = color_shape;
         marker_style = 's';
-        legend_label = 'Space (Position-based)';
+        legend_label = 'Space';
     end
     
     % Plot Composite Score
@@ -723,35 +875,36 @@ end
 y_min = min(all_composite_vals) * 0.98;
 y_max = max(all_composite_vals) * 1.02;
 
-ylabel('Composite Score', 'FontWeight', 'bold', 'FontSize', 14);
+ylabel('Composite score', 'FontWeight', 'bold', 'FontSize', 20);
 ylim([y_min, y_max]);
 
 % X-axis: Generische Labels (1-6)
 set(gca, 'XTick', 1:6);
-set(gca, 'XTickLabel', {'Baseline', '+Meta', '+Velocity', '+Orient', '+Joint/Pos.', '+All'});
-xlabel('Incremental Feature Addition', 'FontWeight', 'bold', 'FontSize', 14);
+set(gca, 'XTickLabel', {'Baseline', '+Meta.', '+Vel.', '+Orient.', '+Cross', '+All'});
+xlabel('Incremental feature addition', 'FontWeight', 'bold', 'FontSize', 20);
+yticks([0.60,0.64,0.68,0.72,0.76]);
+yticklabels({'0.60','0.64','0.68','0.72','0.76'});
+xtickangle(0);
+set(gca, 'FontName', 'courier new');
+
 
 grid on;
-set(gca, 'FontSize', 13);
+set(gca, 'FontSize', 18, 'FontWeight', 'bold');
+ax = gca;
+ax.Position = [0.14 0.14 0.82 0.84];
+ax.LooseInset = [0, 0, 0, 0];  % Minimiert weiße Ränder
+
 
 % Legend
-legend(h_lines, legend_entries, 'Location', 'southeast', 'FontSize', 14);
-
-% Engere Margins
-ax = gca;
-ax.Position = [0.13 0.16 0.83 0.78];
+legend(h_lines, legend_entries, 'Location', 'southeast', 'FontSize', 16);
 
 hold off;
 
 % Save
 if save_figures
-    fig2_file = fullfile(output_folder, 'figure2_weight_modes_COMBINED');
-    if strcmp(figure_format, 'png') || strcmp(figure_format, 'both')
-        saveas(fig2, [fig2_file '.png']);
-        fprintf('✓ Saved: %s.png\n', fig2_file);
-    end
+    fig2_file = fullfile(figure_folder, 'incremental_feature');
     if strcmp(figure_format, 'pdf') || strcmp(figure_format, 'both')
-        saveas(fig2, [fig2_file '.pdf']);
+        exportgraphics(gca, 'figs/incremental_add.pdf');
         fprintf('✓ Saved: %s.pdf\n', fig2_file);
     end
 end
@@ -813,7 +966,7 @@ T2 = cell2table(table2_data, 'VariableNames', ...
     {'Mode', 'Weight_Mode', 'N', ...
      'Spearman_Mean', 'Spearman_Std', ...
      'R10_DTW', 'R50_DTW', ...
-     'R10_GT', 'R50_GT', 'MeanRank_GT', 'NDCG10_GT', ...
+     'R10_GT', 'R50_GT', 'MeanRank_GT', 'NDCG50_GT', ...
      'Composite_Score'});
 
 % Sort by composite score within each mode
@@ -876,11 +1029,11 @@ function score = calculate_composite_score(ndcg, r50_dtw, mean_rank_gt, r50_gt, 
     % Alle Gewichte hier ändern, um sie global anzupassen
     
     % Gewichtungen (müssen zu 1.0 summieren)
-    w_ndcg = 0.33;
-    w_r50_dtw = 0.33;
+    w_ndcg = 0.25;
+    w_r50_dtw = 0.25;
     w_rank = 0.0;       % wird als 1/mean_rank verwendet
-    w_r50_gt = 0.33;
-    w_spearman = 0.0;
+    w_r50_gt = 0.25;
+    w_spearman = 0.25;
     
     % Berechnung
     score = w_ndcg * ndcg + ...

@@ -6,26 +6,26 @@ addpath(genpath('main'))
 addpath(genpath('methods'))
 
 % Mode selection
-mode = 'automatic'; % 'manual' oder 'automatic'
+mode = 'manual'; % 'manual' oder 'automatic'
 
 % Manual mode parameters
 %bahn_id = '1765280434';
 bahn_id = '';
-record_date = ''; % Format: dd.mm.yyyy
+record_date = '06.01.2026'; % Format: dd.mm.yyyy
 loop_record_date = 1;
 loop_all = 0;
 overwrite = 0;
 
 % Methodenauswahl
-use_euclidean = 1;
-use_sidtw = 1;
+use_euclidean = 0;
+use_sidtw = 0;
 use_dtw = 0;
 use_dfd = 0;
 use_lcss = 0;
-use_qad = 0;
-use_qdtw = 0;
+use_qad = 1;
+use_qdtw = 1;
 
-evaluate_orientation = 0;
+evaluate_orientation = 1;
 
 % Upload-Einstellungen
 upload_info = 1;

@@ -1,4 +1,4 @@
-%  TWO-STAGE RETRIEVAL - SIMPLIFIED & CLEAN
+%  TWO-STAGE RETRIEVAL
 %  ========================================================================
 %  Step-by-step trajectory similarity search
 %  ========================================================================
@@ -10,9 +10,8 @@ addpath(genpath('../main'));
 addpath(genpath('../lasertracker'));
 addpath(genpath('../methods'));
 
-fprintf('╔════════════════════════════════════════════════════════════════╗\n');
-fprintf('║  TWO-STAGE RETRIEVAL - CLEAN VERSION                           ║\n');
-fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
+
+fprintf('═══ TWO-STAGE RETRIEVAL ═══\n');
 
 % ========================================================================
 %% SECTION 1: SETUP & CONFIGURATION
@@ -21,34 +20,84 @@ fprintf('╚══════════════════════�
 fprintf('═══ SECTION 1: SETUP & CONFIGURATION ═══\n\n');
 
 % === WAS SUCHEN WIR? ===
-query_id = '1761928390';
+query_id = '1765991743';
 
-% === WIE VIELE KANDIDATEN MIT EMBEDDINGS? ===
-K = 250;  % Stage 1: Hole 50 Kandidaten mit Embeddings
+% === STAGE 1: EMBEDDING-BASIERTE VORFILTERUNG ===
+% K = Anzahl der Kandidaten, die aus der Embedding-Suche geholt werden.
+% Höherer Wert = mehr Kandidaten für DTW, aber langsamer.
+K = 50;
 
-% RRF Parameter (Paper Standard = 60, Python Default oft 50)
+% RRF (Reciprocal Rank Fusion) Parameter:
+% Kombiniert Rankings aus verschiedenen Embedding-Modalitäten.
+% Formel: score = sum(weight_i / (rrf_k + rank_i))
+% Höherer rrf_k = Rankings werden gleichmäßiger gewichtet.
+% typische Werte: 50-60.
 rrf_k = 60; 
 
 % === EMBEDDING GEWICHTE ===
+% Gewichtung der 5 Embedding-Modalitäten für die RRF-Fusion:
+%   [1] position    - 3D Kartesische Koordinaten (x,y,z)
+%   [2] joint       - 6 Gelenkwinkel (joint_1 bis joint_6)
+%   [3] orientation - Orientierung/Rotation des Endeffektors
+%   [4] velocity    - Geschwindigkeitsprofil
+%   [5] metadata    - Metadaten (Frequenz, Punktanzahl, etc.)
+% Setze auf 0.0 um eine Modalität zu ignorieren.
+% Beispiel: [1;1;0;0;0] = nur Position + Joint verwenden.
 weights = [1.0; 1.0; 1.0; 1.0; 1.0];  % position, joint, orientation, velocity, metadata
 weights = weights / sum(weights);     % Normalisieren
 
-% === DTW EINSTELLUNGEN ===
-dtw_mode = 'position';  % 'position' oder 'joint_states'
-dtw_window = 0.2;       % 20% window
-normalize_dtw = true; %% besser für prognose bis jetzt
+% === STAGE 2: DTW RERANKING ===
+% dtw_mode: Welche Daten für DTW-Vergleich verwenden?
+%   'position'     - Vergleiche 3D Positionen (x,y,z) - gut für Bahnform
+%   'joint_states' - Vergleiche Gelenkwinkel - gut für Armkonfiguration
+%   'off'          - Kein DTW, nur Embedding-Ranking (Stage 1 only)
+dtw_mode = 'off';
+
+% dtw_window: Sakoe-Chiba Band als Anteil der Sequenzlänge.
+% 0.2 = 20% = DTW darf max 20% der Länge "warpen".
+% Kleinerer Wert = schneller, aber weniger flexibel.
+dtw_window = 0.2;
+
+% normalize_dtw: Sequenzen vor DTW normalisieren?
+% true  = Min-Max Normalisierung auf [0,1] pro Dimension
+%         Macht DTW skalen-invariant (empfohlen für Prognose!)
+% false = Rohe Werte verwenden
+normalize_dtw = true;
+
+% use_rotation_alignment: Rotation vor DTW ausrichten?
+% true  = Dreht Kandidat zur Query (nur für position mode sinnvoll)
+% false = Keine Rotation (Standard)
 use_rotation_alignment = false;
 
-% === PROGNOSE ===
-prognose = true;
-prognose_top_n = 100;  % Top-N für Prognose nutzen
+% === LOWER BOUNDS (Speedup für Stage 2) ===
+% LB_Kim und LB_Keogh sind schnelle Untergrenzen für DTW.
+% Sie filtern Kandidaten VOR dem teuren DTW aus.
 
-% Lower Bounds (für Speedup)
-lb_kim_keep_ratio = 1.0;      % 100% = alle durchlassen (kein LB_Kim)
-lb_keogh_candidates = 500;     % Nach LB_Keogh: max 500 für DTW
+% lb_kim_keep_ratio: Anteil der Kandidaten nach LB_Kim behalten.
+% 1.0 = 100% = kein Filtering (alle durchlassen)
+% 0.7 = 70% = die 30% mit höchster LB_Kim Distanz werden verworfen
+lb_kim_keep_ratio = 1.0;
 
-% === WAS WOLLEN WIR AM ENDE ZEIGEN? ===
-final_top_n = 5;  % Zeige nur Top-10
+% lb_keogh_candidates: Max. Anzahl Kandidaten für finales DTW.
+% Nach LB_Keogh werden nur die besten N für echtes DTW verwendet.
+% Kleinerer Wert = schneller, aber evtl. gute Kandidaten verpasst.
+% Empfehlung: 30-100 für schnelle Suche, 500+ für hohe Qualität.
+lb_keogh_candidates = 500;
+
+% === PROGNOSE (Performance-Vorhersage) ===
+% prognose: Soll die SIDTW-Distanz prognostiziert werden?
+% Nutzt die gefundenen ähnlichen Bahnen um die Performance vorherzusagen.
+prognose = false;
+
+% prognose_top_n: Wie viele Top-Kandidaten für Prognose verwenden?
+% Höher = stabilere Vorhersage, aber evtl. weniger ähnliche Bahnen dabei.
+% Empfehlung: 5-20
+prognose_top_n = 10;
+
+% === VISUALISIERUNG ===
+% final_top_n: Wie viele Top-Ergebnisse in den Plots anzeigen?
+plot = false;
+final_top_n = 5;
 
 fprintf('Query ID:              %s\n', query_id);
 fprintf('Stage 1 (Embeddings):  K = %d candidates\n', K);
@@ -70,8 +119,6 @@ if ~isopen(conn)
     error('Database connection failed');
 end
 fprintf('✓ Connected\n\n');
-
-fprintf('═══ SECTION 1 COMPLETE ═══\n\n');
 
 % ========================================================================
 %% SECTION 2: LOAD QUERY TRAJECTORY + SEGMENTS
@@ -136,9 +183,12 @@ end
 if strcmp(dtw_mode, 'position')
     query_bahn_seq = query_bahn_position;
     query_segment_seqs = query_segments_position;
-else
+elseif strcmp(dtw_mode, 'joint_states')
     query_bahn_seq = query_bahn_joint;
     query_segment_seqs = query_segments_joint;
+else
+    query_bahn_seq = [];
+    query_segment_seqs = cell(num_segments, 1);
 end
 
 fprintf('✓ Query loaded\n');
@@ -146,8 +196,6 @@ fprintf('  Bahn points:    %d\n', size(query_bahn_seq, 1));
 fprintf('  Num segments:   %d\n', num_segments);
 fprintf('  DTW mode:       %s\n', dtw_mode);
 fprintf('\n');
-
-fprintf('═══ SECTION 2 COMPLETE ═══\n\n');
 
 % ========================================================================
 %% SECTION 3: STAGE 1 - EMBEDDING SEARCH (RRF)
@@ -319,8 +367,6 @@ for seg_idx = 1:num_segments
     end
 end
 
-fprintf('\n═══ STAGE 1 COMPLETE ═══\n\n');
-
 clear m rank id emb_str col_name search_sql result
 clear rrf_scores rrf_scores_seg all_ids all_scores sort_idx sorted_ids sorted_scores
 clear all_ids_seg all_scores_seg sorted_ids_seg sorted_scores_seg sort_idx_seg
@@ -331,8 +377,8 @@ clear emb_result emb_sql query_embeddings seg_embeddings modalities
 % ========================================================================
 %% SECTION 4: LOAD CANDIDATE DATA (BATCH)
 % ========================================================================
-fprintf('═══ SECTION 4: LOAD CANDIDATE DATA FOR DTW ═══\n\n');
-fprintf('Loading mode: %s\n', dtw_mode);
+
+fprintf('═══ SECTION 4: LOAD CANDIDATE DATA ═══\n\n');
 
 load_data_start = tic;
 
@@ -389,160 +435,182 @@ total_load_time = toc(load_data_start);
 fprintf('\n✓ Data loading complete in %.3f sec\n', total_load_time);
 fprintf('═══ SECTION 4 COMPLETE ═══\n\n');
 
-
 % ========================================================================
 %% SECTION 5: STAGE 2 - DTW RERANKING
 % ========================================================================
-fprintf('═══ SECTION 5: STAGE 2 - DTW RERANKING ═══\n\n');
 
-dtw_start = tic;
-total_dtw_calls = 0;
-
-% DTW Configuration Struct für Helper
-config = struct();
-config.mode = dtw_mode;
-config.window = dtw_window;
-config.normalize = normalize_dtw;
-config.rot_align = use_rotation_alignment;
-config.lb_kim_ratio = lb_kim_keep_ratio;
-config.lb_keogh_n = lb_keogh_candidates;
-
-% ========================================================================
-% BAHN-LEVEL RERANKING
-% ========================================================================
-fprintf('--- BAHN-LEVEL ---\n');
-
-if ~isempty(stage1_bahn_results)
-    % Helper aufrufen: Berechnet DTW, sortiert neu, fügt Ranks hinzu
-    [stage2_bahn_results, stats] = performReranking(stage1_bahn_results, query_bahn_seq, config);
+if ~strcmp(dtw_mode, 'off')
+    fprintf('═══ SECTION 5: STAGE 2 - DTW RERANKING ═══\n\n');
     
-    total_dtw_calls = total_dtw_calls + stats.dtw_calls;
+    dtw_start = tic;
+    total_dtw_calls = 0;
     
-    % Zeige Top-3 Änderungen
-    fprintf('✓ Reranked %d candidates. Top 3 results:\n', height(stage2_bahn_results));
-else
-    stage2_bahn_results = table();
-    fprintf('⚠ No bahn candidates to rerank.\n');
-end
-fprintf('\n');
-
-
-% ========================================================================
-% SEGMENT-LEVEL RERANKING
-% ========================================================================
-fprintf('--- SEGMENT-LEVEL ---\n');
-
-stage2_seg_results = cell(num_segments, 1);
-
-for seg_idx = 1:num_segments
-    % Tabelle und Query Sequenz holen
-    current_table = stage1_seg_results{seg_idx};
+    % DTW Configuration Struct für Helper
+    config = struct();
+    config.mode = dtw_mode;
+    config.window = dtw_window;
+    config.normalize = normalize_dtw;
+    config.rot_align = use_rotation_alignment;
+    config.lb_kim_ratio = lb_kim_keep_ratio;
+    config.lb_keogh_n = lb_keogh_candidates;
     
-    if strcmp(dtw_mode, 'position')
-        q_seq = query_segments_position{seg_idx};
-    else
-        q_seq = query_segments_joint{seg_idx};
-    end
+    % ========================================================================
+    % BAHN-LEVEL RERANKING
+    % ========================================================================
+    fprintf('--- BAHN-LEVEL ---\n');
     
-    if ~isempty(current_table) && ~isempty(q_seq)
-        % Reranking durchführen
-        [reranked_table, stats] = performReranking(current_table, q_seq, config);
+    if ~isempty(stage1_bahn_results)
+        % Helper aufrufen: Berechnet DTW, sortiert neu, fügt Ranks hinzu
+        [stage2_bahn_results, stats] = performReranking(stage1_bahn_results, query_bahn_seq, config);
         
-        stage2_seg_results{seg_idx} = reranked_table;
         total_dtw_calls = total_dtw_calls + stats.dtw_calls;
         
-        % Kleine Statistik ausgeben
-        best_change = max(reranked_table.rank_change);
-        fprintf('  Segment %d: Top match ID: %s (Dist: %.2f) | Max promotion: +%d places\n', ...
-            seg_idx, reranked_table.segment_id{1}, reranked_table.dtw_dist(1), best_change);
+        % Zeige Top-3 Änderungen
+        fprintf('✓ Reranked %d candidates. Top 3 results:\n', height(stage2_bahn_results));
     else
-        stage2_seg_results{seg_idx} = table();
-        fprintf('  Segment %d: Skipped.\n', seg_idx);
+        stage2_bahn_results = table();
+        fprintf('⚠ No bahn candidates to rerank.\n');
     end
-end
+    fprintf('\n');
+    
+    % ========================================================================
+    % SEGMENT-LEVEL RERANKING
+    % ========================================================================
+    fprintf('--- SEGMENT-LEVEL ---\n');
+    
+    stage2_seg_results = cell(num_segments, 1);
+    
+    for seg_idx = 1:num_segments
+        % Tabelle und Query Sequenz holen
+        current_table = stage1_seg_results{seg_idx};
+        
+        if strcmp(dtw_mode, 'position')
+            q_seq = query_segments_position{seg_idx};
+        else
+            q_seq = query_segments_joint{seg_idx};
+        end
+        
+        if ~isempty(current_table) && ~isempty(q_seq)
+            % Reranking durchführen
+            [reranked_table, stats] = performReranking(current_table, q_seq, config);
+            
+            stage2_seg_results{seg_idx} = reranked_table;
+            total_dtw_calls = total_dtw_calls + stats.dtw_calls;
+            
+            % Kleine Statistik ausgeben
+            best_change = max(reranked_table.rank_change);
+            fprintf('  Segment %d: Top match ID: %s (Dist: %.2f) | Max promotion: +%d places\n', ...
+                seg_idx, reranked_table.segment_id{1}, reranked_table.dtw_dist(1), best_change);
+        else
+            stage2_seg_results{seg_idx} = table();
+            fprintf('  Segment %d: Skipped.\n', seg_idx);
+        end
+    end
+    
+    total_time = toc(dtw_start);
+    fprintf('\n✓ Stage 2 complete in %.3f sec (Total DTW calls: %d)\n', total_time, total_dtw_calls);
+    fprintf('═══ SECTION 5 COMPLETE ═══\n\n');
 
-total_time = toc(dtw_start);
-fprintf('\n✓ Stage 2 complete in %.3f sec (Total DTW calls: %d)\n', total_time, total_dtw_calls);
-fprintf('═══ SECTION 5 COMPLETE ═══\n\n');
+else
+    fprintf('═══ SECTION 5: SKIPPED (DTW off) ═══\n\n');
+    stage2_bahn_results = stage1_bahn_results;
+    stage2_bahn_results.dtw_dist = nan(height(stage2_bahn_results), 1);
+    stage2_seg_results = stage1_seg_results;
+end
 
 %% SECTION 6: VISUALIZATION
-fprintf('═══ SECTION 6: VISUALIZATION ═══\n\n');
-figure('Position', [100 100 1400 600]);
-
-colors = lines(final_top_n);
-lw_max = 3.0;
-lw_min = 0.5;
-line_widths = linspace(lw_max, lw_min, final_top_n);
-
-if strcmp(dtw_mode, 'position')
-    % === 3D PLOTS ===
-    subplot(1,2,1); hold on;
-    plot3(query_bahn_position(:,1), query_bahn_position(:,2), query_bahn_position(:,3), ...
-          'k-', 'LineWidth', 4, 'DisplayName', 'Query');
-    for i = 1:min(final_top_n, height(stage1_bahn_results))
-        seq = stage1_bahn_results.sequence{i};
-        if ~isempty(seq)
-            plot3(seq(:,1), seq(:,2), seq(:,3), '-', 'Color', colors(i,:), ...
-                  'LineWidth', line_widths(i), 'DisplayName', sprintf('#%d (RRF=%.4f)', i, stage1_bahn_results.rrf_score(i)));
-        end
-    end
-    hold off; grid on; axis equal; view(3);
-    title('Stage 1: Embedding Ranking'); legend('Location', 'bestoutside', 'FontSize', 7);
+if plot
+    fprintf('═══ SECTION 6: VISUALIZATION ═══\n\n');
+    figure('Position', [100 100 1400 600]);
     
-    subplot(1,2,2); hold on;
-    plot3(query_bahn_position(:,1), query_bahn_position(:,2), query_bahn_position(:,3), ...
-          'k-', 'LineWidth', 4, 'DisplayName', 'Query');
-    for i = 1:min(final_top_n, height(stage2_bahn_results))
-        seq = stage2_bahn_results.sequence{i};
-        if ~isempty(seq)
-            plot3(seq(:,1), seq(:,2), seq(:,3), '-', 'Color', colors(i,:), ...
-                  'LineWidth', line_widths(i), 'DisplayName', sprintf('#%d (DTW=%.2f, Δ%+d)', i, stage2_bahn_results.dtw_dist(i), stage2_bahn_results.rank_change(i)));
-        end
-    end
-    hold off; grid on; axis equal; view(3);
-    title('Stage 2: DTW Reranked'); legend('Location', 'bestoutside', 'FontSize', 7);
+    colors = lines(final_top_n);
+    lw_max = 3.0;
+    lw_min = 0.5;
+    line_widths = linspace(lw_max, lw_min, final_top_n);
     
-else
-    % === 2D JOINT PLOTS ===
-    subplot(1,2,1); hold on;
-    for j = 1:6
-        plot(query_bahn_joint(:,j), 'k-', 'LineWidth', 2, 'HandleVisibility', 'off');
-    end
-    plot(NaN, NaN, 'k-', 'LineWidth', 2, 'DisplayName', 'Query');  % Dummy für Legende
-    for i = 1:min(final_top_n, height(stage1_bahn_results))
-        seq = stage1_bahn_results.sequence{i};
-        if ~isempty(seq)
-            for j = 1:6
-                plot(seq(:,j), '-', 'Color', colors(i,:), 'LineWidth', line_widths(i), 'HandleVisibility', 'off');
+    if strcmp(dtw_mode, 'off')
+        % Nur 1 Plot (Stage 1)
+        hold on;
+        plot3(query_bahn_position(:,1), query_bahn_position(:,2), query_bahn_position(:,3), ...
+              'k-', 'LineWidth', 4, 'DisplayName', 'Query');
+        for i = 1:min(final_top_n, height(stage1_bahn_results))
+            seq = stage1_bahn_results.sequence{i};
+            if ~isempty(seq)
+                plot3(seq(:,1), seq(:,2), seq(:,3), '-', 'Color', colors(i,:), ...
+                      'LineWidth', line_widths(i), 'DisplayName', sprintf('#%d (RRF=%.4f)', i, stage1_bahn_results.rrf_score(i)));
             end
-            plot(NaN, NaN, '-', 'Color', colors(i,:), 'LineWidth', line_widths(i), ...
-                 'DisplayName', sprintf('#%d (RRF=%.4f)', i, stage1_bahn_results.rrf_score(i)));
         end
-    end
-    hold off; grid on; xlabel('Sample'); ylabel('Joint Angle [rad]');
-    title('Stage 1: Embedding Ranking'); legend('Location', 'bestoutside', 'FontSize', 7);
-    
-    subplot(1,2,2); hold on;
-    for j = 1:6
-        plot(query_bahn_joint(:,j), 'k-', 'LineWidth', 2, 'HandleVisibility', 'off');
-    end
-    plot(NaN, NaN, 'k-', 'LineWidth', 2, 'DisplayName', 'Query');
-    for i = 1:min(final_top_n, height(stage2_bahn_results))
-        seq = stage2_bahn_results.sequence{i};
-        if ~isempty(seq)
-            for j = 1:6
-                plot(seq(:,j), '-', 'Color', colors(i,:), 'LineWidth', line_widths(i), 'HandleVisibility', 'off');
+        hold off; grid on; axis equal; view(3); legend('Location', 'bestoutside', 'FontSize', 7);
+    elseif strcmp(dtw_mode, 'position')
+        % === 3D PLOTS ===
+        subplot(1,2,1); hold on;
+        plot3(query_bahn_position(:,1), query_bahn_position(:,2), query_bahn_position(:,3), ...
+              'k-', 'LineWidth', 4, 'DisplayName', 'Query');
+        for i = 1:min(final_top_n, height(stage1_bahn_results))
+            seq = stage1_bahn_results.sequence{i};
+            if ~isempty(seq)
+                plot3(seq(:,1), seq(:,2), seq(:,3), '-', 'Color', colors(i,:), ...
+                      'LineWidth', line_widths(i), 'DisplayName', sprintf('#%d (RRF=%.4f)', i, stage1_bahn_results.rrf_score(i)));
             end
-            plot(NaN, NaN, '-', 'Color', colors(i,:), 'LineWidth', line_widths(i), ...
-                 'DisplayName', sprintf('#%d (DTW=%.2f, Δ%+d)', i, stage2_bahn_results.dtw_dist(i), stage2_bahn_results.rank_change(i)));
         end
+        hold off; grid on; axis equal; view(3);
+        title('Stage 1: Embedding Ranking'); legend('Location', 'bestoutside', 'FontSize', 7);
+        
+        subplot(1,2,2); hold on;
+        plot3(query_bahn_position(:,1), query_bahn_position(:,2), query_bahn_position(:,3), ...
+              'k-', 'LineWidth', 4, 'DisplayName', 'Query');
+        for i = 1:min(final_top_n, height(stage2_bahn_results))
+            seq = stage2_bahn_results.sequence{i};
+            if ~isempty(seq)
+                plot3(seq(:,1), seq(:,2), seq(:,3), '-', 'Color', colors(i,:), ...
+                      'LineWidth', line_widths(i), 'DisplayName', sprintf('#%d (DTW=%.2f, Δ%+d)', i, stage2_bahn_results.dtw_dist(i), stage2_bahn_results.rank_change(i)));
+            end
+        end
+        hold off; grid on; axis equal; view(3);
+        title('Stage 2: DTW Reranked'); legend('Location', 'bestoutside', 'FontSize', 7);
+        
+    else
+        % === 2D JOINT PLOTS ===
+        subplot(1,2,1); hold on;
+        for j = 1:6
+            plot(query_bahn_joint(:,j), 'k-', 'LineWidth', 2, 'HandleVisibility', 'off');
+        end
+        plot(NaN, NaN, 'k-', 'LineWidth', 2, 'DisplayName', 'Query');  % Dummy für Legende
+        for i = 1:min(final_top_n, height(stage1_bahn_results))
+            seq = stage1_bahn_results.sequence{i};
+            if ~isempty(seq)
+                for j = 1:6
+                    plot(seq(:,j), '-', 'Color', colors(i,:), 'LineWidth', line_widths(i), 'HandleVisibility', 'off');
+                end
+                plot(NaN, NaN, '-', 'Color', colors(i,:), 'LineWidth', line_widths(i), ...
+                     'DisplayName', sprintf('#%d (RRF=%.4f)', i, stage1_bahn_results.rrf_score(i)));
+            end
+        end
+        hold off; grid on; xlabel('Sample'); ylabel('Joint Angle [rad]');
+        title('Stage 1: Embedding Ranking'); legend('Location', 'bestoutside', 'FontSize', 7);
+        
+        subplot(1,2,2); hold on;
+        for j = 1:6
+            plot(query_bahn_joint(:,j), 'k-', 'LineWidth', 2, 'HandleVisibility', 'off');
+        end
+        plot(NaN, NaN, 'k-', 'LineWidth', 2, 'DisplayName', 'Query');
+        for i = 1:min(final_top_n, height(stage2_bahn_results))
+            seq = stage2_bahn_results.sequence{i};
+            if ~isempty(seq)
+                for j = 1:6
+                    plot(seq(:,j), '-', 'Color', colors(i,:), 'LineWidth', line_widths(i), 'HandleVisibility', 'off');
+                end
+                plot(NaN, NaN, '-', 'Color', colors(i,:), 'LineWidth', line_widths(i), ...
+                     'DisplayName', sprintf('#%d (DTW=%.2f, Δ%+d)', i, stage2_bahn_results.dtw_dist(i), stage2_bahn_results.rank_change(i)));
+            end
+        end
+        hold off; grid on; xlabel('Sample'); ylabel('Joint Angle [rad]');
+        title('Stage 2: DTW Reranked'); legend('Location', 'bestoutside', 'FontSize', 7);
     end
-    hold off; grid on; xlabel('Sample'); ylabel('Joint Angle [rad]');
-    title('Stage 2: DTW Reranked'); legend('Location', 'bestoutside', 'FontSize', 7);
+    
+    sgtitle(sprintf('Query: %s | Mode: %s', query_id, dtw_mode));
+    fprintf('✓ Plots generated\n');
 end
-
-sgtitle(sprintf('Query: %s | Mode: %s', query_id, dtw_mode));
-fprintf('✓ Plots generated\n');
 
 %% SECTION 7: PROGNOSE
 if prognose
@@ -554,8 +622,13 @@ if prognose
     [s1_simple, s1_weighted] = computePrognose(stage1_bahn_results, prognose_top_n, conn, 'rrf_score');
     fprintf('Direct Stage 1:       Simple=%.4f | Weighted=%.4f\n', s1_simple, s1_weighted);
     
-    [s2_simple, s2_weighted] = computePrognose(stage2_bahn_results, prognose_top_n, conn, 'dtw_dist');
-    fprintf('Direct Stage 2:       Simple=%.4f | Weighted=%.4f\n', s2_simple, s2_weighted);
+    if ~strcmp(dtw_mode, 'off')
+        [s2_simple, s2_weighted] = computePrognose(stage2_bahn_results, prognose_top_n, conn, 'dtw_dist');
+        fprintf('Direct Stage 2:       Simple=%.4f | Weighted=%.4f\n', s2_simple, s2_weighted);
+    else
+        s2_simple = NaN; s2_weighted = NaN;
+        fprintf('-\n');
+    end
     
     % === BAHN-LEVEL (FROM SEGMENTS) ===
     seg_lengths = zeros(num_segments, 1);
@@ -584,12 +657,14 @@ if prognose
             seg_prognose_s1_weighted(seg_idx) = NaN;
         end
         
-        if ~isempty(s2_table)
-            [seg_prognose_s2_simple(seg_idx), seg_prognose_s2_weighted(seg_idx)] = ...
-                computePrognose(s2_table, prognose_top_n, conn, 'dtw_dist');
-        else
-            seg_prognose_s2_simple(seg_idx) = NaN;
-            seg_prognose_s2_weighted(seg_idx) = NaN;
+        if ~strcmp(dtw_mode, 'off')
+            if ~isempty(s2_table)
+                [seg_prognose_s2_simple(seg_idx), seg_prognose_s2_weighted(seg_idx)] = ...
+                    computePrognose(s2_table, prognose_top_n, conn, 'dtw_dist');
+            else
+                seg_prognose_s2_simple(seg_idx) = NaN;
+                seg_prognose_s2_weighted(seg_idx) = NaN;
+            end
         end
     end
     
@@ -605,32 +680,43 @@ if prognose
         agg_s1_simple = NaN; agg_s1_weighted = NaN;
     end
     
-    if any(valid_s2)
-        w = seg_lengths(valid_s2) / sum(seg_lengths(valid_s2));
-        agg_s2_simple = sum(w .* seg_prognose_s2_simple(valid_s2));
-        agg_s2_weighted = sum(w .* seg_prognose_s2_weighted(valid_s2));
-    else
-        agg_s2_simple = NaN; agg_s2_weighted = NaN;
+    if ~strcmp(dtw_mode, 'off')
+        if any(valid_s2)
+            w = seg_lengths(valid_s2) / sum(seg_lengths(valid_s2));
+            agg_s2_simple = sum(w .* seg_prognose_s2_simple(valid_s2));
+            agg_s2_weighted = sum(w .* seg_prognose_s2_weighted(valid_s2));
+        else
+            agg_s2_simple = NaN; agg_s2_weighted = NaN;
+        end
     end
     
     fprintf('From Segs Stage 1:    Simple=%.4f | Weighted=%.4f\n', agg_s1_simple, agg_s1_weighted);
-    fprintf('From Segs Stage 2:    Simple=%.4f | Weighted=%.4f\n', agg_s2_simple, agg_s2_weighted);
     
+    if ~strcmp(dtw_mode, 'off')
+        fprintf('From Segs Stage 2:    Simple=%.4f | Weighted=%.4f\n', agg_s2_simple, agg_s2_weighted);
+    end
+
     % Ground Truth + Errors
     gt_sql = sprintf(['SELECT sidtw_average_distance FROM auswertung.info_sidtw ' ...
                       'WHERE segment_id = ''%s'''], query_id);
     gt_result = fetch(conn, gt_sql);
+
     if ~isempty(gt_result)
         gt_value = gt_result.sidtw_average_distance(1);
         fprintf('\nGround Truth:         %.4f\n', gt_value);
         fprintf('Error Direct S1:      Simple=%.4f | Weighted=%.4f\n', ...
                 abs(gt_value - s1_simple), abs(gt_value - s1_weighted));
-        fprintf('Error Direct S2:      Simple=%.4f | Weighted=%.4f\n', ...
-                abs(gt_value - s2_simple), abs(gt_value - s2_weighted));
+
+        if ~strcmp(dtw_mode, 'off')
+            fprintf('Error Direct S2:      Simple=%.4f | Weighted=%.4f\n', ...
+                    abs(gt_value - s2_simple), abs(gt_value - s2_weighted));
+        end
         fprintf('Error FromSegs S1:    Simple=%.4f | Weighted=%.4f\n', ...
                 abs(gt_value - agg_s1_simple), abs(gt_value - agg_s1_weighted));
-        fprintf('Error FromSegs S2:    Simple=%.4f | Weighted=%.4f\n', ...
+        if ~strcmp(dtw_mode, 'off')
+            fprintf('Error FromSegs S2:    Simple=%.4f | Weighted=%.4f\n', ...
                 abs(gt_value - agg_s2_simple), abs(gt_value - agg_s2_weighted));
+        end
     end
     
     % === SEGMENT-LEVEL (Detail-Ausgabe) ===
@@ -641,19 +727,31 @@ if prognose
         fprintf('\nSegment %d: %s (Länge: %d)\n', seg_idx, seg_id, seg_lengths(seg_idx));
         fprintf('  Stage 1:  Simple=%.4f | Weighted=%.4f\n', ...
                 seg_prognose_s1_simple(seg_idx), seg_prognose_s1_weighted(seg_idx));
-        fprintf('  Stage 2:  Simple=%.4f | Weighted=%.4f\n', ...
-                seg_prognose_s2_simple(seg_idx), seg_prognose_s2_weighted(seg_idx));
+        if ~strcmp(dtw_mode, 'off')
+            fprintf('  Stage 2:  Simple=%.4f | Weighted=%.4f\n', ...
+                    seg_prognose_s2_simple(seg_idx), seg_prognose_s2_weighted(seg_idx));
+        end
         
         gt_sql = sprintf(['SELECT sidtw_average_distance FROM auswertung.info_sidtw ' ...
                           'WHERE segment_id = ''%s'''], seg_id);
         gt_result = fetch(conn, gt_sql);
-        if ~isempty(gt_result)
-            gt_val = gt_result.sidtw_average_distance(1);
-            fprintf('  GT=%.4f | Err S1: %.4f / %.4f | Err S2: %.4f / %.4f\n', ...
-                    gt_val, abs(gt_val - seg_prognose_s1_simple(seg_idx)), ...
-                    abs(gt_val - seg_prognose_s1_weighted(seg_idx)), ...
-                    abs(gt_val - seg_prognose_s2_simple(seg_idx)), ...
-                    abs(gt_val - seg_prognose_s2_weighted(seg_idx)));
+        
+        if ~strcmp(dtw_mode, 'off')
+            if ~isempty(gt_result)
+                gt_val = gt_result.sidtw_average_distance(1);
+                fprintf('  GT=%.4f | Err S1: %.4f / %.4f | Err S2: %.4f / %.4f\n', ...
+                        gt_val, abs(gt_val - seg_prognose_s1_simple(seg_idx)), ...
+                        abs(gt_val - seg_prognose_s1_weighted(seg_idx)), ...
+                        abs(gt_val - seg_prognose_s2_simple(seg_idx)), ...
+                        abs(gt_val - seg_prognose_s2_weighted(seg_idx)));
+            end
+        else
+            if ~isempty(gt_result)
+                gt_val = gt_result.sidtw_average_distance(1);
+                fprintf('  GT=%.4f | Err S1: %.4f / %.4f \n', ...
+                        gt_val, abs(gt_val - seg_prognose_s1_simple(seg_idx)), ...
+                        abs(gt_val - seg_prognose_s1_weighted(seg_idx)));
+            end
         end
     end
     
@@ -727,7 +825,7 @@ function sequences = fetchBatchSequences(conn, schema, ids, id_col_name, mode)
     id_list_str = sprintf('''%s'',', ids{:});
     id_list_str = id_list_str(1:end-1); % Letztes Komma weg
     
-    if strcmp(mode, 'position')
+    if strcmp(mode, 'position') || strcmp(mode, 'off')
         table_name = 'bahn_position_soll';
         cols = 'x_soll, y_soll, z_soll';
     else
@@ -758,7 +856,7 @@ function sequences = fetchBatchSequences(conn, schema, ids, id_col_name, mode)
     id_col_data = data.(id_col_name);
     
     % Konvertiere Daten zu Matrix
-    if strcmp(mode, 'position')
+    if strcmp(mode, 'position') || strcmp(mode, 'off') 
         vals = [data.x_soll, data.y_soll, data.z_soll];
     else
         vals = [data.joint_1, data.joint_2, data.joint_3, ...
@@ -867,4 +965,5 @@ function [simple_mean, weighted_mean] = computePrognose(results_table, top_n, co
     
     weights = weights / sum(weights);  % Normalisieren
     weighted_mean = sum(values .* weights);
+
 end

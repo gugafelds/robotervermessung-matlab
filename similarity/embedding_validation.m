@@ -42,7 +42,7 @@ use_ground_truth = true;  % Set to false to disable
 base_config = struct();
 base_config.database_sample_size = 1000;  % Fixed for fair comparison
 base_config.random_seed = 42;
-base_config.top_k_trajectories = 100;     % Fixed
+base_config.top_k_trajectories = 500;     % Fixed
 
 % === DIMENSION 1: Embedding Architectures ===
 embedding_configs = {
@@ -257,7 +257,7 @@ dtw_tic = tic;
 dtw_config = struct();
 dtw_config.top_k_trajectories = base_config.top_k_trajectories;
 dtw_config.lb_kim_keep_ratio = 1;
-dtw_config.lb_keogh_candidates = 100;
+dtw_config.lb_keogh_candidates = 500;
 dtw_config.cdtw_window = 0.2;
 dtw_config.normalize_dtw = true;
 dtw_config.use_rotation_alignment = false;
@@ -800,7 +800,6 @@ total_time = toc(experiment_start);
 
 % ========================================================================
 %% SIMPLIFIED CSV EXPORT (Two-Stage Style)
-%% Replace the entire "CREATE RESULTS TABLES" section with this
 % ========================================================================
 
 fprintf('\n=== Creating Results Tables (Simplified) ===\n');
@@ -838,6 +837,8 @@ r5_dtw_eb = zeros(num_results, 1);
 r3_dtw_eb = zeros(num_results, 1);
 r1_dtw_eb = zeros(num_results, 1);
 p_dtw_eb = zeros(num_results, 1);
+ndcg10_dtw_eb = zeros(num_results, 1);
+ndcg50_dtw_eb = zeros(num_results, 1);
 
 % GT vs Embedding
 r50_gt_eb = zeros(num_results, 1);
@@ -903,6 +904,8 @@ for i = 1:total_experiments
     r3_dtw_eb(i) = r.recall_at_3;
     r1_dtw_eb(i) = r.recall_at_1;
     p_dtw_eb(i) = r.p_all_traj;
+    ndcg10_dtw_eb(i) = r.ndcg_10_dtw_eb;
+    ndcg50_dtw_eb(i) = r.ndcg_50_dtw_eb;
     
     % GT vs Embedding
     if isfield(r, 'gt_recall_at_50')
@@ -1032,6 +1035,9 @@ for i = 1:total_experiments
     r3_dtw_eb(idx) = r.seg_recall_at_3;
     r1_dtw_eb(idx) = r.seg_recall_at_1;
     p_dtw_eb(idx) = r.p_all_seg;
+    ndcg10_dtw_eb(idx) = r.seg_ndcg_10_dtw_eb;
+    ndcg50_dtw_eb(idx) = r.seg_ndcg_50_dtw_eb;
+
     
     % GT vs Embedding - SEGMENT
     if isfield(r, 'seg_gt_recall_at_50')
@@ -1149,6 +1155,8 @@ combined_table = table(...
     r3_dtw_eb, ...
     r1_dtw_eb, ...
     p_dtw_eb, ...
+    ndcg10_dtw_eb, ...
+    ndcg50_dtw_eb, ...
     r50_gt_eb, ...
     r10_gt_eb, ...
     r5_gt_eb, ...
@@ -1194,6 +1202,8 @@ combined_table = table(...
     'R@3_DTWvsEB', ...
     'R@1_DTWvsEB', ...
     'P_DTWvsEB', ...
+    'NDCG@10_DTWvsEB', ...
+    'NDCG@50_DTWvsEB', ...
     'R@50_GTvsEB', ...
     'R@10_GTvsEB', ...
     'R@5_GTvsEB', ...

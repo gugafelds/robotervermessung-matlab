@@ -1170,6 +1170,7 @@ dtw_distances = comparison_table.dtw_distance;
 emb_scores = -comparison_table.rrf_score;
 
 [rho_spearman, ~] = corr(dtw_distances, emb_scores, 'Type', 'Spearman');
+
 fprintf('Spearman ρ: %.4f\n', rho_spearman);
 
 fprintf('Precision: ');
@@ -1206,6 +1207,31 @@ emb_top_1 = embedding_table.bahn_id{1};
 prec_1 = double(strcmp(dtw_top_1, emb_top_1));
 fprintf(' | P@1=%.0f\n', prec_1);
 
+% === NDCG@K (DTW vs Embedding) - Trajectory Level ===
+if height(comparison_table) > 1
+    dists = comparison_table.dtw_distance;
+    % Normalisierte Relevanz: 1 = Beste Distanz, 0 = Schlechteste in den Top-K
+    rel_scores = 1 - (dists - min(dists)) / (max(max(dists) - min(dists), 1e-6));
+    
+    % Sortierung nach Embedding-Ranking (RRF Score)
+    [~, emb_rank_idx] = sort(comparison_table.rrf_score, 'descend');
+    rel_at_emb_rank = rel_scores(emb_rank_idx);
+    rel_ideal = sort(rel_scores, 'descend');
+
+    % NDCG Formel-Handle
+    calc_ndcg_val = @(rel, ideal, K) ...
+        (sum((2.^rel(1:min(K, length(rel))) - 1) ./ log2((1:min(K, length(rel)))' + 1))) / ...
+        (max(sum((2.^ideal(1:min(K, length(ideal))) - 1) ./ log2((1:min(K, length(ideal)))' + 1)), 1e-6));
+
+    ndcg_10_dtw_eb = calc_ndcg_val(rel_at_emb_rank, rel_ideal, 10);
+    ndcg_50_dtw_eb = calc_ndcg_val(rel_at_emb_rank, rel_ideal, 50);
+    
+    fprintf('NDCG@10 (DTW-EB): %.4f | NDCG@50 (DTW-EB): %.4f\n', ndcg_10_dtw_eb, ndcg_50_dtw_eb);
+else
+    ndcg_10_dtw_eb = NaN;
+    ndcg_50_dtw_eb = NaN;
+end
+
 % Segment-level
 if num_query_segments > 0 && ~isempty(segment_embedding_results)
     fprintf('\n--- SEGMENT LEVEL (avg over %d segments) ---\n', num_query_segments);
@@ -1219,6 +1245,8 @@ if num_query_segments > 0 && ~isempty(segment_embedding_results)
     seg_prec_5_all = [];
     seg_prec_3_all = [];
     seg_prec_1_all = [];
+    seg_ndcg10_all = [];
+    seg_ndcg50_all = [];
     
     for seg_idx = 1:num_query_segments
         seg_dtw_table = segment_results{seg_idx};
@@ -1232,6 +1260,15 @@ if num_query_segments > 0 && ~isempty(segment_embedding_results)
             'Keys', 'segment_id', ...
             'LeftVariables', {'segment_id', 'dtw_distance'}, ...
             'RightVariables', {'rrf_score'});
+
+        if height(seg_comparison) > 1
+            s_dists = seg_comparison.dtw_distance;
+            s_rel = 1 - (s_dists - min(s_dists)) / (max(max(s_dists) - min(s_dists), 1e-6));
+            [~, s_rank_idx] = sort(seg_comparison.rrf_score, 'descend');
+            
+            seg_ndcg10_all(end+1) = calc_ndcg_val(s_rel(s_rank_idx), sort(s_rel, 'descend'), 10);
+            seg_ndcg50_all(end+1) = calc_ndcg_val(s_rel(s_rank_idx), sort(s_rel, 'descend'), 50);
+        end
         
         if height(seg_comparison) >= 3
             seg_emb_scores = -seg_comparison.rrf_score;
@@ -1286,6 +1323,15 @@ if num_query_segments > 0 && ~isempty(segment_embedding_results)
             fprintf(' | P@1=%.3f\n', mean(seg_prec_1_all));
         end
     end
+    
+    if ~isempty(seg_ndcg10_all)
+        seg_ndcg_10_dtw_eb = mean(seg_ndcg10_all);
+        seg_ndcg_50_dtw_eb = mean(seg_ndcg50_all);
+    else
+        seg_ndcg_10_dtw_eb = NaN;
+        seg_ndcg_50_dtw_eb = NaN;
+    end
+
 end
 
 fprintf('\n========================================\n\n');

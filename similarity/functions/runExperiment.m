@@ -229,6 +229,9 @@ end
 
 results.p_at_1 = prec_1;
 
+results.ndcg_10_dtw_eb = ndcg_10_dtw_eb;
+results.ndcg_50_dtw_eb = ndcg_50_dtw_eb;
+
 % ========================================================================
 % Segment-Level Metrics
 % ========================================================================
@@ -236,6 +239,9 @@ results.p_at_1 = prec_1;
 if num_query_segments > 0 && exist('seg_rho_all', 'var') && ~isempty(seg_rho_all)
     results.seg_spearman = mean(seg_rho_all);
     results.seg_p_at_k = mean(seg_prec_k_all);
+
+    results.seg_ndcg_10_dtw_eb = seg_ndcg_10_dtw_eb;
+    results.seg_ndcg_50_dtw_eb = seg_ndcg_50_dtw_eb;
     
     if ~isempty(seg_prec_10_all)
         results.seg_p_at_10 = mean(seg_prec_10_all);
@@ -260,6 +266,7 @@ if num_query_segments > 0 && exist('seg_rho_all', 'var') && ~isempty(seg_rho_all
     else
         results.seg_p_at_1 = NaN;
     end
+
 else
     % No segments or empty results
     results.seg_spearman = NaN;
@@ -268,6 +275,8 @@ else
     results.seg_p_at_5 = NaN;
     results.seg_p_at_3 = NaN;
     results.seg_p_at_1 = NaN;
+    results.seg_ndcg_10_dtw_eb = NaN;
+    results.seg_ndcg_50_dtw_eb = NaN;
 end
 
 % ========================================================================

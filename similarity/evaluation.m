@@ -450,7 +450,7 @@ output_folder = 'results';
 figure_folder = 'figs';
 use_trajectory_only = false;
 use_segment_only = false;
-use_non_normalized_dtw = true;
+use_normalized_dtw = false;
 save_figures = true;
 figure_format = 'both';
 
@@ -467,9 +467,11 @@ end
 if use_segment_only
     data_table = data_table(strcmp(data_table.Level, 'Segment'), :);
 end
-if use_non_normalized_dtw
-    data_table = data_table(data_table.DTW_Normalization == 0, :);
+if use_normalized_dtw
+    data_table = data_table(data_table.DTW_Normalization == 1, :);
 end
+
+data_table = data_table(contains(data_table.Timestamp, '2026'), :);
 
 filtered = data_table;
 fprintf('✓ Dataset: %d experiments\n\n', height(filtered));
@@ -506,6 +508,7 @@ end
 fprintf('✓ Figure 1: %d experiments (baselines only)\n\n', height(filtered_baselines));
 
 
+matlab
 % ========================================================================
 %% STEP 3: FIGURE 1 - DIMENSIONALITY (BASELINES ONLY!) - COMPOSITE SCORE
 % ========================================================================
@@ -516,74 +519,91 @@ fprintf('╚══════════════════════�
 
 % Filter für Database_Size = 1000
 filtered_baselines_1000 = filtered_baselines(filtered_baselines.Database_Size == 1000, :);
+filtered_baselines_1000 = filtered_baselines_1000(contains(filtered_baselines_1000.Timestamp, '2026'), :);
 
 fig1 = figure('Position', [100, 100, 750, 500], 'Color', 'w');
 set(fig1, 'Name', 'Figure 1: Dimensionality Invariance (Baselines) - Composite');
 
+% Farben
 color_motion = [0.86, 0.13, 0.15];
 color_shape  = [0.15, 0.39, 0.91];
 color_zone   = [0.09, 0.64, 0.29];
+color_motion_dark = color_motion * 0.6;
+color_shape_dark = color_shape * 0.6;
 
 h_lines = [];
 legend_entries = {};
 all_plot_data = struct([]);
+plot_idx = 0;
 
-% Prepare data with ACTUAL dimensions
-for m = 1:length(dtw_modes)
-    curr_dtw_mode = dtw_modes{m};
-    baseline = baseline_weights{m};
-    
-    mode_data = filtered_baselines_1000(strcmp(filtered_baselines_1000.DTW_Mode, curr_dtw_mode), :);
-    
-    all_dims_per_param = unique(mode_data.Total_Dims);
-    all_dims_per_param = sort(all_dims_per_param);
-    
-    % ACTUAL dimensions (pure!)
-    if strcmp(curr_dtw_mode, 'joint_states')
-        actual_dims = all_dims_per_param * 6;
-        dim_label = '6×n';
-    else
-        actual_dims = all_dims_per_param * 3;
-        dim_label = '3×n';
-    end
-    
-    fprintf('%s (%s):\n', mode_labels{m}, baseline);
-    fprintf('  Dims per param: %s\n', mat2str(all_dims_per_param'));
-    fprintf('  Actual dims:    %s (%s)\n', mat2str(actual_dims'), dim_label);
-    
-    composite_vals = zeros(length(all_dims_per_param), 1);
-    
-    for i = 1:length(all_dims_per_param)
-        dim_data = mode_data(mode_data.Total_Dims == all_dims_per_param(i), :);
-        
-        % Berechne alle Metriken für Composite Score
-        spearman_mean = mean(dim_data.Spearman_DTWvsEB);
-        r50_dtw = mean(dim_data.('R@50_DTWvsEB'));
-        r50_gt = mean(dim_data.('R@50_GTvsEB'));
-        mean_rank_gt = mean(dim_data.Mean_GTvsEB_Rank);
-        ndcg50_gt = mean(dim_data.('NDCG@50_GTvsEB'), 'omitnan');
-        
-        % Composite Score (gleiche Formel wie Tabelle 1)
-        composite_vals(i) = calculate_composite_score(ndcg50_gt, r50_dtw, mean_rank_gt, r50_gt, spearman_mean);
+levels = {'Trajectory', 'Segment'};
 
+% ========================================================================
+% Daten vorbereiten für beide Levels
+% ========================================================================
+
+for lvl = 1:length(levels)
+    level_name = levels{lvl};
+    filtered_level = filtered_baselines_1000(strcmp(filtered_baselines_1000.Level, level_name), :);
+    
+    for m = 1:length(dtw_modes)
+        plot_idx = plot_idx + 1;
+        curr_dtw_mode = dtw_modes{m};
+        baseline = baseline_weights{m};
+        
+        mode_data = filtered_level(strcmp(filtered_level.DTW_Mode, curr_dtw_mode), :);
+        
+        all_dims_per_param = unique(mode_data.Total_Dims);
+        all_dims_per_param = sort(all_dims_per_param);
+        
+        % ACTUAL dimensions
+        if strcmp(curr_dtw_mode, 'joint_states')
+            actual_dims = all_dims_per_param * 6;
+            dim_label = '6×n';
+        else
+            actual_dims = all_dims_per_param * 3;
+            dim_label = '3×n';
+        end
+        
+        fprintf('%s - %s (%s):\n', level_name, mode_labels{m}, baseline);
+        fprintf('  Dims per param: %s\n', mat2str(all_dims_per_param'));
+        fprintf('  Actual dims:    %s (%s)\n', mat2str(actual_dims'), dim_label);
+        
+        composite_vals = zeros(length(all_dims_per_param), 1);
+        
+        for i = 1:length(all_dims_per_param)
+            dim_data = mode_data(mode_data.Total_Dims == all_dims_per_param(i), :);
+            
+            spearman_mean = mean(dim_data.Spearman_DTWvsEB);
+            r50_dtw = mean(dim_data.('R@50_DTWvsEB'));
+            r50_gt = mean(dim_data.('R@50_GTvsEB'));
+            mean_rank_gt = mean(dim_data.Mean_GTvsEB_Rank);
+            ndcg50_gt = mean(dim_data.('NDCG@50_GTvsEB'), 'omitnan');
+            
+            composite_vals(i) = calculate_composite_score(ndcg50_gt, r50_dtw, mean_rank_gt, r50_gt, spearman_mean);
+        end
+        
+        all_plot_data(plot_idx).actual_dims = actual_dims;
+        all_plot_data(plot_idx).composite = composite_vals;
+        all_plot_data(plot_idx).mode = curr_dtw_mode;
+        all_plot_data(plot_idx).baseline = baseline;
+        all_plot_data(plot_idx).level = level_name;
+        
+        fprintf('  Composite scores: %s\n\n', mat2str(composite_vals', 3));
     end
-    
-    all_plot_data(m).actual_dims = actual_dims;
-    all_plot_data(m).composite = composite_vals;
-    all_plot_data(m).mode = curr_dtw_mode;
-    all_plot_data(m).baseline = baseline;
-    
-    fprintf('  Composite scores: %s\n', mat2str(composite_vals', 3));
-    fprintf('\n');
 end
 
 % ========================================================================
-% MANUAL Sweet Spot Configuration
+% Sweet Spot Configuration
 % ========================================================================
 sweet_start = 30;
 sweet_end = 150;
 plateau_start = 150;
-plateau_end = max([all_plot_data(1).actual_dims; all_plot_data(2).actual_dims]);
+all_dims_combined = [];
+for p = 1:length(all_plot_data)
+    all_dims_combined = [all_dims_combined; all_plot_data(p).actual_dims];
+end
+plateau_end = max(all_dims_combined);
 
 fprintf('=== Manual Sweet Spot Configuration ===\n');
 fprintf('Sweet Spot Zone: [%d, %d] dims\n', sweet_start, sweet_end);
@@ -594,58 +614,81 @@ fprintf('Plateau Zone: [%d, %d] dims\n\n', plateau_start, plateau_end);
 % ========================================================================
 hold on;
 
-% Get Y-axis range für Zonen (Auto-Skalierung)
-all_scores = [all_plot_data(1).composite; all_plot_data(2).composite];
-y_min = min(all_scores) * 0.99;
-y_max = max(all_scores) * 1.01;
+% Y-Achsen Range
+all_scores = [];
+for p = 1:length(all_plot_data)
+    all_scores = [all_scores; all_plot_data(p).composite];
+end
+y_min = min(all_scores) * 0.991;
+y_max = max(all_scores) * 1.015;
 
-% Sweet spot zones (manuell konfiguriert!)
+% Sweet spot zones
 fill([sweet_start, sweet_end, sweet_end, sweet_start], [y_min, y_min, y_max, y_max], ...
      color_zone, 'FaceAlpha', 0.15, 'EdgeColor', 'none', 'HandleVisibility', 'off');
 fill([plateau_start, plateau_end, plateau_end, plateau_start], [y_min, y_min, y_max, y_max], ...
      [0.5, 0.5, 0.5], 'FaceAlpha', 0.15, 'EdgeColor', 'none', 'HandleVisibility', 'off');
 
-% Plot data
-for m = 1:length(all_plot_data)
-    if strcmp(all_plot_data(m).mode, 'joint_states')
-        line_color = color_motion;
-        marker_style = 'o';
-        legend_label = 'Motion (6×n - Joint only)';
+% Plot alle Daten
+for p = 1:length(all_plot_data)
+    is_trajectory = strcmp(all_plot_data(p).level, 'Trajectory');
+    is_motion = strcmp(all_plot_data(p).mode, 'joint_states');
+    
+    % Farbe und Stil bestimmen
+    if is_motion
+        if is_trajectory
+            line_color = color_motion;
+            line_style = '-';
+            marker_style = 'o';
+            line_width = 3;
+            marker_size = 11;
+            legend_label = 'Motion (Traj.)';
+        else
+            line_color = color_motion_dark;
+            line_style = '--';
+            marker_style = 'o';
+            line_width = 2;
+            marker_size = 8;
+            legend_label = 'Motion (Seg.)';
+        end
     else
-        line_color = color_shape;
-        marker_style = 's';
-        legend_label = 'Space (3×n - Position only)';
+        if is_trajectory
+            line_color = color_shape;
+            line_style = '-';
+            marker_style = 's';
+            line_width = 3;
+            marker_size = 11;
+            legend_label = 'Shape (Traj.)';
+        else
+            line_color = color_shape_dark;
+            line_style = '--';
+            marker_style = 's';
+            line_width = 2;
+            marker_size = 8;
+            legend_label = 'Shape (Seg.)';
+        end
     end
     
-    h = plot(all_plot_data(m).actual_dims, all_plot_data(m).composite, ...
-        [marker_style '-'], 'LineWidth', 3, 'MarkerSize', 11, ...  % Dickere Linie, größere Marker
+    h = plot(all_plot_data(p).actual_dims, all_plot_data(p).composite, ...
+        [marker_style line_style], 'LineWidth', line_width, 'MarkerSize', marker_size, ...
         'Color', line_color, 'MarkerFaceColor', line_color);
     h_lines = [h_lines, h];
     legend_entries{end+1} = legend_label;
 end
 
-% Styling mit größeren Schriften
+% Styling
 set(gca, 'XScale', 'log');
 xlabel('Total embedding dimensions', 'FontWeight', 'bold', 'FontSize', 20);
 ylabel('Composite score', 'FontWeight', 'bold', 'FontSize', 20);
 set(gca, 'XTick', [6, 15, 30, 75, 150, 300, 600, 1200, 3600]);
-set(gca, 'FontName', 'Courier New');
-yticks([0.67,0.68,0.69,0.70,0.71,0.72,0.73])
-yticklabels({'0.67','0.68','0.69','0.70','0.71','0.72','0.73'});
+set(gca, 'FontName', 'Courier New', 'FontWeight', 'bold', 'FontSize', 18);
 xtickangle(0);
-set(gca, 'FontName', 'courier new', 'FontWeight', 'bold', 'FontSize', 18);
-
-% Auto-Skalierung der Y-Achse
 ylim([y_min, y_max]);
 
+legend(h_lines, legend_entries, 'Location', 'best', 'FontSize', 14);
 
-% Kompaktere Legend
-legend(h_lines, legend_entries, 'Location', 'southeast', 'FontSize', 16);
-
-% Engere Margins
 ax = gca;
 ax.Position = [0.14 0.14 0.84 0.84];
-ax.LooseInset = [0, 0, 0, 0];  % Minimiert weiße Ränder
+ax.LooseInset = [0, 0, 0, 0];
 ax.YGrid = 'on';
 ax.XGrid = 'off';
 
@@ -661,82 +704,137 @@ if save_figures
 end
 
 fprintf('\n');
+
 % ========================================================================
-%% TABLE 1: DIMENSIONALITY ANALYSIS (BASELINES)
+%% TABLE 1: DIMENSIONALITY ANALYSIS (BASELINES) - COMBINED
 % ========================================================================
-fprintf('Creating Table 1: Dimensionality Analysis...\n');
-table1_data = cell(0, 10);  % Eine zusätzliche Spalte für Composite Score
+fprintf('Creating Table 1: Dimensionality Analysis (Combined)...\n');
+table1_data = cell(0, 11);
 
-filtered_baselines_1000 = filtered_baselines(filtered_baselines.Database_Size == 1000, :);
-
-for m = 1:length(dtw_modes)
-    mode_name = dtw_modes{m};
-    mode_label = mode_labels{m};
-    baseline = baseline_weights{m};
-    mode_data = filtered_baselines_1000(strcmp(filtered_baselines_1000.DTW_Mode, mode_name), :);
-    all_dims_per_param = unique(mode_data.Total_Dims);
-    all_dims_per_param = sort(all_dims_per_param);
-
-    % Calculate actual dimensions
-    if strcmp(mode_name, 'joint_states')
-        actual_dims = all_dims_per_param * 6;
-    else
-        actual_dims = all_dims_per_param * 3;
-    end
-
-    for i = 1:length(all_dims_per_param)
-        dim = all_dims_per_param(i);
-        actual_dim = actual_dims(i);
-        dim_data = mode_data(mode_data.Total_Dims == dim, :);
+for lvl = 1:length(levels)
+    level_name = levels{lvl};
+    filtered_level = filtered_baselines_1000(strcmp(filtered_baselines_1000.Level, level_name), :);
+    
+    for m = 1:length(dtw_modes)
+        mode_name = dtw_modes{m};
+        mode_label = mode_labels{m};
+        baseline = baseline_weights{m};
+        mode_data = filtered_level(strcmp(filtered_level.DTW_Mode, mode_name), :);
         
-        if height(dim_data) < 1
-            continue;
+        all_dims_per_param = unique(mode_data.Total_Dims);
+        all_dims_per_param = sort(all_dims_per_param);
+        
+        if strcmp(mode_name, 'joint_states')
+            actual_dims = all_dims_per_param * 6;
+        else
+            actual_dims = all_dims_per_param * 3;
         end
-
-        % Calculate metrics
-        n = height(dim_data);
-        spearman_mean = mean(dim_data.Spearman_DTWvsEB);
-        spearman_std = std(dim_data.Spearman_DTWvsEB);
-        r50_dtw = mean(dim_data.('R@50_DTWvsEB'));
-        r10_dtw = mean(dim_data.('R@10_DTWvsEB'));
-        r50_gt = mean(dim_data.('R@50_GTvsEB'));
-        r10_gt = mean(dim_data.('R@10_GTvsEB'));
-        mean_rank_gt = mean(dim_data.Mean_GTvsEB_Rank);
-        ndcg50_gt = mean(dim_data.('NDCG@50_GTvsEB'), 'omitnan');
-
-        % Composite score (gleiche Gewichtung wie Tabelle 2)
-        composite = calculate_composite_score(ndcg50_gt, r50_dtw, mean_rank_gt, r50_gt, spearman_mean);
-
-        % Store
-        table1_data(end+1, :) = {
-            mode_label, baseline, dim, actual_dim, n, ...
-            spearman_mean, ...
-            r50_dtw, r50_gt, ndcg50_gt, ...
-            composite
-        };
+        
+        for i = 1:length(all_dims_per_param)
+            dim = all_dims_per_param(i);
+            actual_dim = actual_dims(i);
+            dim_data = mode_data(mode_data.Total_Dims == dim, :);
+            
+            if height(dim_data) < 1
+                continue;
+            end
+            
+            n = height(dim_data);
+            spearman_mean = mean(dim_data.Spearman_DTWvsEB);
+            r50_dtw = mean(dim_data.('R@50_DTWvsEB'));
+            r50_gt = mean(dim_data.('R@50_GTvsEB'));
+            mean_rank_gt = mean(dim_data.Mean_GTvsEB_Rank);
+            ndcg50_gt = mean(dim_data.('NDCG@50_GTvsEB'), 'omitnan');
+            
+            composite = calculate_composite_score(ndcg50_gt, r50_dtw, mean_rank_gt, r50_gt, spearman_mean);
+            
+            table1_data(end+1, :) = {
+                level_name, ...
+                mode_label, baseline, dim, actual_dim, n, ...
+                spearman_mean, ...
+                r50_dtw, r50_gt, ndcg50_gt, ...
+                composite
+            };
+        end
     end
 end
 
-% Create table
 T1 = cell2table(table1_data, 'VariableNames', ...
-    {'Mode', 'Config', 'Dims_Per_Param', 'Actual_Dims', 'N', ...
+    {'Level', 'Mode', 'Config', 'Dims_Per_Param', 'Actual_Dims', 'N', ...
     'Spearman', ...
     'R@50 (DTW)', 'R@50 (GT)', 'NDCG@50 (GT)', ...
     'Composite_Score'});
 
-% Sort by composite score within each mode
-motion_rows = strcmp(T1.Mode, mode_labels{1});
-shape_rows = strcmp(T1.Mode, mode_labels{2});
-T1_motion = T1(motion_rows, :);
-T1_shape = T1(shape_rows, :);
-[~, sort_idx_motion] = sort(T1_motion.Composite_Score, 'descend');
-[~, sort_idx_shape] = sort(T1_shape.Composite_Score, 'descend');
-T1 = [T1_motion(sort_idx_motion, :); T1_shape(sort_idx_shape, :)];
+% Sort: Level -> Mode -> Composite (descending)
+T1 = sortrows(T1, {'Level', 'Mode', 'Composite_Score'}, {'ascend', 'ascend', 'descend'});
 
-% Create output folder
-if ~exist(output_folder, 'dir')
-    mkdir(output_folder);
+% Save
+table1_file = fullfile(output_folder, 'table1_dimensionality.csv');
+writetable(T1, table1_file);
+fprintf('✓ Saved: %s\n\n', table1_file);
+
+% ========================================================================
+%% TABLE 1: DIMENSIONALITY ANALYSIS (BASELINES) - COMBINED
+% ========================================================================
+fprintf('Creating Table 1: Dimensionality Analysis (Combined)...\n');
+table1_data = cell(0, 11);
+
+for lvl = 1:length(levels)
+    level_name = levels{lvl};
+    filtered_level = filtered_baselines_1000(strcmp(filtered_baselines_1000.Level, level_name), :);
+    
+    for m = 1:length(dtw_modes)
+        mode_name = dtw_modes{m};
+        mode_label = mode_labels{m};
+        baseline = baseline_weights{m};
+        mode_data = filtered_level(strcmp(filtered_level.DTW_Mode, mode_name), :);
+        
+        all_dims_per_param = unique(mode_data.Total_Dims);
+        all_dims_per_param = sort(all_dims_per_param);
+        
+        if strcmp(mode_name, 'joint_states')
+            actual_dims = all_dims_per_param * 6;
+        else
+            actual_dims = all_dims_per_param * 3;
+        end
+        
+        for i = 1:length(all_dims_per_param)
+            dim = all_dims_per_param(i);
+            actual_dim = actual_dims(i);
+            dim_data = mode_data(mode_data.Total_Dims == dim, :);
+            
+            if height(dim_data) < 1
+                continue;
+            end
+            
+            n = height(dim_data);
+            spearman_mean = mean(dim_data.Spearman_DTWvsEB);
+            r50_dtw = mean(dim_data.('R@50_DTWvsEB'));
+            r50_gt = mean(dim_data.('R@50_GTvsEB'));
+            mean_rank_gt = mean(dim_data.Mean_GTvsEB_Rank);
+            ndcg50_gt = mean(dim_data.('NDCG@50_GTvsEB'), 'omitnan');
+            
+            composite = calculate_composite_score(ndcg50_gt, r50_dtw, mean_rank_gt, r50_gt, spearman_mean);
+            
+            table1_data(end+1, :) = {
+                level_name, ...
+                mode_label, baseline, dim, actual_dim, n, ...
+                spearman_mean, ...
+                r50_dtw, r50_gt, ndcg50_gt, ...
+                composite
+            };
+        end
+    end
 end
+
+T1 = cell2table(table1_data, 'VariableNames', ...
+    {'Level', 'Mode', 'Config', 'Dims_Per_Param', 'Actual_Dims', 'N', ...
+    'Spearman', ...
+    'R@50 (DTW)', 'R@50 (GT)', 'NDCG@50 (GT)', ...
+    'Composite_Score'});
+
+% Sort: Level -> Mode -> Composite (descending)
+T1 = sortrows(T1, {'Level', 'Mode', 'Composite_Score'}, {'ascend', 'ascend', 'descend'});
 
 % Save
 table1_file = fullfile(output_folder, 'table1_dimensionality.csv');
@@ -753,6 +851,14 @@ fprintf('╚══════════════════════�
 
 % Filter für Database_Size = 1000
 filtered_1000 = filtered(filtered.Database_Size == 1000, :);
+filtered_1000 = filtered_1000(contains(filtered_1000.Timestamp, '2026'), :);
+filtered_1000 = filtered_1000(contains(filtered_1000.Embedding_Config, 'Multi-Balanced-25'), :);
+
+% Farben
+color_motion = [0.86, 0.13, 0.15];
+color_shape  = [0.15, 0.39, 0.91];
+color_motion_dark = color_motion * 0.6;
+color_shape_dark = color_shape * 0.6;
 
 fig2 = figure('Position', [100, 100, 750, 500], 'Color', 'w');
 set(fig2, 'Name', 'Figure 2: Weight Mode Contribution - Composite');
@@ -763,119 +869,132 @@ all_composite_vals = [];
 h_lines = [];
 legend_entries = {};
 
-for m = 1:length(dtw_modes)
-    mode_name = dtw_modes{m};
-    mode_label = mode_labels{m};
-    mode_data = filtered_1000(strcmp(filtered_1000.DTW_Mode, mode_name), :);
-    
-    % Get all weight modes
-    weight_modes_unique = unique(mode_data.Weight_Mode);
-    
-    wm_results = struct([]);
-    for w = 1:length(weight_modes_unique)
-        wm = weight_modes_unique{w};
-        wm_data = mode_data(strcmp(mode_data.Weight_Mode, wm), :);
-        
-        if height(wm_data) < 3
-            continue;
-        end
-        
-        wm_results(end+1).name = wm;
-        
-        % Berechne alle Metriken für Composite Score
-        spearman_mean = mean(wm_data.Spearman_DTWvsEB);
-        r50_dtw = mean(wm_data.('R@50_DTWvsEB'));
-        r50_gt = mean(wm_data.('R@50_GTvsEB'));
-        mean_rank_gt = mean(wm_data.Mean_GTvsEB_Rank);
-        
-        if ismember('NDCG@10_GTvsEB', wm_data.Properties.VariableNames)
-            ndcg10_gt = mean(wm_data.('NDCG@10_GTvsEB'), 'omitnan');
-        else
-            ndcg10_gt = 0;
-        end
-        
-        % Composite Score (gleiche Formel wie Tabelle 2)
-        wm_results(end).composite = calculate_composite_score(ndcg50_gt, r50_dtw, mean_rank_gt, r50_gt, spearman_mean);
+levels = {'Trajectory', 'Segment'};
 
-    end
+for lvl = 1:length(levels)
+    level_name = levels{lvl};
+    filtered_level = filtered_1000(strcmp(filtered_1000.Level, level_name), :);
     
-    % Manual logical sorting for incremental features
-    if strcmp(mode_name, 'joint_states')
-        % Motion mode order: Baseline → +Meta → +Velocity → +Orient → +Position → +All
-        feature_order = {
-            'Joint only',           % Baseline
-            'Joint + Meta',         % +Meta
-            'Joint + Velocity',     % +Velocity
-            'Joint + Orient',       % +Orient
-            'Joint + Position',     % +Position (cross-domain)
-            'Joint + All'           % +All
-        };
-    else
-        % Space mode order: Baseline → +Meta → +Velocity → +Orient → +Joint → +All
-        feature_order = {
-            'Position only',        % Baseline
-            'Pos + Meta',           % +Meta
-            'Pos + Velocity',       % +Velocity
-            'Pos + Orient',         % +Orient
-            'Pos + Joint',          % +Joint (cross-domain)
-            'Pos + All'             % +All
-        };
-    end
-    
-    % Reorder wm_results according to feature_order
-    sorted_indices = [];
-    for f = 1:length(feature_order)
-        feature_name = feature_order{f};
-        idx = find(strcmp({wm_results.name}, feature_name), 1);
-        if ~isempty(idx)
-            sorted_indices(end+1) = idx;
+    for m = 1:length(dtw_modes)
+        mode_name = dtw_modes{m};
+        mode_label = mode_labels{m};
+        mode_data = filtered_level(strcmp(filtered_level.DTW_Mode, mode_name), :);
+        
+        % Get all weight modes
+        weight_modes_unique = unique(mode_data.Weight_Mode);
+        
+        wm_results = struct([]);
+        for w = 1:length(weight_modes_unique)
+            wm = weight_modes_unique{w};
+            wm_data = mode_data(strcmp(mode_data.Weight_Mode, wm), :);
+            
+            if height(wm_data) < 3
+                continue;
+            end
+            
+            wm_results(end+1).name = wm;
+            
+            % Berechne alle Metriken für Composite Score
+            spearman_mean = mean(wm_data.Spearman_DTWvsEB);
+            r50_dtw = mean(wm_data.('R@50_DTWvsEB'));
+            r50_gt = mean(wm_data.('R@50_GTvsEB'));
+            mean_rank_gt = mean(wm_data.Mean_GTvsEB_Rank);
+            ndcg50_gt = mean(wm_data.('NDCG@50_GTvsEB'), 'omitnan');
+            
+            % Composite Score
+            wm_results(end).composite = calculate_composite_score(ndcg50_gt, r50_dtw, mean_rank_gt, r50_gt, spearman_mean);
         end
-    end
-    
-    % Add any remaining modes not in the predefined order
-    for w = 1:length(wm_results)
-        if ~ismember(wm_results(w).name, feature_order)
-            sorted_indices(end+1) = w;
+        
+        % Manual logical sorting for incremental features
+        if strcmp(mode_name, 'joint_states')
+            feature_order = {
+                'Joint only',
+                'Joint + Meta',
+                'Joint + Velocity',
+                'Joint + Orient',
+                'Joint + Position',
+                'Joint + All'
+            };
+        else
+            feature_order = {
+                'Position only',
+                'Pos + Meta',
+                'Pos + Velocity',
+                'Pos + Orient',
+                'Pos + Joint',
+                'Pos + All'
+            };
         end
+        
+        % Reorder wm_results according to feature_order
+        sorted_indices = [];
+        for f = 1:length(feature_order)
+            feature_name = feature_order{f};
+            idx = find(strcmp({wm_results.name}, feature_name), 1);
+            if ~isempty(idx)
+                sorted_indices(end+1) = idx;
+            end
+        end
+        
+        for w = 1:length(wm_results)
+            if ~ismember(wm_results(w).name, feature_order)
+                sorted_indices(end+1) = w;
+            end
+        end
+        
+        wm_results = wm_results(sorted_indices);
+        
+        x_pos = 1:length(wm_results);
+        
+        % Farbe und Stil bestimmen
+        is_trajectory = strcmp(level_name, 'Trajectory');
+        is_motion = strcmp(mode_name, 'joint_states');
+        
+        if is_motion
+            if is_trajectory
+                line_color = color_motion;
+                line_style = '-';
+                marker_style = 'o';
+                line_width = 3;
+                marker_size = 11;
+                legend_label = 'Motion (Traj.)';
+            else
+                line_color = color_motion_dark;
+                line_style = '--';
+                marker_style = 'o';
+                line_width = 2;
+                marker_size = 8;
+                legend_label = 'Motion (Seg.)';
+            end
+        else
+            if is_trajectory
+                line_color = color_shape;
+                line_style = '-';
+                marker_style = 's';
+                line_width = 3;
+                marker_size = 11;
+                legend_label = 'Shape (Traj.)';
+            else
+                line_color = color_shape_dark;
+                line_style = '--';
+                marker_style = 's';
+                line_width = 2;
+                marker_size = 8;
+                legend_label = 'Shape (Seg.)';
+            end
+        end
+        
+        % Plot Composite Score
+        composite_vals = [wm_results.composite];
+        all_composite_vals = [all_composite_vals; composite_vals'];
+        
+        h = plot(x_pos, composite_vals, ...
+            [marker_style line_style], 'LineWidth', line_width, 'MarkerSize', marker_size, ...
+            'Color', line_color, 'MarkerFaceColor', line_color);
+        
+        h_lines = [h_lines, h];
+        legend_entries{end+1} = legend_label;
     end
-    
-    % Apply the sorting
-    wm_results = wm_results(sorted_indices);
-    
-    % Shorten names (only for this mode)
-    x_labels = cell(length(wm_results), 1);
-    for i = 1:length(wm_results)
-        name = wm_results(i).name;
-        name = strrep(name, 'Joint only', 'Baseline');
-        name = strrep(name, 'Position only', 'Baseline');
-        name = strrep(name, 'Joint + ', '+');
-        name = strrep(name, 'Pos + ', '+');
-        x_labels{i} = name;
-    end
-    
-    x_pos = 1:length(wm_results);
-    
-    % Color and style
-    if strcmp(mode_name, 'joint_states')
-        line_color = color_motion;
-        marker_style = 'o';
-        legend_label = 'Motion';
-    else
-        line_color = color_shape;
-        marker_style = 's';
-        legend_label = 'Space';
-    end
-    
-    % Plot Composite Score
-    composite_vals = [wm_results.composite];
-    all_composite_vals = [all_composite_vals; composite_vals'];
-    
-    h = plot(x_pos, composite_vals, ...
-        [marker_style '-'], 'LineWidth', 3, 'MarkerSize', 11, ...
-        'Color', line_color, 'MarkerFaceColor', line_color);
-    
-    h_lines = [h_lines, h];
-    legend_entries{end+1} = legend_label;
 end
 
 % Auto-Skalierung
@@ -885,25 +1004,23 @@ y_max = max(all_composite_vals) * 1.02;
 ylabel('Composite score', 'FontWeight', 'bold', 'FontSize', 20);
 ylim([y_min, y_max]);
 
-% X-axis: Generische Labels (1-6)
+% X-axis
 set(gca, 'XTick', 1:6);
 set(gca, 'XTickLabel', {'Baseline', '+Meta.', '+Vel.', '+Orient.', '+Cross', '+All'});
 xlabel('Incremental feature addition', 'FontWeight', 'bold', 'FontSize', 20);
-yticks([0.60,0.64,0.68,0.72,0.76]);
-yticklabels({'0.60','0.64','0.68','0.72','0.76'});
 xtickangle(0);
 set(gca, 'FontName', 'courier new');
+%yticks([0.60,0.64,0.68,0.72,0.76]);
+%yticklabels({'0.60','0.64','0.68','0.72','0.76'});
 
 
 grid on;
 set(gca, 'FontSize', 18, 'FontWeight', 'bold');
 ax = gca;
 ax.Position = [0.14 0.14 0.82 0.84];
-ax.LooseInset = [0, 0, 0, 0];  % Minimiert weiße Ränder
+ax.LooseInset = [0, 0, 0, 0];
 
-
-% Legend
-legend(h_lines, legend_entries, 'Location', 'southeast', 'FontSize', 16);
+legend(h_lines, legend_entries, 'Location', 'southwest', 'FontSize', 14);
 
 hold off;
 
@@ -911,7 +1028,7 @@ hold off;
 if save_figures
     fig2_file = fullfile(figure_folder, 'incremental_feature');
     if strcmp(figure_format, 'pdf') || strcmp(figure_format, 'both')
-        exportgraphics(gca, 'figs/incremental_add.pdf');
+        exportgraphics(gca, [fig2_file '.pdf']);
         fprintf('✓ Saved: %s.pdf\n', fig2_file);
     end
 end
@@ -919,74 +1036,68 @@ end
 fprintf('\n');
 
 % ========================================================================
-%% TABLE 2: WEIGHT MODE ANALYSIS (ALL MODES)
+%% TABLE 2: WEIGHT MODE ANALYSIS (ALL MODES) - COMBINED
 % ========================================================================
 
-fprintf('Creating Table 2: Weight Mode Analysis...\n');
+fprintf('Creating Table 2: Weight Mode Analysis (Combined)...\n');
 
-table2_data = cell(0, 12);
+table2_data = cell(0, 13);
 
-filtered_1000 = filtered(filtered.Database_Size == 1000, :);
-
-for m = 1:length(dtw_modes)
-    mode_name = dtw_modes{m};
-    mode_label = mode_labels{m};
-    mode_data = filtered_1000(strcmp(filtered_1000.DTW_Mode, mode_name), :);
-    weight_modes_unique = unique(mode_data.Weight_Mode);
+for lvl = 1:length(levels)
+    level_name = levels{lvl};
+    filtered_level = filtered_1000(strcmp(filtered_1000.Level, level_name), :);
     
-    for w = 1:length(weight_modes_unique)
-        wm = weight_modes_unique{w};
-        wm_data = mode_data(strcmp(mode_data.Weight_Mode, wm), :);
+    for m = 1:length(dtw_modes)
+        mode_name = dtw_modes{m};
+        mode_label = mode_labels{m};
+        mode_data = filtered_level(strcmp(filtered_level.DTW_Mode, mode_name), :);
+        weight_modes_unique = unique(mode_data.Weight_Mode);
         
-        if height(wm_data) < 3
-            continue;
+        for w = 1:length(weight_modes_unique)
+            wm = weight_modes_unique{w};
+            wm_data = mode_data(strcmp(mode_data.Weight_Mode, wm), :);
+            
+            if height(wm_data) < 3
+                continue;
+            end
+            
+            % Calculate all metrics
+            n = height(wm_data);
+            spearman_mean = mean(wm_data.Spearman_DTWvsEB);
+            spearman_std = std(wm_data.Spearman_DTWvsEB);
+            r50_dtw = mean(wm_data.('R@50_DTWvsEB'));
+            r10_dtw = mean(wm_data.('R@10_DTWvsEB'));
+            r50_gt = mean(wm_data.('R@50_GTvsEB'));
+            r10_gt = mean(wm_data.('R@10_GTvsEB'));
+            mean_rank_gt = mean(wm_data.Mean_GTvsEB_Rank);
+            ndcg50_gt = mean(wm_data.('NDCG@50_GTvsEB'), 'omitnan');
+            
+            % Composite score
+            composite = calculate_composite_score(ndcg50_gt, r50_dtw, mean_rank_gt, r50_gt, spearman_mean);
+            
+            % Store
+            table2_data(end+1, :) = {
+                level_name, ...
+                mode_label, wm, n, ...
+                spearman_mean, spearman_std, ...
+                r10_dtw, r50_dtw, ...
+                r10_gt, r50_gt, mean_rank_gt, ndcg50_gt, ...
+                composite
+            };
         end
-        
-        % Calculate all metrics
-        n = height(wm_data);
-        spearman_mean = mean(wm_data.Spearman_DTWvsEB);
-        spearman_std = std(wm_data.Spearman_DTWvsEB);
-        r50_dtw = mean(wm_data.('R@50_DTWvsEB'));
-        r10_dtw = mean(wm_data.('R@10_DTWvsEB'));
-        r50_gt = mean(wm_data.('R@50_GTvsEB'));
-        r10_gt = mean(wm_data.('R@10_GTvsEB'));
-        mean_rank_gt = mean(wm_data.Mean_GTvsEB_Rank);
-        ndcg50_gt = mean(wm_data.('NDCG@50_GTvsEB'), 'omitnan');
-        
-        % Composite score
-        composite = calculate_composite_score(ndcg50_gt, r50_dtw, mean_rank_gt, r50_gt, spearman_mean);
-
-        
-        % Store
-        table2_data(end+1, :) = {
-            mode_label, wm, n, ...
-            spearman_mean, spearman_std, ...
-            r10_dtw, r50_dtw, ...
-            r10_gt, r50_gt, mean_rank_gt, ndcg50_gt, ...
-            composite
-        };
     end
 end
 
 % Create table
 T2 = cell2table(table2_data, 'VariableNames', ...
-    {'Mode', 'Weight_Mode', 'N', ...
+    {'Level', 'Mode', 'Weight_Mode', 'N', ...
      'Spearman_Mean', 'Spearman_Std', ...
      'R10_DTW', 'R50_DTW', ...
      'R10_GT', 'R50_GT', 'MeanRank_GT', 'NDCG50_GT', ...
      'Composite_Score'});
 
-% Sort by composite score within each mode
-motion_rows = strcmp(T2.Mode, mode_labels{1});
-shape_rows = strcmp(T2.Mode, mode_labels{2});
-
-T2_motion = T2(motion_rows, :);
-T2_shape = T2(shape_rows, :);
-
-[~, sort_idx_motion] = sort(T2_motion.Composite_Score, 'descend');
-[~, sort_idx_shape] = sort(T2_shape.Composite_Score, 'descend');
-
-T2 = [T2_motion(sort_idx_motion, :); T2_shape(sort_idx_shape, :)];
+% Sort: Level -> Mode -> Composite (descending)
+T2 = sortrows(T2, {'Level', 'Mode', 'Composite_Score'}, {'ascend', 'ascend', 'descend'});
 
 % Save
 table2_file = fullfile(output_folder, 'table2_weight_modes.csv');
@@ -1036,10 +1147,10 @@ function score = calculate_composite_score(ndcg, r50_dtw, mean_rank_gt, r50_gt, 
     % Alle Gewichte hier ändern, um sie global anzupassen
     
     % Gewichtungen (müssen zu 1.0 summieren)
-    w_ndcg = 0.25;
+    w_ndcg = 0.50;
     w_r50_dtw = 0.25;
     w_rank = 0.0;       % wird als 1/mean_rank verwendet
-    w_r50_gt = 0.25;
+    w_r50_gt = 0.0;
     w_spearman = 0.25;
     
     % Berechnung

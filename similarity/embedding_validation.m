@@ -46,22 +46,22 @@ base_config.top_k_trajectories = 100;     % Fixed
 
 % === DIMENSION 1: Embedding Architectures ===
 embedding_configs = {
-    'Single-Fine-2'        0,    2,   false;
-    'Multi-Coarse-3'       1,    2,   true;
-    'Single-Fine-5'        0,    5,   false;
-    'Multi-Coarse-10'      5,    5,   true;
-    'Single-Fine-10',      0,    10,    false;
-    'Multi-Coarse-15',     5,   10,    true;
-    'Single-Fine-20',     0,    20,   false;
-    'Multi-Balanced-25',  5,   20,    true;
-    'Single-Fine-50',      0,    50,    false;
-    'Multi-Coarse-75',     25,   50,    true;
-    'Single-Fine-100',     0,    100,   false;
-    'Multi-Balanced-125',  25,   100,    true;
-    'Single-Fine-200',     0,    200,   false;
-    'Multi-Dense-250',     100,  150,   true;
-    'Single-Fine-400',     0,    400,   false;
-    'Multi-Full-600',      200,  400,   true;
+    % === UNTER SWEET SPOT (zeigen dass es schlechter ist) ===
+    'Single-2',       0,    2,   false;   % 6-12 dims (zu wenig)
+    'Single-5',       0,    5,   false;   % 15-30 dims (Grenze)
+    
+    % === SWEET SPOT (30-150 dims) - Hauptvergleich ===
+    'Single-10',      0,   10,   false;   % 30-60 dims
+    'Single-20',      0,   20,   false;   % 60-120 dims
+    'Multi-15',       5,   10,   true;    % 45-90 dims (1:2 ratio)
+    'Multi-25',       5,   20,   true;    % 75-150 dims (1:4 ratio)
+    
+    % === PLATEAU (zeigen dass mehr nichts bringt) ===
+    'Single-50',      0,   50,   false;   % 150-300 dims
+    'Single-100',     0,  100,   false;   % 300-600 dims
+    
+    % === OPTIONAL: Ein großer zum Absichern ===
+    'Single-200',     0,  200,   false;   % 600-1200 dims
 };
 
 % === DIMENSION 2: Query Trajectories ===
@@ -74,19 +74,19 @@ query_ids = {
     %'1765987310'; % clean, np = 4 / 30 GT
 
     %% clean
-    %'1765989370'; % clean, np = 3 / 10 GT
-    %'1765989294'; % clean, np = 3 / 20 GT
-    %'1765988821'; % clean, np = 3 / 30 GT
-    %'1765988920'; % clean; np = 3 / 40 GT
-    %'1765989411'; % clean; np = 3 / 50 GT
+    '1765989370'; % clean, np = 3 / 10 GT
+    '1765989294'; % clean, np = 3 / 20 GT
+    '1765988821'; % clean, np = 3 / 30 GT
+    '1765988920'; % clean; np = 3 / 40 GT
+    '1765989411'; % clean; np = 3 / 50 GT
     
     %% noisy - 2 mm
 
-    '1765990630'; % noisy; np = 3 / 10 GT
-    '1765990747'; % noisy; np = 3 / 20 GT
-    '1765990822'; % noisy; np = 3 / 30 GT
-    '1765991047'; % noisy; np = 3 / 40 GT
-    '1765991234'; % noisy; np = 3 / 50 GT
+    %'1765990630'; % noisy; np = 3 / 10 GT
+    %'1765990747'; % noisy; np = 3 / 20 GT
+    %'1765990822'; % noisy; np = 3 / 30 GT
+    %'1765991047'; % noisy; np = 3 / 40 GT
+    %'1765991234'; % noisy; np = 3 / 50 GT
     
     %% noisy - 5 mm
 
@@ -257,7 +257,7 @@ dtw_tic = tic;
 dtw_config = struct();
 dtw_config.top_k_trajectories = base_config.top_k_trajectories;
 dtw_config.lb_kim_keep_ratio = 1;
-dtw_config.lb_keogh_candidates = 500;
+dtw_config.lb_keogh_candidates = 100;
 dtw_config.cdtw_window = 0.2;
 dtw_config.normalize_dtw = true;
 dtw_config.use_rotation_alignment = false;

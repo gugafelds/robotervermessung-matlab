@@ -105,7 +105,7 @@ weight_mode_configs = {
     'Joint + Orient',       'joint_states',  [0, 1, 1, 0, 0];
     'Joint + Velocity',     'joint_states',  [0, 1, 0, 1, 0];
     'Joint + Meta',         'joint_states',  [0, 1, 0, 0, 1];
-    'Meta only',            'joint_states',  [0, 0, 0, 0, 1];
+    'Joint + All',          'joint_states',  [1, 1, 1, 1, 1];
     
     % Position space
     'Position only',        'position',      [1, 0, 0, 0, 0];

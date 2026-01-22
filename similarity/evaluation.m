@@ -76,15 +76,15 @@ else
                     
                     % Filter new data
                     if iscellstr(timestamps_to_add) || isstring(timestamps_to_add)
-                        mask_to_add_p2 = ismember(emb_val_data_all.Timestamp, timestamps_to_add);
+                        mask_to_add = ismember(emb_val_data_all.Timestamp, timestamps_to_add);
                     else
-                        mask_to_add_p2 = false(height(emb_val_data_all), 1);
+                        mask_to_add = false(height(emb_val_data_all), 1);
                         for i = 1:length(timestamps_to_add)
-                            mask_to_add_p2 = mask_to_add_p2 | strcmp(emb_val_data_all.Timestamp, timestamps_to_add(i));
+                            mask_to_add = mask_to_add | strcmp(emb_val_data_all.Timestamp, timestamps_to_add(i));
                         end
                     end
                     
-                    data_to_add = emb_val_data_all(mask_to_add_p2, :);
+                    data_to_add = emb_val_data_all(mask_to_add, :);
                     
                     fprintf('  → Rows to add: %d\n\n', height(data_to_add));
                     

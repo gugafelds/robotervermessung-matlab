@@ -7,29 +7,46 @@ addpath(genpath('../lasertracker'));
 addpath(genpath('../methods'));
 
 % === Experiment Settings ===
-database_sample_size = 250;
+database_sample_size = 1500;
 random_seed = 42;
-top_k = 100;
+top_k = 250;
 
 % === Query IDs ===
 query_ids = {
+    %% clean
     '1765989370'; % clean, np = 3 / 10 GT
-    %'1765989294'; % clean, np = 3 / 20 GT
-    %'1765988821'; % clean, np = 3 / 30 GT
-    %'1765988920'; % clean; np = 3 / 40 GT
-    %'1765989411'; % clean; np = 3 / 50 GT
+    '1765989294'; % clean, np = 3 / 20 GT
+    '1765988821'; % clean, np = 3 / 30 GT
+    '1765988920'; % clean; np = 3 / 40 GT
+    '1765989411'; % clean; np = 3 / 50 GT
+    
+    %% noisy - 2 mm
+
+    %'1765990630'; % noisy; np = 3 / 10 GT
+    %'1765990747'; % noisy; np = 3 / 20 GT
+    %'1765990822'; % noisy; np = 3 / 30 GT
+    %'1765991047'; % noisy; np = 3 / 40 GT
+    %'1765991234'; % noisy; np = 3 / 50 GT
+    
+    %% noisy - 5 mm
+
+    %'1765991190'; % noisy; np = 3 / 10 GT
+    %'1765991445'; % noisy; np = 3 / 20 GT
+    %'1765991515'; % noisy; np = 3 / 30 GT
+    %'1765991949'; % noisy; np = 3 / 40 GT 
+    %'1765991743'; % noisy; np = 3 / 50 GT
     };
 
 % === Embedding Configs: {name, n_coarse, n_fine, multi_scale} ===
 embedding_configs = {
-    %'Single-2',    0,   2, false;
-    %'Single-5',    0,   5, false;
-    %'Single-10',   0,  10, false;
-    %'Single-20',   0,  20, false;
-    %'Multi-15',    5,  10, true;
+    'Single-2',    0,   2, false;
+    'Single-5',    0,   5, false;
+    'Single-10',   0,  10, false;
+    'Single-20',   0,  20, false;
+    'Multi-15',    5,  10, true;
     'Multi-25',    5,  20, true;
-    %'Single-50',   0,  50, false;
-    %'Single-100',  0, 100, false;
+    'Single-50',   0,  50, false;
+    'Single-100',  0, 100, false;
 };
 
 % === Weight Modes: {name, dtw_mode, [pos,joint,orient,vel,meta]} ===
@@ -55,8 +72,8 @@ weight_mode_configs = {
 dtw_window = 0.2;
 dtw_normalize = true;
 dtw_rot_align = false;
-lb_kim_ratio = 1.0;
-lb_keogh_n = 100;
+lb_kim_ratio = 0.5;
+lb_keogh_n = 250;
 
 % === Counts ===
 num_queries = length(query_ids);

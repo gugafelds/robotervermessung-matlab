@@ -18,7 +18,7 @@ function dist = cDTW(seq1, seq2, mode, window_percent, best_so_far, align_rotati
     % ================================================================
     % NORMALIZATION
     % ================================================================
-    if normalize_dtw
+    if normalize_dtw || strcmp(mode, 'joint_states')
         % For joint_states: ALWAYS normalize (regardless of flag)
         % For position: only if flag is set
         seq1 = normalizeForDTW(seq1, mode);

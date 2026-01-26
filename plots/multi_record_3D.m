@@ -309,9 +309,9 @@ end
 %% 9. Verbindung schließen
 close(conn);
 folder_path = fullfile('similarity', 'figs');
-file_name = 'multi_record_3d.png';
+file_name = 'multi_record_3d.pdf';
 full_path = fullfile(folder_path, file_name);
 
-exportgraphics(fig, full_path,"Resolution","600")
+exportgraphics(fig, full_path, ContentType="image")
 
 fprintf('Fertig!\n');

@@ -21,8 +21,8 @@ fprintf('╚══════════════════════�
 fprintf('═══ CONFIGURATION ═══\n\n');
 
 % === QUERY SETTINGS ===
-queries_quantity = 250;
-random_seed = 11;  % Für Reproduzierbarkeit
+queries_quantity = 100;
+random_seed = 42;  % Für Reproduzierbarkeit
 
 % === EMBEDDING SETTINGS ===
 K = 100;  % Stage 1 candidates
@@ -31,14 +31,14 @@ weights = [1.0; 1.0; 1.0; 1.0; 1.0];
 weights = weights / sum(weights);
 
 % === DTW SETTINGS ===
-dtw_mode = 'position';  % 'position' oder 'joint_states'
+dtw_mode = 'joint_states';  % 'position' oder 'joint_states'
 dtw_window = 0.2;
-normalize_dtw = false;
+normalize_dtw = true;
 use_rotation_alignment = false;
 
 % === LOWER BOUNDS ===
 lb_kim_keep_ratio = 1.0;
-lb_keogh_candidates = 500;
+lb_keogh_candidates = 100;
 
 % === PROGNOSE SETTINGS ===
 all_k_values = [5, 10, 25, 50];

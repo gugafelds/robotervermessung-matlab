@@ -7,9 +7,9 @@ addpath(genpath('../lasertracker'));
 addpath(genpath('../methods'));
 
 % === Experiment Settings ===
-database_sample_size = 1500;
+database_sample_size = 5000;
 random_seed = 42;
-top_k = 250;
+top_k = 50;
 
 % === Query IDs ===
 query_ids = {
@@ -22,19 +22,19 @@ query_ids = {
     
     %% noisy - 2 mm
 
-    %'1765990630'; % noisy; np = 3 / 10 GT
-    %'1765990747'; % noisy; np = 3 / 20 GT
-    %'1765990822'; % noisy; np = 3 / 30 GT
-    %'1765991047'; % noisy; np = 3 / 40 GT
-    %'1765991234'; % noisy; np = 3 / 50 GT
+    '1765990630'; % noisy; np = 3 / 10 GT
+    '1765990747'; % noisy; np = 3 / 20 GT
+    '1765990822'; % noisy; np = 3 / 30 GT
+    '1765991047'; % noisy; np = 3 / 40 GT
+    '1765991234'; % noisy; np = 3 / 50 GT
     
     %% noisy - 5 mm
 
-    %'1765991190'; % noisy; np = 3 / 10 GT
-    %'1765991445'; % noisy; np = 3 / 20 GT
-    %'1765991515'; % noisy; np = 3 / 30 GT
-    %'1765991949'; % noisy; np = 3 / 40 GT 
-    %'1765991743'; % noisy; np = 3 / 50 GT
+    '1765991190'; % noisy; np = 3 / 10 GT
+    '1765991445'; % noisy; np = 3 / 20 GT
+    '1765991515'; % noisy; np = 3 / 30 GT
+    '1765991949'; % noisy; np = 3 / 40 GT 
+    '1765991743'; % noisy; np = 3 / 50 GT
     };
 
 % === Embedding Configs: {name, n_coarse, n_fine, multi_scale} ===
@@ -60,7 +60,7 @@ weight_mode_configs = {
     'Joint + All',          'joint_states',  [1, 1, 1, 1, 1];
     
     % Position space
-    'Pos only',             'position',      [1, 0, 0, 0, 0];
+    'Position only',        'position',      [1, 0, 0, 0, 0];
     'Pos + Joint',          'position',      [1, 1, 0, 0, 0];
     'Pos + Orient',         'position',      [1, 0, 1, 0, 0];
     'Pos + Velocity',       'position',      [1, 0, 0, 1, 0];
@@ -70,10 +70,10 @@ weight_mode_configs = {
 
 % === DTW Settings ===
 dtw_window = 0.2;
-dtw_normalize = true;
+dtw_normalize = false;
 dtw_rot_align = false;
-lb_kim_ratio = 0.5;
-lb_keogh_n = 250;
+lb_kim_ratio = 1.0;
+lb_keogh_n = 50;
 
 % === Counts ===
 num_queries = length(query_ids);

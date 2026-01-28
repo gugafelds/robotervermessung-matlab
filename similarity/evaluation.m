@@ -17,9 +17,9 @@ cfg.dtw_norm = 0;
 % Composite weights (summe = 1.0)
 cfg.w.spearman = 0.0;
 cfg.w.ndcg50_dtw = 0.0;
-cfg.w.ndcg50_gt = 0.5;
+cfg.w.ndcg50_gt = 0.0;
 cfg.w.r50_dtw = 0.0;
-cfg.w.r50_gt = 0.5;
+cfg.w.r50_gt = 1.0;
 
 % Paths
 cfg.output_folder = 'results';

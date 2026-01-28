@@ -62,7 +62,7 @@ dtw_window = 0.2;
 % true  = Min-Max Normalisierung auf [0,1] pro Dimension
 %         Macht DTW skalen-invariant (empfohlen für Prognose!)
 % false = Rohe Werte verwenden
-normalize_dtw = true;
+normalize_dtw = false;
 
 % use_rotation_alignment: Rotation vor DTW ausrichten?
 % true  = Dreht Kandidat zur Query (nur für position mode sinnvoll)
@@ -201,6 +201,8 @@ fprintf('\n');
 %% SECTION 3: STAGE 1 - EMBEDDING SEARCH (RRF)
 % ========================================================================
 fprintf('═══ SECTION 3: STAGE 1 - EMBEDDING SEARCH ═══\n\n');
+
+stage1_time = tic;
 
 % ========================================================================
 % BAHN-LEVEL
@@ -366,6 +368,10 @@ for seg_idx = 1:num_segments
         fprintf('    ✓ %d candidates\n', height(stage1_seg_results{seg_idx}));
     end
 end
+
+stage1_time = toc(stage1_time);
+
+fprintf('    ! Stage 1 time: %.3f sec\n', stage1_time);
 
 clear m rank id emb_str col_name search_sql result
 clear rrf_scores rrf_scores_seg all_ids all_scores sort_idx sorted_ids sorted_scores

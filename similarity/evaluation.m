@@ -11,15 +11,15 @@ clear; clc;
 %% === CONFIGURATION ===
 % Filter settings
 cfg.db_size = 5000;
-cfg.top_k = 500;
+cfg.top_k = 50;
 cfg.dtw_norm = 0;
 
 % Composite weights (summe = 1.0)
-cfg.w.spearman = 0.5;
+cfg.w.spearman = 0.0;
 cfg.w.ndcg50_dtw = 0.0;
 cfg.w.ndcg50_gt = 0.5;
 cfg.w.r50_dtw = 0.0;
-cfg.w.r50_gt = 0.0;
+cfg.w.r50_gt = 0.5;
 
 % Paths
 cfg.output_folder = 'results';
@@ -48,12 +48,12 @@ fprintf('Filtered: %d rows\n\n', height(filtered));
 
 %% FIGURE 1: DIMENSIONALITY (BASELINES)
 dtw_modes = {'joint_states', 'position'};
-baseline_weights = {'Joint only', 'Pos only'};
+baseline_weights = {'Joint only', 'Position only'};
 
 filtered_baselines = [];
 for m = 1:length(dtw_modes)
     mask = strcmp(data_table.dtw_mode, dtw_modes{m}) & ...
-           data_table.top_k == 500;
+           data_table.top_k == cfg.top_k;
     filtered_baselines = [filtered_baselines; data_table(mask, :)];
 end
 fprintf('✓ Baselines: %d experiments\n\n', height(filtered_baselines));
@@ -106,7 +106,7 @@ levels = {'bahn', 'segment'};
 level_labels = {'Trajectory', 'Segment'};
 dtw_modes = {'joint_states', 'position'};
 mode_labels = {'MOTION (Joint)', 'SHAPE (Cartesian)'};
-baseline_weights = {'Joint only', 'Pos only'};
+baseline_weights = {'Joint only', 'Position only'};
 dim_multiplier = [6, 3];
 
 for lvl = 1:length(levels)
@@ -273,8 +273,8 @@ fprintf('Creating Figure 2...\n');
 
 % Filter
 filtered_wm = data_table(data_table.database_size == 5000 & ...
-                       data_table.top_k == 500 & ...
-                       data_table.dtw_normalize == 1, :);
+                       data_table.top_k == 50 & ...
+                       data_table.dtw_normalize == 0, :);
 
 % Farben
 c_motion = [0.86, 0.13, 0.15];
@@ -285,7 +285,7 @@ hold on;
 
 % Feature order für X-Achse
 feature_order_joint = {'Joint only', 'Joint + Meta', 'Joint + Velocity', 'Joint + Orient', 'Joint + Position', 'Joint + All'};
-feature_order_pos = {'Pos only', 'Pos + Meta', 'Pos + Velocity', 'Pos + Orient', 'Pos + Joint', 'Pos + All'};
+feature_order_pos = {'Position only', 'Pos + Meta', 'Pos + Velocity', 'Pos + Orient', 'Pos + Joint', 'Pos + All'};
 
 % Trajectory - Motion
 d = filtered_wm(strcmpi(filtered_wm.level, 'bahn') & strcmp(filtered_wm.dtw_mode, 'joint_states'), :);

@@ -72,8 +72,8 @@ weight_mode_configs = {
 dtw_window = 0.2;
 dtw_normalize = false;
 dtw_rot_align = false;
-lb_kim_ratio = 1.0;
-lb_keogh_n = 50;
+lb_kim_ratio = 0.2;
+lb_keogh_n = top_k * 5;
 
 % === Counts ===
 num_queries = length(query_ids);

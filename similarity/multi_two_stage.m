@@ -22,23 +22,28 @@ fprintf('═══ CONFIGURATION ═══\n\n');
 
 % === QUERY SETTINGS ===
 queries_quantity = 100;
-random_seed = 42;  % Für Reproduzierbarkeit
+random_seed = 21;  % Für Reproduzierbarkeit
 
 % === EMBEDDING SETTINGS ===
-K = 100;  % Stage 1 candidates
+K = 50;  % Stage 1 candidates
 rrf_k = 60;
-weights = [1.0; 1.0; 1.0; 1.0; 1.0];
-weights = weights / sum(weights);
+weights_conf = {    [1.0; 0.0; 0.0; 0.0; 0.0];
+                    [1.0; 1.0; 0.0; 0.0; 0.0];
+                    [1.0; 0.0; 1.0; 0.0; 0.0];
+                    [1.0; 0.0; 0.0; 1.0; 0.0];
+                    [1.0; 0.0; 0.0; 0.0; 1.0];
+                    [1.0; 1.0; 1.0; 1.0; 1.0];
+                }; 
 
 % === DTW SETTINGS ===
-dtw_mode = 'joint_states';  % 'position' oder 'joint_states'
+dtw_mode = 'position';  % 'position' oder 'joint_states'
 dtw_window = 0.2;
-normalize_dtw = true;
+normalize_dtw = false;
 use_rotation_alignment = false;
 
 % === LOWER BOUNDS ===
 lb_kim_keep_ratio = 1.0;
-lb_keogh_candidates = 100;
+lb_keogh_candidates = 50;
 
 % === PROGNOSE SETTINGS ===
 all_k_values = [5, 10, 25, 50];
@@ -53,27 +58,46 @@ fprintf('LB_Keogh target:   %d\n\n', lb_keogh_candidates);
 % ========================================================================
 %% SECTION 2: SETUP
 % ========================================================================
-
 timestamp = datestr(now, 'yyyymmdd_HHMMSS');
-
 if ~exist('results', 'dir')
     mkdir('results');
 end
-
 results_filename = sprintf('results/similarity_search_%s.csv', timestamp);
+
+% === EXCLUSION LIST (GT / Noisy Trajectories) ===
+% Diese IDs sollen NICHT im Random Sampling landen, um Data Leakage zu vermeiden
+exclude_ids = {
+    % clean
+    '1765989370'; '1765989294'; '1765988821'; '1765988920'; '1765989411';
+    % noisy - 2 mm
+    '1765990630'; '1765990747'; '1765990822'; '1765991047'; '1765991234';
+    % noisy - 5 mm
+    '1765991190'; '1765991445'; '1765991515'; '1765991949'; '1765991743'
+};
+
+% Formatieren für SQL: 'id1', 'id2', 'id3' ...
+exclude_str = sprintf('''%s'',', exclude_ids{:});
+exclude_str = exclude_str(1:end-1); % Letztes Komma entfernen
 
 % Sample queries
 conn = connectingToPostgres();
+
+% SQL Query mit NOT IN Filter
 query_sql = sprintf(['SELECT bahn_id FROM (' ...
     'SELECT DISTINCT b.bahn_id FROM bewegungsdaten.bahn_metadata b ' ...
     'INNER JOIN auswertung.info_sidtw s ON b.bahn_id = s.segment_id ' ...
-    'WHERE b.segment_id = b.bahn_id) AS distinct_bahnen ' ...
-    'ORDER BY md5(bahn_id || ''%d'') LIMIT %d'], random_seed, queries_quantity);
+    'WHERE b.segment_id = b.bahn_id ' ...
+    'AND b.bahn_id NOT IN (%s) ' ...
+    ') AS distinct_bahnen ' ...
+    'ORDER BY md5(bahn_id || ''%d'') LIMIT %d'], ...
+    exclude_str, random_seed, queries_quantity);
+
 query_results = fetch(conn, query_sql);
 query_ids = query_results.bahn_id;
 close(conn);
 
-fprintf('✓ Sampled %d queries\n', length(query_ids));
+fprintf('✓ Sampled %d queries (excluded %d GT/Noisy IDs)\n', ...
+    length(query_ids), length(exclude_ids));
 fprintf('✓ Output: %s\n\n', results_filename);
 
 % ========================================================================
@@ -146,114 +170,21 @@ for q_idx = 1:length(query_ids)
             query_bahn_seq = query_bahn_joint;
             query_segment_seqs = query_segments_joint;
         end
-        
-        % ================================================================
-        % BAHN-LEVEL: STAGE 1
-        % ================================================================
-        stage1_bahn_start = tic;
-        
-        emb_sql = sprintf(['SELECT position_embedding::text, joint_embedding::text, ' ...
-                          'orientation_embedding::text, velocity_embedding::text, ' ...
-                          'metadata_embedding::text ' ...
-                          'FROM %s.bahn_embeddings WHERE segment_id = ''%s'''], schema, query_id);
-        emb_result = fetch(conn, emb_sql);
-        
-        query_embeddings = {
-            parseEmbedding(emb_result.position_embedding), ...
-            parseEmbedding(emb_result.joint_embedding), ...
-            parseEmbedding(emb_result.orientation_embedding), ...
-            parseEmbedding(emb_result.velocity_embedding), ...
-            parseEmbedding(emb_result.metadata_embedding)
-        };
-        
-        modalities = {'position', 'joint', 'orientation', 'velocity', 'metadata'};
-        
-        execute(conn, 'SET hnsw.ef_search = 200');
-        execute(conn, 'SET search_path = "bewegungsdaten"');
-        
-        rrf_scores = containers.Map();
-        
-        for m = 1:5
-            if weights(m) == 0 || isempty(query_embeddings{m}), continue; end
             
-            emb_str = sprintf('[%s]', strjoin(string(query_embeddings{m}), ','));
-            col_name = sprintf('%s_embedding', modalities{m});
-            
-            search_sql = sprintf(['SELECT segment_id, %s <=> ''%s''::vector as distance ' ...
-                                 'FROM %s.bahn_embeddings ' ...
-                                 'WHERE segment_id = bahn_id AND segment_id != ''%s'' AND %s IS NOT NULL ' ...
-                                 'ORDER BY distance LIMIT %d'], ...
-                                 col_name, emb_str, schema, query_id, col_name, K);
-            
-            result = fetch(conn, search_sql);
-            
-            for rank = 1:height(result)
-                id = result.segment_id{rank};
-                if ~rrf_scores.isKey(id), rrf_scores(id) = 0; end
-                rrf_scores(id) = rrf_scores(id) + weights(m) / (rrf_k + rank);
-            end
-        end
-        
-        all_ids = keys(rrf_scores);
-        all_scores_vals = cell2mat(values(rrf_scores, all_ids));
-        [sorted_scores, sort_idx] = sort(all_scores_vals, 'descend');
-        sorted_ids = all_ids(sort_idx);
-        
-        num_keep = min(K, length(sorted_ids));
-        stage1_bahn_results = table(sorted_ids(1:num_keep)', sorted_scores(1:num_keep)', (1:num_keep)', ...
-            'VariableNames', {'bahn_id', 'rrf_score', 'rank'});
-        
-        stage1_bahn_time = toc(stage1_bahn_start);
-        
-        % ================================================================
-        % BAHN-LEVEL: LOAD DATA
-        % ================================================================
-        loading_bahn_start = tic;
-        
-        ids_to_load = stage1_bahn_results.bahn_id;
-        sequences = fetchBatchSequences(conn, schema, ids_to_load, 'bahn_id', dtw_mode);
-        stage1_bahn_results.sequence = sequences;
-        
-        loading_bahn_time = toc(loading_bahn_start);
-        
-        % ================================================================
-        % BAHN-LEVEL: STAGE 2
-        % ================================================================
-        config = struct();
-        config.mode = dtw_mode;
-        config.window = dtw_window;
-        config.normalize = normalize_dtw;
-        config.rot_align = use_rotation_alignment;
-        config.lb_kim_ratio = lb_kim_keep_ratio;
-        config.lb_keogh_n = lb_keogh_candidates;
-        
-        stage2_bahn_start = tic;
-        [stage2_bahn_results, bahn_stats] = performReranking(stage1_bahn_results, query_bahn_seq, config);
-        stage2_bahn_time = toc(stage2_bahn_start);
-        
-        % ================================================================
-        % SEGMENT-LEVEL: STAGE 1 + LOAD + STAGE 2
-        % ================================================================
-        stage1_seg_results = cell(num_segments, 1);
-        stage2_seg_results = cell(num_segments, 1);
-        seg_stats = cell(num_segments, 1);
-        seg_times = struct('stage1', zeros(num_segments,1), 'loading', zeros(num_segments,1), 'stage2', zeros(num_segments,1));
-        seg_lengths = zeros(num_segments, 1);
-        
-        for seg_idx = 1:num_segments
-            seg_id = query_segment_ids{seg_idx};
-            seg_lengths(seg_idx) = size(query_segment_seqs{seg_idx}, 1);
-            
-            % Stage 1
-            seg_s1_start = tic;
+        for i = 1:length(weights_conf)
+            weights = weights_conf{i};
+            % ================================================================
+            % BAHN-LEVEL: STAGE 1
+            % ================================================================
+            stage1_bahn_start = tic;
             
             emb_sql = sprintf(['SELECT position_embedding::text, joint_embedding::text, ' ...
                               'orientation_embedding::text, velocity_embedding::text, ' ...
                               'metadata_embedding::text ' ...
-                              'FROM %s.bahn_embeddings WHERE segment_id = ''%s'''], schema, seg_id);
+                              'FROM %s.bahn_embeddings WHERE segment_id = ''%s'''], schema, query_id);
             emb_result = fetch(conn, emb_sql);
             
-            seg_embeddings = {
+            query_embeddings = {
                 parseEmbedding(emb_result.position_embedding), ...
                 parseEmbedding(emb_result.joint_embedding), ...
                 parseEmbedding(emb_result.orientation_embedding), ...
@@ -261,285 +192,387 @@ for q_idx = 1:length(query_ids)
                 parseEmbedding(emb_result.metadata_embedding)
             };
             
-            rrf_scores_seg = containers.Map();
+            modalities = {'position', 'joint', 'orientation', 'velocity', 'metadata'};
             
+            execute(conn, 'SET hnsw.ef_search = 200');
+            execute(conn, 'SET search_path = "bewegungsdaten"');
+            
+            rrf_scores = containers.Map();
+                       
             for m = 1:5
-                if weights(m) == 0 || isempty(seg_embeddings{m}), continue; end
+                if weights(m) == 0 || isempty(query_embeddings{m}), continue; end
                 
-                emb_str = sprintf('[%s]', strjoin(string(seg_embeddings{m}), ','));
+                emb_str = sprintf('[%s]', strjoin(string(query_embeddings{m}), ','));
                 col_name = sprintf('%s_embedding', modalities{m});
                 
                 search_sql = sprintf(['SELECT segment_id, %s <=> ''%s''::vector as distance ' ...
                                      'FROM %s.bahn_embeddings ' ...
-                                     'WHERE segment_id != bahn_id AND segment_id != ''%s'' AND %s IS NOT NULL ' ...
+                                     'WHERE segment_id = bahn_id AND segment_id != ''%s'' AND %s IS NOT NULL ' ...
                                      'ORDER BY distance LIMIT %d'], ...
-                                     col_name, emb_str, schema, seg_id, col_name, K);
+                                     col_name, emb_str, schema, query_id, col_name, K*10);
                 
                 result = fetch(conn, search_sql);
                 
                 for rank = 1:height(result)
                     id = result.segment_id{rank};
-                    if ~rrf_scores_seg.isKey(id), rrf_scores_seg(id) = 0; end
-                    rrf_scores_seg(id) = rrf_scores_seg(id) + weights(m) / (rrf_k + rank);
+                    if ~rrf_scores.isKey(id), rrf_scores(id) = 0; end
+                    rrf_scores(id) = rrf_scores(id) + weights(m) / (rrf_k + rank);
                 end
             end
             
-            if ~isempty(rrf_scores_seg)
-                all_ids_seg = keys(rrf_scores_seg);
-                all_scores_seg = cell2mat(values(rrf_scores_seg, all_ids_seg));
-                [sorted_scores_seg, sort_idx_seg] = sort(all_scores_seg, 'descend');
-                sorted_ids_seg = all_ids_seg(sort_idx_seg);
-                num_keep_seg = min(K, length(sorted_ids_seg));
-                
-                stage1_seg_results{seg_idx} = table(sorted_ids_seg(1:num_keep_seg)', ...
-                    sorted_scores_seg(1:num_keep_seg)', (1:num_keep_seg)', ...
-                    'VariableNames', {'segment_id', 'rrf_score', 'rank'});
-            else
-                stage1_seg_results{seg_idx} = table();
-            end
+            all_ids = keys(rrf_scores);
+            all_scores_vals = cell2mat(values(rrf_scores, all_ids));
+            [sorted_scores, sort_idx] = sort(all_scores_vals, 'descend');
+            sorted_ids = all_ids(sort_idx);
             
-            seg_times.stage1(seg_idx) = toc(seg_s1_start);
+            num_keep = min(K, length(sorted_ids));
+            stage1_bahn_results = table(sorted_ids(1:num_keep)', sorted_scores(1:num_keep)', (1:num_keep)', ...
+                'VariableNames', {'bahn_id', 'rrf_score', 'rank'});
             
-            % Load
-            seg_load_start = tic;
-            if ~isempty(stage1_seg_results{seg_idx})
-                ids_to_load = stage1_seg_results{seg_idx}.segment_id;
-                sequences = fetchBatchSequences(conn, schema, ids_to_load, 'segment_id', dtw_mode);
-                stage1_seg_results{seg_idx}.sequence = sequences;
-            end
-            seg_times.loading(seg_idx) = toc(seg_load_start);
+            stage1_bahn_time = toc(stage1_bahn_start);
             
-            % Stage 2
-            seg_s2_start = tic;
-            if ~isempty(stage1_seg_results{seg_idx})
-                [stage2_seg_results{seg_idx}, seg_stats{seg_idx}] = performReranking(...
-                    stage1_seg_results{seg_idx}, query_segment_seqs{seg_idx}, config);
-            else
-                stage2_seg_results{seg_idx} = table();
-                seg_stats{seg_idx} = struct('lb_kim_calls', 0, 'lb_keogh_calls', 0, 'dtw_calls', 0);
-            end
-            seg_times.stage2(seg_idx) = toc(seg_s2_start);
-        end
-        
-        % ================================================================
-        % PROGNOSE + COLLECT RESULTS
-        % ================================================================
-        
-        % Ground Truth Bahn
-        gt_sql = sprintf(['SELECT sidtw_average_distance FROM auswertung.info_sidtw ' ...
-                          'WHERE segment_id = ''%s'''], query_id);
-        gt_result = fetch(conn, gt_sql);
-        gt_bahn = [];
-        if ~isempty(gt_result)
-            gt_bahn = gt_result.sidtw_average_distance(1);
-        end
-        
-        % For each K value
-        for k_idx = 1:length(all_k_values)
-            prognose_top_n = all_k_values(k_idx);
+            % ================================================================
+            % BAHN-LEVEL: LOAD DATA
+            % ================================================================
+            loading_bahn_start = tic;
             
-            if prognose_top_n > height(stage2_bahn_results)
-                continue;
-            end
+            ids_to_load = stage1_bahn_results.bahn_id;
+            sequences = fetchBatchSequences(conn, schema, ids_to_load, 'bahn_id', dtw_mode);
+            stage1_bahn_results.sequence = sequences;
             
-            % === BAHN DIRECT ===
-            [s1_simple, s1_weighted] = computePrognose(stage1_bahn_results, prognose_top_n, conn, 'rrf_score');
-            [s2_simple, s2_weighted] = computePrognose(stage2_bahn_results, prognose_top_n, conn, 'dtw_dist');
+            loading_bahn_time = toc(loading_bahn_start);
             
-            % === BAHN FROM SEGMENTS ===
-            seg_prognose_s1_simple = zeros(num_segments, 1);
-            seg_prognose_s1_weighted = zeros(num_segments, 1);
-            seg_prognose_s2_simple = zeros(num_segments, 1);
-            seg_prognose_s2_weighted = zeros(num_segments, 1);
+            % ================================================================
+            % BAHN-LEVEL: STAGE 2
+            % ================================================================
+            config = struct();
+            config.mode = dtw_mode;
+            config.window = dtw_window;
+            config.normalize = normalize_dtw;
+            config.rot_align = use_rotation_alignment;
+            config.lb_kim_ratio = lb_kim_keep_ratio;
+            config.lb_keogh_n = lb_keogh_candidates;
+            config.weights = strjoin(string(weights),',');
+            
+            stage2_bahn_start = tic;
+            [stage2_bahn_results, bahn_stats] = performReranking(stage1_bahn_results, query_bahn_seq, config);
+            stage2_bahn_time = toc(stage2_bahn_start);
+            
+            % ================================================================
+            % SEGMENT-LEVEL: STAGE 1 + LOAD + STAGE 2
+            % ================================================================
+            stage1_seg_results = cell(num_segments, 1);
+            stage2_seg_results = cell(num_segments, 1);
+            seg_stats = cell(num_segments, 1);
+            seg_times = struct('stage1', zeros(num_segments,1), 'loading', zeros(num_segments,1), 'stage2', zeros(num_segments,1));
+            seg_lengths = zeros(num_segments, 1);
             
             for seg_idx = 1:num_segments
-                if ~isempty(stage1_seg_results{seg_idx}) && height(stage1_seg_results{seg_idx}) >= prognose_top_n
-                    [seg_prognose_s1_simple(seg_idx), seg_prognose_s1_weighted(seg_idx)] = ...
-                        computePrognose(stage1_seg_results{seg_idx}, prognose_top_n, conn, 'rrf_score');
-                else
-                    seg_prognose_s1_simple(seg_idx) = NaN;
-                    seg_prognose_s1_weighted(seg_idx) = NaN;
+                seg_id = query_segment_ids{seg_idx};
+                seg_lengths(seg_idx) = size(query_segment_seqs{seg_idx}, 1);
+                
+                % Stage 1
+                seg_s1_start = tic;
+                
+                emb_sql = sprintf(['SELECT position_embedding::text, joint_embedding::text, ' ...
+                                  'orientation_embedding::text, velocity_embedding::text, ' ...
+                                  'metadata_embedding::text ' ...
+                                  'FROM %s.bahn_embeddings WHERE segment_id = ''%s'''], schema, seg_id);
+                emb_result = fetch(conn, emb_sql);
+                
+                seg_embeddings = {
+                    parseEmbedding(emb_result.position_embedding), ...
+                    parseEmbedding(emb_result.joint_embedding), ...
+                    parseEmbedding(emb_result.orientation_embedding), ...
+                    parseEmbedding(emb_result.velocity_embedding), ...
+                    parseEmbedding(emb_result.metadata_embedding)
+                };
+                
+                rrf_scores_seg = containers.Map();
+                
+                for m = 1:5
+                    if weights(m) == 0 || isempty(seg_embeddings{m}), continue; end
+                    
+                    emb_str = sprintf('[%s]', strjoin(string(seg_embeddings{m}), ','));
+                    col_name = sprintf('%s_embedding', modalities{m});
+                    
+                    search_sql = sprintf(['SELECT segment_id, %s <=> ''%s''::vector as distance ' ...
+                                         'FROM %s.bahn_embeddings ' ...
+                                         'WHERE segment_id != bahn_id AND segment_id != ''%s'' AND %s IS NOT NULL ' ...
+                                         'ORDER BY distance LIMIT %d'], ...
+                                         col_name, emb_str, schema, seg_id, col_name, K*2);
+                    
+                    result = fetch(conn, search_sql);
+                    
+                    for rank = 1:height(result)
+                        id = result.segment_id{rank};
+                        if ~rrf_scores_seg.isKey(id), rrf_scores_seg(id) = 0; end
+                        rrf_scores_seg(id) = rrf_scores_seg(id) + weights(m) / (rrf_k + rank);
+                    end
                 end
                 
-                if ~isempty(stage2_seg_results{seg_idx}) && height(stage2_seg_results{seg_idx}) >= prognose_top_n
-                    [seg_prognose_s2_simple(seg_idx), seg_prognose_s2_weighted(seg_idx)] = ...
-                        computePrognose(stage2_seg_results{seg_idx}, prognose_top_n, conn, 'dtw_dist');
+                if ~isempty(rrf_scores_seg)
+                    all_ids_seg = keys(rrf_scores_seg);
+                    all_scores_seg = cell2mat(values(rrf_scores_seg, all_ids_seg));
+                    [sorted_scores_seg, sort_idx_seg] = sort(all_scores_seg, 'descend');
+                    sorted_ids_seg = all_ids_seg(sort_idx_seg);
+                    num_keep_seg = min(K, length(sorted_ids_seg));
+                    
+                    stage1_seg_results{seg_idx} = table(sorted_ids_seg(1:num_keep_seg)', ...
+                        sorted_scores_seg(1:num_keep_seg)', (1:num_keep_seg)', ...
+                        'VariableNames', {'segment_id', 'rrf_score', 'rank'});
                 else
-                    seg_prognose_s2_simple(seg_idx) = NaN;
-                    seg_prognose_s2_weighted(seg_idx) = NaN;
+                    stage1_seg_results{seg_idx} = table();
                 end
+                
+                seg_times.stage1(seg_idx) = toc(seg_s1_start);
+                
+                % Load
+                seg_load_start = tic;
+                if ~isempty(stage1_seg_results{seg_idx})
+                    ids_to_load = stage1_seg_results{seg_idx}.segment_id;
+                    sequences = fetchBatchSequences(conn, schema, ids_to_load, 'segment_id', dtw_mode);
+                    stage1_seg_results{seg_idx}.sequence = sequences;
+                end
+                seg_times.loading(seg_idx) = toc(seg_load_start);
+                
+                % Stage 2
+                seg_s2_start = tic;
+                if ~isempty(stage1_seg_results{seg_idx})
+                    [stage2_seg_results{seg_idx}, seg_stats{seg_idx}] = performReranking(...
+                        stage1_seg_results{seg_idx}, query_segment_seqs{seg_idx}, config);
+                else
+                    stage2_seg_results{seg_idx} = table();
+                    seg_stats{seg_idx} = struct('lb_kim_calls', 0, 'lb_keogh_calls', 0, 'dtw_calls', 0);
+                end
+                seg_times.stage2(seg_idx) = toc(seg_s2_start);
             end
             
-            % Aggregate from segments
-            valid_s1 = ~isnan(seg_prognose_s1_simple);
-            valid_s2 = ~isnan(seg_prognose_s2_simple);
+            % ================================================================
+            % PROGNOSE + COLLECT RESULTS
+            % ================================================================
             
-            if any(valid_s1)
-                w = seg_lengths(valid_s1) / sum(seg_lengths(valid_s1));
-                agg_s1_simple = sum(w .* seg_prognose_s1_simple(valid_s1));
-                agg_s1_weighted = sum(w .* seg_prognose_s1_weighted(valid_s1));
-            else
-                agg_s1_simple = NaN; agg_s1_weighted = NaN;
+            % Ground Truth Bahn
+            gt_sql = sprintf(['SELECT sidtw_average_distance FROM auswertung.info_sidtw ' ...
+                              'WHERE segment_id = ''%s'''], query_id);
+            gt_result = fetch(conn, gt_sql);
+            gt_bahn = [];
+            if ~isempty(gt_result)
+                gt_bahn = gt_result.sidtw_average_distance(1);
             end
             
-            if any(valid_s2)
-                w = seg_lengths(valid_s2) / sum(seg_lengths(valid_s2));
-                agg_s2_simple = sum(w .* seg_prognose_s2_simple(valid_s2));
-                agg_s2_weighted = sum(w .* seg_prognose_s2_weighted(valid_s2));
-            else
-                agg_s2_simple = NaN; agg_s2_weighted = NaN;
-            end
-            
-            % === SAVE BAHN ROW ===
-            row = struct();
-            row.query_id = query_id;
-            row.segment_id = query_id;  % Für Bahn = query_id
-            row.level = 'bahn';
-            row.K = prognose_top_n;
-            row.length = size(query_bahn_position, 1);
-            row.num_segments = num_segments;
-            row.ground_truth = gt_bahn;
-            
-            % Direct prognose
-            row.direct_s1_simple = s1_simple;
-            row.direct_s1_weighted = s1_weighted;
-            row.direct_s2_simple = s2_simple;
-            row.direct_s2_weighted = s2_weighted;
-            
-            % From segments prognose
-            row.fromsegs_s1_simple = agg_s1_simple;
-            row.fromsegs_s1_weighted = agg_s1_weighted;
-            row.fromsegs_s2_simple = agg_s2_simple;
-            row.fromsegs_s2_weighted = agg_s2_weighted;
-            
-            % Errors
-            if ~isempty(gt_bahn)
-                row.err_direct_s1_simple = abs(gt_bahn - s1_simple);
-                row.err_direct_s1_weighted = abs(gt_bahn - s1_weighted);
-                row.err_direct_s2_simple = abs(gt_bahn - s2_simple);
-                row.err_direct_s2_weighted = abs(gt_bahn - s2_weighted);
-                row.err_fromsegs_s1_simple = abs(gt_bahn - agg_s1_simple);
-                row.err_fromsegs_s1_weighted = abs(gt_bahn - agg_s1_weighted);
-                row.err_fromsegs_s2_simple = abs(gt_bahn - agg_s2_simple);
-                row.err_fromsegs_s2_weighted = abs(gt_bahn - agg_s2_weighted);
-            else
-                row.err_direct_s1_simple = NaN;
-                row.err_direct_s1_weighted = NaN;
-                row.err_direct_s2_simple = NaN;
-                row.err_direct_s2_weighted = NaN;
-                row.err_fromsegs_s1_simple = NaN;
-                row.err_fromsegs_s1_weighted = NaN;
-                row.err_fromsegs_s2_simple = NaN;
-                row.err_fromsegs_s2_weighted = NaN;
-            end
-            
-            % Times
-            row.stage1_time_sec = stage1_bahn_time;
-            row.loading_time_sec = loading_bahn_time;
-            row.stage2_time_sec = stage2_bahn_time;
-            row.total_time_sec = stage1_bahn_time + loading_bahn_time + stage2_bahn_time;
-            
-            % Stats
-            row.lb_kim_calls = bahn_stats.lb_kim_calls;
-            row.lb_keogh_calls = bahn_stats.lb_keogh_calls;
-            row.dtw_calls = bahn_stats.dtw_calls;
-            row.dtw_mode = dtw_mode;
-            row.normalize_dtw = normalize_dtw;
-            
-            all_results = [all_results; row];
-        end
-        
-        % === SEGMENT ROWS ===
-        for seg_idx = 1:num_segments
-            seg_id = query_segment_ids{seg_idx};
-            
-            gt_seg_sql = sprintf(['SELECT sidtw_average_distance FROM auswertung.info_sidtw ' ...
-                                  'WHERE segment_id = ''%s'''], seg_id);
-            gt_seg_result = fetch(conn, gt_seg_sql);
-            gt_seg = [];
-            if ~isempty(gt_seg_result)
-                gt_seg = gt_seg_result.sidtw_average_distance(1);
-            end
-            
+            % For each K value
             for k_idx = 1:length(all_k_values)
                 prognose_top_n = all_k_values(k_idx);
                 
-                s1_tbl = stage1_seg_results{seg_idx};
-                s2_tbl = stage2_seg_results{seg_idx};
-                
-                if isempty(s2_tbl) || height(s2_tbl) < prognose_top_n
+                if prognose_top_n > height(stage2_bahn_results)
                     continue;
                 end
                 
-                [s1_simple, s1_weighted] = computePrognose(s1_tbl, prognose_top_n, conn, 'rrf_score');
-                [s2_simple, s2_weighted] = computePrognose(s2_tbl, prognose_top_n, conn, 'dtw_dist');
+                % === BAHN DIRECT ===
+                [s1_simple, s1_weighted] = computePrognose(stage1_bahn_results, prognose_top_n, conn, 'rrf_score');
+                [s2_simple, s2_weighted] = computePrognose(stage2_bahn_results, prognose_top_n, conn, 'dtw_dist');
                 
+                % === BAHN FROM SEGMENTS ===
+                seg_prognose_s1_simple = zeros(num_segments, 1);
+                seg_prognose_s1_weighted = zeros(num_segments, 1);
+                seg_prognose_s2_simple = zeros(num_segments, 1);
+                seg_prognose_s2_weighted = zeros(num_segments, 1);
+                
+                for seg_idx = 1:num_segments
+                    if ~isempty(stage1_seg_results{seg_idx}) && height(stage1_seg_results{seg_idx}) >= prognose_top_n
+                        [seg_prognose_s1_simple(seg_idx), seg_prognose_s1_weighted(seg_idx)] = ...
+                            computePrognose(stage1_seg_results{seg_idx}, prognose_top_n, conn, 'rrf_score');
+                    else
+                        seg_prognose_s1_simple(seg_idx) = NaN;
+                        seg_prognose_s1_weighted(seg_idx) = NaN;
+                    end
+                    
+                    if ~isempty(stage2_seg_results{seg_idx}) && height(stage2_seg_results{seg_idx}) >= prognose_top_n
+                        [seg_prognose_s2_simple(seg_idx), seg_prognose_s2_weighted(seg_idx)] = ...
+                            computePrognose(stage2_seg_results{seg_idx}, prognose_top_n, conn, 'dtw_dist');
+                    else
+                        seg_prognose_s2_simple(seg_idx) = NaN;
+                        seg_prognose_s2_weighted(seg_idx) = NaN;
+                    end
+                end
+                
+                % Aggregate from segments
+                valid_s1 = ~isnan(seg_prognose_s1_simple);
+                valid_s2 = ~isnan(seg_prognose_s2_simple);
+                
+                if any(valid_s1)
+                    w = seg_lengths(valid_s1) / sum(seg_lengths(valid_s1));
+                    agg_s1_simple = sum(w .* seg_prognose_s1_simple(valid_s1));
+                    agg_s1_weighted = sum(w .* seg_prognose_s1_weighted(valid_s1));
+                else
+                    agg_s1_simple = NaN; agg_s1_weighted = NaN;
+                end
+                
+                if any(valid_s2)
+                    w = seg_lengths(valid_s2) / sum(seg_lengths(valid_s2));
+                    agg_s2_simple = sum(w .* seg_prognose_s2_simple(valid_s2));
+                    agg_s2_weighted = sum(w .* seg_prognose_s2_weighted(valid_s2));
+                else
+                    agg_s2_simple = NaN; agg_s2_weighted = NaN;
+                end
+                
+                % === SAVE BAHN ROW ===
                 row = struct();
                 row.query_id = query_id;
-                row.segment_id = seg_id;
-                row.level = 'segment';
+                row.segment_id = query_id;  % Für Bahn = query_id
+                row.level = 'bahn';
                 row.K = prognose_top_n;
-                row.length = seg_lengths(seg_idx);
-                row.num_segments = 1;
-                row.ground_truth = gt_seg;
+                row.length = size(query_bahn_position, 1);
+                row.num_segments = num_segments;
+                row.ground_truth = gt_bahn;
                 
+                % Direct prognose
                 row.direct_s1_simple = s1_simple;
                 row.direct_s1_weighted = s1_weighted;
                 row.direct_s2_simple = s2_simple;
                 row.direct_s2_weighted = s2_weighted;
                 
-                row.fromsegs_s1_simple = NaN;
-                row.fromsegs_s1_weighted = NaN;
-                row.fromsegs_s2_simple = NaN;
-                row.fromsegs_s2_weighted = NaN;
+                % From segments prognose
+                row.fromsegs_s1_simple = agg_s1_simple;
+                row.fromsegs_s1_weighted = agg_s1_weighted;
+                row.fromsegs_s2_simple = agg_s2_simple;
+                row.fromsegs_s2_weighted = agg_s2_weighted;
                 
-                if ~isempty(gt_seg)
-                    row.err_direct_s1_simple = abs(gt_seg - s1_simple);
-                    row.err_direct_s1_weighted = abs(gt_seg - s1_weighted);
-                    row.err_direct_s2_simple = abs(gt_seg - s2_simple);
-                    row.err_direct_s2_weighted = abs(gt_seg - s2_weighted);
+                % Errors
+                if ~isempty(gt_bahn)
+                    row.err_direct_s1_simple = abs(gt_bahn - s1_simple);
+                    row.err_direct_s1_weighted = abs(gt_bahn - s1_weighted);
+                    row.err_direct_s2_simple = abs(gt_bahn - s2_simple);
+                    row.err_direct_s2_weighted = abs(gt_bahn - s2_weighted);
+                    row.err_fromsegs_s1_simple = abs(gt_bahn - agg_s1_simple);
+                    row.err_fromsegs_s1_weighted = abs(gt_bahn - agg_s1_weighted);
+                    row.err_fromsegs_s2_simple = abs(gt_bahn - agg_s2_simple);
+                    row.err_fromsegs_s2_weighted = abs(gt_bahn - agg_s2_weighted);
                 else
                     row.err_direct_s1_simple = NaN;
                     row.err_direct_s1_weighted = NaN;
                     row.err_direct_s2_simple = NaN;
                     row.err_direct_s2_weighted = NaN;
+                    row.err_fromsegs_s1_simple = NaN;
+                    row.err_fromsegs_s1_weighted = NaN;
+                    row.err_fromsegs_s2_simple = NaN;
+                    row.err_fromsegs_s2_weighted = NaN;
                 end
                 
-                row.err_fromsegs_s1_simple = NaN;
-                row.err_fromsegs_s1_weighted = NaN;
-                row.err_fromsegs_s2_simple = NaN;
-                row.err_fromsegs_s2_weighted = NaN;
+                % Times
+                row.stage1_time_sec = stage1_bahn_time;
+                row.loading_time_sec = loading_bahn_time;
+                row.stage2_time_sec = stage2_bahn_time;
+                row.total_time_sec = stage1_bahn_time + loading_bahn_time + stage2_bahn_time;
                 
-                row.stage1_time_sec = seg_times.stage1(seg_idx);
-                row.loading_time_sec = seg_times.loading(seg_idx);
-                row.stage2_time_sec = seg_times.stage2(seg_idx);
-                row.total_time_sec = seg_times.stage1(seg_idx) + seg_times.loading(seg_idx) + seg_times.stage2(seg_idx);
-                
-                if ~isempty(seg_stats{seg_idx})
-                    row.lb_kim_calls = seg_stats{seg_idx}.lb_kim_calls;
-                    row.lb_keogh_calls = seg_stats{seg_idx}.lb_keogh_calls;
-                    row.dtw_calls = seg_stats{seg_idx}.dtw_calls;
-                else
-                    row.lb_kim_calls = 0;
-                    row.lb_keogh_calls = 0;
-                    row.dtw_calls = 0;
-                end
-
+                % Stats
+                row.lb_kim_calls = bahn_stats.lb_kim_calls;
+                row.lb_keogh_calls = bahn_stats.lb_keogh_calls;
+                row.dtw_calls = bahn_stats.dtw_calls;
                 row.dtw_mode = dtw_mode;
                 row.normalize_dtw = normalize_dtw;
+                row.weights = strjoin(string(weights),',');
                 
                 all_results = [all_results; row];
             end
+            
+            % === SEGMENT ROWS ===
+            for seg_idx = 1:num_segments
+                seg_id = query_segment_ids{seg_idx};
+                
+                gt_seg_sql = sprintf(['SELECT sidtw_average_distance FROM auswertung.info_sidtw ' ...
+                                      'WHERE segment_id = ''%s'''], seg_id);
+                gt_seg_result = fetch(conn, gt_seg_sql);
+                gt_seg = [];
+                if ~isempty(gt_seg_result)
+                    gt_seg = gt_seg_result.sidtw_average_distance(1);
+                end
+                
+                for k_idx = 1:length(all_k_values)
+                    prognose_top_n = all_k_values(k_idx);
+                    
+                    s1_tbl = stage1_seg_results{seg_idx};
+                    s2_tbl = stage2_seg_results{seg_idx};
+                    
+                    if isempty(s2_tbl) || height(s2_tbl) < prognose_top_n
+                        continue;
+                    end
+                    
+                    [s1_simple, s1_weighted] = computePrognose(s1_tbl, prognose_top_n, conn, 'rrf_score');
+                    [s2_simple, s2_weighted] = computePrognose(s2_tbl, prognose_top_n, conn, 'dtw_dist');
+                    
+                    row = struct();
+                    row.query_id = query_id;
+                    row.segment_id = seg_id;
+                    row.level = 'segment';
+                    row.K = prognose_top_n;
+                    row.length = seg_lengths(seg_idx);
+                    row.num_segments = 1;
+                    row.ground_truth = gt_seg;
+                    
+                    row.direct_s1_simple = s1_simple;
+                    row.direct_s1_weighted = s1_weighted;
+                    row.direct_s2_simple = s2_simple;
+                    row.direct_s2_weighted = s2_weighted;
+                    
+                    row.fromsegs_s1_simple = NaN;
+                    row.fromsegs_s1_weighted = NaN;
+                    row.fromsegs_s2_simple = NaN;
+                    row.fromsegs_s2_weighted = NaN;
+                    
+                    if ~isempty(gt_seg)
+                        row.err_direct_s1_simple = abs(gt_seg - s1_simple);
+                        row.err_direct_s1_weighted = abs(gt_seg - s1_weighted);
+                        row.err_direct_s2_simple = abs(gt_seg - s2_simple);
+                        row.err_direct_s2_weighted = abs(gt_seg - s2_weighted);
+                    else
+                        row.err_direct_s1_simple = NaN;
+                        row.err_direct_s1_weighted = NaN;
+                        row.err_direct_s2_simple = NaN;
+                        row.err_direct_s2_weighted = NaN;
+                    end
+                    
+                    row.err_fromsegs_s1_simple = NaN;
+                    row.err_fromsegs_s1_weighted = NaN;
+                    row.err_fromsegs_s2_simple = NaN;
+                    row.err_fromsegs_s2_weighted = NaN;
+                    
+                    row.stage1_time_sec = seg_times.stage1(seg_idx);
+                    row.loading_time_sec = seg_times.loading(seg_idx);
+                    row.stage2_time_sec = seg_times.stage2(seg_idx);
+                    row.total_time_sec = seg_times.stage1(seg_idx) + seg_times.loading(seg_idx) + seg_times.stage2(seg_idx);
+                    
+                    if ~isempty(seg_stats{seg_idx})
+                        row.lb_kim_calls = seg_stats{seg_idx}.lb_kim_calls;
+                        row.lb_keogh_calls = seg_stats{seg_idx}.lb_keogh_calls;
+                        row.dtw_calls = seg_stats{seg_idx}.dtw_calls;
+                    else
+                        row.lb_kim_calls = 0;
+                        row.lb_keogh_calls = 0;
+                        row.dtw_calls = 0;
+                    end
+    
+                    row.dtw_mode = dtw_mode;
+                    row.normalize_dtw = normalize_dtw;
+                    row.weights = strjoin(string(weights),',');
+                    
+                    all_results = [all_results; row];
+                end
+            end
+            
+            
+            fprintf('  ✓ Complete (Bahn: %.2fs, %d DTW calls)\n\n', ...
+                stage1_bahn_time + loading_bahn_time + stage2_bahn_time, bahn_stats.dtw_calls);
+
         end
-        
+
         close(conn);
-        fprintf('  ✓ Complete (Bahn: %.2fs, %d DTW calls)\n\n', ...
-            stage1_bahn_time + loading_bahn_time + stage2_bahn_time, bahn_stats.dtw_calls);
-        
-    catch ME
-        warning('Query %s failed: %s', query_id, ME.message);
-        try close(conn); catch; end
-    end
+            
+        catch ME
+            warning('Query %s failed: %s', query_id, ME.message);
+            try close(conn); catch; end
+        end
 end
 
 overall_time = toc(overall_start);

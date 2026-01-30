@@ -43,3 +43,5 @@ codegen/
 .DS_STORE
 resources/
 test/
+similarity/results/
+similarity/results/experiment_data.xlsx

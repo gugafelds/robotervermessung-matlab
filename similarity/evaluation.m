@@ -10,16 +10,17 @@ clear; clc;
 
 %% === CONFIGURATION ===
 % Filter settings
-cfg.db_size = 5000;
+cfg.db_size = 7500;
 cfg.top_k = 50;
 cfg.dtw_norm = 0;
+cfg.weight_modes_tab3 = {'Joint + All', 'Position + All'};
 
 % Composite weights (summe = 1.0)
 cfg.w.spearman = 0.0;
 cfg.w.ndcg50_dtw = 0.0;
-cfg.w.ndcg50_gt = 0.0;
+cfg.w.ndcg50_gt = 1.0;
 cfg.w.r50_dtw = 0.0;
-cfg.w.r50_gt = 1.0;
+cfg.w.r50_gt = 0.0;
 
 % Paths
 cfg.output_folder = 'results';
@@ -41,7 +42,7 @@ appendCSVtoExcel('results/similarity_search_*.csv', ...
 data_table = readtable('experiment_data.xlsx', 'Sheet', 'embedding_validation', 'VariableNamingRule', 'preserve');
 fprintf('Loaded: %d rows\n', height(data_table));
 
-filtered = data_table(data_table.database_size == cfg.db_size & ...
+filtered = data_table( data_table.database_size == cfg.db_size & ...
                       data_table.top_k == cfg.top_k & ...
                       data_table.dtw_normalize == cfg.dtw_norm, :);
 fprintf('Filtered: %d rows\n\n', height(filtered));
@@ -53,14 +54,20 @@ baseline_weights = {'Joint only', 'Position only'};
 filtered_baselines = [];
 for m = 1:length(dtw_modes)
     mask = strcmp(data_table.dtw_mode, dtw_modes{m}) & ...
+           strcmp(data_table.weight_mode, baseline_weights{m}) & ...
            data_table.top_k == cfg.top_k;
     filtered_baselines = [filtered_baselines; data_table(mask, :)];
 end
 fprintf('✓ Baselines: %d experiments\n\n', height(filtered_baselines));
 
+exclude_configs = {'Multi-15', 'Multi-25'};
+% Falls deine Spalte anders heißt (z.B. 'emb_name'), hier anpassen:
+keep_mask = ~ismember(filtered_baselines.emb_config, exclude_configs);
+filtered_baselines = filtered_baselines(keep_mask, :);
+
 fprintf('Creating Figure 1...\n');
 
-fig1 = figure('Position', [100, 100, 750, 500], 'Color', 'w');
+fig1 = figure('Position', [200, 100, 750, 500], 'Color', 'w');
 hold on;
 
 % Farben
@@ -87,18 +94,88 @@ d = filtered_baselines(strcmpi(filtered_baselines.level, 'segment') & strcmp(fil
 [dims, comp] = calcDimComposite(d, 3, cfg.w);
 h4 = plot(dims, comp, 's--', 'Color', c_shape*0.6, 'MarkerFaceColor', c_shape*0.6, 'LineWidth', 2, 'MarkerSize', 8);
 
+%ylim([0.299,0.801])
+ylim([0.8599, 0.9601])
+
 % Styling
 set(gca, 'XScale', 'log', 'XTick', [6,15,30,75,150,300,600,1200,3600], ...
     'FontName', 'Courier New', 'FontWeight', 'bold', 'FontSize', 18);
+set(gca, 'YTick', [0.86,0.88,0.90,0.92,0.94,0.96],'FontName', 'Courier New', 'FontWeight', 'bold', 'FontSize', 18);
+%set(gca, 'YTick', [0.3,0.4,0.5,0.6,0.7,0.8],'FontName', 'Courier New', 'FontWeight', 'bold', 'FontSize', 18);
 xlabel('Total embedding dimensions', 'FontWeight', 'bold', 'FontSize', 20);
-ylabel('Composite score', 'FontWeight', 'bold', 'FontSize', 20);
-legend([h1 h2 h3 h4], {'Motion (Traj.)', 'Shape (Traj.)', 'Motion (Seg.)', 'Shape (Seg.)'}, 'Location', 'best', 'FontSize', 14);
-ax = gca; ax.Position = [0.14 0.14 0.84 0.84]; ax.YGrid = 'on';
+ylabel('NDCG@50_{GT}', 'FontWeight', 'bold', 'FontSize', 20);
+%ylabel('Spearman_{500}', 'FontWeight', 'bold', 'FontSize', 20);
+legend([h1 h2 h3 h4], {'Motion (T)', 'Shape (T)', 'Motion (S)', 'Shape (S)'}, 'Location', 'best', 'FontSize', 14);
+ax = gca; ax.Position = [0.15 0.14 0.84 0.84]; ax.YGrid = 'on';
 hold off;
 
-if cfg.save_figures
-    exportgraphics(gca, fullfile(figure_folder, 'dimensionality.pdf'));
+exportgraphics(gca, fullfile(cfg.figure_folder, 'dimensionality_ndcg_baseline.pdf'));
+
+%% FIGURE 1: DIMENSIONALITY (BASELINES)
+dtw_modes = {'joint_states', 'position'};
+baseline_weights = {'Joint + All', 'Pos + All'};
+
+filtered_baselines = [];
+for m = 1:length(dtw_modes)
+    mask = strcmp(data_table.dtw_mode, dtw_modes{m}) & ...
+           strcmp(data_table.weight_mode, baseline_weights{m}) & ...
+           data_table.top_k == cfg.top_k;
+    filtered_baselines = [filtered_baselines; data_table(mask, :)];
 end
+fprintf('✓ Baselines: %d experiments\n\n', height(filtered_baselines));
+
+exclude_configs = {'Multi-15', 'Multi-25'};
+% Falls deine Spalte anders heißt (z.B. 'emb_name'), hier anpassen:
+keep_mask = ~ismember(filtered_baselines.emb_config, exclude_configs);
+filtered_baselines = filtered_baselines(keep_mask, :);
+
+fprintf('Creating Figure 1...\n');
+
+fig1 = figure('Position', [200, 100, 750, 500], 'Color', 'w');
+hold on;
+
+% Farben
+c_motion = [0.86, 0.13, 0.15];
+c_shape  = [0.15, 0.39, 0.91];
+
+% Trajectory - Motion
+d = filtered_baselines(strcmpi(filtered_baselines.level, 'bahn') & strcmp(filtered_baselines.dtw_mode, 'joint_states'), :);
+[dims, comp] = calcDimComposite(d, 6, cfg.w);
+h1 = plot(dims, comp, 'o-', 'Color', c_motion, 'MarkerFaceColor', c_motion, 'LineWidth', 3, 'MarkerSize', 11);
+
+% Trajectory - Shape
+d = filtered_baselines(strcmpi(filtered_baselines.level, 'bahn') & strcmp(filtered_baselines.dtw_mode, 'position'), :);
+[dims, comp] = calcDimComposite(d, 3, cfg.w);
+h2 = plot(dims, comp, 's-', 'Color', c_shape, 'MarkerFaceColor', c_shape, 'LineWidth', 3, 'MarkerSize', 11);
+
+% Segment - Motion
+d = filtered_baselines(strcmp(filtered_baselines.dtw_mode, 'joint_states'), :);
+[dims, comp] = calcDimComposite(d, 6, cfg.w);
+h3 = plot(dims, comp, 'o--', 'Color', c_motion*0.6, 'MarkerFaceColor', c_motion*0.6, 'LineWidth', 2, 'MarkerSize', 8);
+
+% Segment - Shape
+d = filtered_baselines(strcmpi(filtered_baselines.level, 'segment') & strcmp(filtered_baselines.dtw_mode, 'position'), :);
+[dims, comp] = calcDimComposite(d, 3, cfg.w);
+h4 = plot(dims, comp, 's--', 'Color', c_shape*0.6, 'MarkerFaceColor', c_shape*0.6, 'LineWidth', 2, 'MarkerSize', 8);
+
+
+%ylim([0.299,0.801])
+ylim([0.8599, 0.9601])
+
+% Styling
+set(gca, 'XScale', 'log', 'XTick', [6,15,30,60,150,300,600,1200,3600], ...
+    'FontName', 'Courier New', 'FontWeight', 'bold', 'FontSize', 18);
+set(gca, 'YTick', [0.86,0.88,0.90,0.92,0.94,0.96], 'FontName', 'Courier New', 'FontWeight', 'bold', 'FontSize', 18);
+%set(gca, 'YTick', [0.3,0.4,0.5,0.6,0.7,0.8],'FontName', 'Courier New', 'FontWeight', 'bold', 'FontSize', 18);
+xlabel('Total embedding dimensions', 'FontWeight', 'bold', 'FontSize', 20);
+ylabel('NDCG@50_{GT}', 'FontWeight', 'bold', 'FontSize', 20);
+%ylabel('Spearman_{500}', 'FontWeight', 'bold', 'FontSize', 20);
+legend([h1 h2 h3 h4], {'Motion (T)', 'Shape (T)', 'Motion (S)', 'Shape (S)'}, 'Location', [0.75000000222524,0.282500002622604,0.217333328882853,0.186999994754791], 'FontSize', 14);
+ax = gca; ax.Position = [0.15 0.14 0.84 0.84]; ax.YGrid = 'on';
+hold off;
+
+exportgraphics(gca, fullfile(cfg.figure_folder, 'dimensionality_ndcg_all.pdf'));
+
 
 %% === TABLE 1 ===
 table1_data = {};
@@ -122,23 +199,38 @@ for lvl = 1:length(levels)
             metrics = calcMetrics(d, cfg.w);
             table1_data(end+1, :) = {level_labels{lvl}, mode_labels{m}, baseline_weights{m}, ...
                 dims_unique(i), dims_unique(i) * dim_multiplier(m), height(d), ...
-                metrics.spearman, metrics.ndcg50_dtw, metrics.ndcg50_gt, metrics.composite};
+                metrics.spearman, metrics.ndcg50_dtw, metrics.ndcg50_gt,  ...
+                metrics.ndcg10_dtw, metrics.ndcg10_gt, ...
+                metrics.r50_dtw , metrics.r50_gt, ...
+                metrics.r10_dtw, metrics.r10_gt, ...
+                metrics.composite};
         end
     end
 end
 
 T1 = cell2table(table1_data, 'VariableNames', ...
     {'Level', 'Mode', 'Config', 'Dims_Per_Param', 'Actual_Dims', 'N', ...
-    'Spearman', 'NDCG50_DTW', 'NDCG50_GT', 'Composite'});
+    'Spearman', 'NDCG50_DTW', 'NDCG50_GT', ...
+    'NDCG10_DTW', 'NDCG10_GT', ...
+    'R50_DTW', 'R50_GT', ...
+    'R10_DTW', 'R10_GT', ...
+    'Composite'});
 T1 = sortrows(T1, {'Level', 'Mode', 'Composite'}, {'ascend', 'ascend', 'descend'});
 writetable(T1, fullfile('results/', 'table1_dimensionality.csv'));
 fprintf('✓ Saved: table1_dimensionality.csv\n\n');
 
 %% === TABLE: EMBEDDING CONFIGS ===
 fprintf('Creating Embedding Config Table...\n');
-data = data_table(data_table.database_size == cfg.db_size & ...
-                  data_table.top_k == cfg.top_k & ...
-                  data_table.dtw_normalize == cfg.dtw_norm, :);
+
+for i = 1:length(cfg.weight_modes_tab3)
+    data = data_table(data_table.database_size == cfg.db_size & ...
+                strcmpi(data_table.weight_mode, cfg.weight_modes_tab3{i}) & ...
+              data_table.top_k == cfg.top_k & ...
+              data_table.dtw_normalize == cfg.dtw_norm, :);
+
+end
+
+
 configs = unique(data.emb_config);
 table_data = {};
 
@@ -154,33 +246,27 @@ for c = 1:length(configs)
     metrics = calcMetrics(d, cfg.w);
     
     table_data(end+1, :) = {config_name, n_coarse, n_fine, total_motion, total_shape, height(d), ...
-        metrics.spearman, std(d.spearman_dtw_eb), ...
-        metrics.ndcg50_dtw, std(d.ndcg_50_dtw_eb, 'omitnan'), ...
-        metrics.ndcg50_gt, std(d.ndcg_50_gt_eb, 'omitnan'), ...
+        metrics.spearman, ...
+        metrics.ndcg50_dtw, metrics.ndcg50_gt,  ...
+        metrics.ndcg10_dtw, metrics.ndcg10_gt, ...
+        metrics.r50_dtw , metrics.r50_gt, ...
+        metrics.r10_dtw, metrics.r10_gt, ...
         metrics.composite};
 end
 
 T = cell2table(table_data, 'VariableNames', ...
     {'Config', 'n_c', 'n_f', 'Dims_Motion', 'Dims_Shape', 'N', ...
-    'Spearman_Mean', 'Spearman_Std', ...
-    'NDCG50_DTW_Mean', 'NDCG50_DTW_Std', ...
-    'NDCG50_GT_Mean', 'NDCG50_GT_Std', ...
+    'Spearman', ...
+    'NDCG50_DTW', 'NDCG50_GT', ...
+    'NDCG10_DTW', 'NDCG10_GT', ...
+    'R50_DTW', 'R50_GT', ...
+    'R10_DTW', 'R10_GT', ...
     'Composite'});
 T = sortrows(T, 'Composite', 'descend');
 disp(T);
-writetable(T, fullfile(cfg.output_folder, 'table_embedding_configs.csv'));
+writetable(T, fullfile(cfg.output_folder, 'table3_embedding_configs.csv'));
 fprintf('✓ Saved: table_embedding_configs.csv\n\n');
 
-% --- LaTeX Export ---
-fprintf('=== LaTeX ===\n');
-for i = 1:height(T)
-    fprintf('%s & %d & %d & %d & %d & %d & %.3f$\\pm$%.3f & %.3f$\\pm$%.3f & %.3f$\\pm$%.3f & %.3f \\\\\n', ...
-        T.Config{i}, T.n_c(i), T.n_f(i), T.Dims_Motion(i), T.Dims_Shape(i), T.N(i), ...
-        T.Spearman_Mean(i), T.Spearman_Std(i), ...
-        T.NDCG50_DTW_Mean(i), T.NDCG50_DTW_Std(i), ...
-        T.NDCG50_GT_Mean(i), T.NDCG50_GT_Std(i), ...
-        T.Composite(i));
-end
 
 % %% === DATA EXPLORATION: Parameter Coverage ===
 % fprintf('\n');
@@ -375,6 +461,10 @@ function metrics = calcMetrics(data, w)
     metrics.ndcg50_gt = mean(data.ndcg_50_gt_eb, 'omitnan');
     metrics.r50_dtw = mean(data.r50_dtw_eb);
     metrics.r50_gt = mean(data.r50_gt_eb);
+    metrics.r10_dtw = mean(data.r10_dtw_eb);
+    metrics.r10_gt = mean(data.r10_gt_eb);
+    metrics.ndcg10_dtw = mean(data.ndcg_10_dtw_eb);
+    metrics.ndcg10_gt = mean(data.ndcg_10_gt_eb);
     metrics.composite = w.spearman * metrics.spearman + ...
                         w.ndcg50_dtw * metrics.ndcg50_dtw + ...
                         w.ndcg50_gt * metrics.ndcg50_gt + ...

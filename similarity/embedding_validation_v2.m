@@ -7,34 +7,63 @@ addpath(genpath('../lasertracker'));
 addpath(genpath('../methods'));
 
 % === Experiment Settings ===
-database_sample_size = 5000;
-random_seed = 42;
+database_sample_size = 7500;
+random_seed = 21;
 top_k = 50;
 
 % === Query IDs ===
 query_ids = {
+    % linear
     %% clean
-    '1765989370'; % clean, np = 3 / 10 GT
-    '1765989294'; % clean, np = 3 / 20 GT
-    '1765988821'; % clean, np = 3 / 30 GT
-    '1765988920'; % clean; np = 3 / 40 GT
-    '1765989411'; % clean; np = 3 / 50 GT
+    %'1765989370'; % clean, np = 3 / 10 GT
+    %'1765989294'; % clean, np = 3 / 20 GT
+    %'1765988821'; % clean, np = 3 / 30 GT
+    %'1765988920'; % clean; np = 3 / 40 GT
+    %'1765989411'; % clean; np = 3 / 50 GT
     
     %% noisy - 2 mm
 
-    '1765990630'; % noisy; np = 3 / 10 GT
-    '1765990747'; % noisy; np = 3 / 20 GT
-    '1765990822'; % noisy; np = 3 / 30 GT
-    '1765991047'; % noisy; np = 3 / 40 GT
-    '1765991234'; % noisy; np = 3 / 50 GT
+    %'1765990630'; % noisy; np = 3 / 10 GT
+    %'1765990747'; % noisy; np = 3 / 20 GT
+    %'1765990822'; % noisy; np = 3 / 30 GT
+    %'1765991047'; % noisy; np = 3 / 40 GT
+    %'1765991234'; % noisy; np = 3 / 50 GT
     
     %% noisy - 5 mm
 
-    '1765991190'; % noisy; np = 3 / 10 GT
-    '1765991445'; % noisy; np = 3 / 20 GT
-    '1765991515'; % noisy; np = 3 / 30 GT
-    '1765991949'; % noisy; np = 3 / 40 GT 
-    '1765991743'; % noisy; np = 3 / 50 GT
+    %'1765991190'; % noisy; np = 3 / 10 GT
+    %'1765991445'; % noisy; np = 3 / 20 GT
+    %'1765991515'; % noisy; np = 3 / 30 GT
+    %'1765991949'; % noisy; np = 3 / 40 GT 
+    %'1765991743'; % noisy; np = 3 / 50 GT
+
+    % zirkular
+    %% clean
+    '1769770498'; % clean, np = 3 / 10 GT
+    '1769770684'; % clean, np = 3 / 20 GT
+    '1769770935'; % clean, np = 3 / 30 GT
+    '1769771107'; % clean; np = 3 / 40 GT
+    '1769771447'; % clean; np = 3 / 50 GT
+    
+    %% noisy - 2 mm
+
+    %'1769773928'; % noisy; np = 3 / 10 GT
+    %'1769772060'; % noisy; np = 3 / 20 GT
+    %'1769772213'; % noisy; np = 3 / 30 GT
+    %'1769773985'; % noisy; np = 3 / 40 GT
+    %'1769774278'; % noisy; np = 3 / 50 GT
+    
+    %% noisy - 5 mm
+
+    %'1769772609'; % noisy; np = 3 / 10 GT
+    %'1769773593'; % noisy; np = 3 / 20 GT
+    %'1769772776'; % noisy; np = 3 / 30 GT
+    %'1769772900'; % noisy; np = 3 / 39 (40) GT 
+    %'1769773333'; % noisy; np = 3 / 50 GT
+
+    %% noise - 10 mm
+
+    %'1769774581'; %noise; np = 3 / 10 GT
     };
 
 % === Embedding Configs: {name, n_coarse, n_fine, multi_scale} ===
@@ -72,8 +101,8 @@ weight_mode_configs = {
 dtw_window = 0.2;
 dtw_normalize = false;
 dtw_rot_align = false;
-lb_kim_ratio = 0.2;
-lb_keogh_n = top_k * 5;
+lb_kim_ratio = 1.0;
+lb_keogh_n = top_k * 10;
 
 % === Counts ===
 num_queries = length(query_ids);

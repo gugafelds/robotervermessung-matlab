@@ -9,8 +9,18 @@ conn = connectingToPostgres();
 target_records = {
     'record_20251217_173659';
     'record_20251217_180722';
-    'record_20251217_181551'
+    'record_20260130_123353';
 };
+
+% Zusätzliche Records (mit Transparenz im Hintergrund)
+additional_records = {
+     %'record_20260130_130116';
+     %'record_20260130_125157';
+     %'record_20260130_124526';
+     %'record_20260130_122226';
+};
+
+additional_alpha = 0.3;  % Transparenz für zusätzliche Records
 
 %% 3. Zoom-Boxen automatisch aus bahn_events laden (je Record ein Eckpunkt)
 fprintf('Lade Eckpunkte aus bahn_events...\n');
@@ -56,9 +66,9 @@ for r = 1:length(target_records)
         cy = eventsData.y_reached(event_idx)-4;
         cz = eventsData.z_reached(event_idx)+4;
     else
-        cx = eventsData.x_reached(event_idx);
-        cy = eventsData.y_reached(event_idx);
-        cz = eventsData.z_reached(event_idx)-10;
+        cx = eventsData.x_reached(event_idx-1)+2;
+        cy = eventsData.y_reached(event_idx-1)+2;
+        cz = eventsData.z_reached(event_idx-1)+2;
     end
     
     
@@ -86,8 +96,8 @@ box_colors = [
     0.850, 0.325, 0.098;  % Orange
     0.466, 0.674, 0.188   % Grün
 ];
-box_alpha = 0.10;
-box_edge_alpha = 0.4;
+box_alpha = 0.15;
+box_edge_alpha = 0.8;
 
 %% 5. Figure mit kompaktem Layout erstellen
 fig = figure('Name', 'Multi-Record 3D Detail-Vergleich', ...
@@ -115,7 +125,13 @@ main_width = 0.67;
 main_height = 1 - margin_bottom - margin_top;
 axMain = axes('Position', [margin_left, margin_bottom, main_width, main_height]);
 hold on; grid on; axis equal;
-view(120,25);
+view(140,28);
+xlim(axMain,[900,2000]);
+ylim(axMain,[-600,750]);
+zlim(axMain, [300, 1400]);
+xticks([900, 1200, 1500, 1800]);
+yticks([-600, -300, 0, 300, 600]);
+zticks([600,900,1200]);
 xlabel('X [mm]', 'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Courier New');
 ylabel('Y [mm]', 'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Courier New');
 zlabel('Z [mm]', 'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Courier New');
@@ -152,6 +168,10 @@ end
 %% 6. Daten laden und plotten (mit Farbverlauf)
 fprintf('Lade Bahndaten aus der Datenbank...\n');
 
+% Downsampling-Faktor
+downsample_factor = 15;  % Nur jeden 10. Punkt plotten
+
+% Erst die Haupt-Records (highlighted)
 for r = 1:length(target_records)
     rec_name = target_records{r};
     fprintf('  Record %d/%d: %s\n', r, length(target_records), rec_name);
@@ -188,15 +208,21 @@ for r = 1:length(target_records)
             y = data.y_soll;
             z = data.z_soll;
             
+            % Downsampling
+            idx = 1:downsample_factor:length(x);
+            x = x(idx);
+            y = y(idx);
+            z = z(idx);
+            
             plot3(axMain, x, y, z, ...
                 'Color', [bahn_color, 0.6], ...
-                'LineWidth', 2.5, ...
+                'LineWidth', 3.5, ...
                 'HandleVisibility', 'off');
             
             for j = 1:3
                 plot3(axZoom(j), x, y, z, ...
                     'Color', [bahn_color, 0.9], ...
-                    'LineWidth', 1.5);
+                    'LineWidth', 2.0);
             end
             
         catch ME
@@ -205,21 +231,70 @@ for r = 1:length(target_records)
     end
     
     if r == 1
-    plot3(axMain, NaN, NaN, NaN, 'Color', base_color, 'LineWidth', 3, ...
+    plot3(axMain, NaN, NaN, NaN, 'Color', bahn_color, 'LineWidth', 3, ...
         'DisplayName', ' 0 mm');
     
     elseif r == 2
 
-    plot3(axMain, NaN, NaN, NaN, 'Color', base_color, 'LineWidth', 3, ...
+    plot3(axMain, NaN, NaN, NaN, 'Color', bahn_color, 'LineWidth', 3, ...
         'DisplayName', ' 2 mm');
 
     else
 
-    plot3(axMain, NaN, NaN, NaN, 'Color', base_color, 'LineWidth', 3, ...
+    plot3(axMain, NaN, NaN, NaN, 'Color', bahn_color, 'LineWidth', 3, ...
         'DisplayName', ' 5 mm');
     
     end
     
+end
+
+% Dann die zusätzlichen Records (transparent, schwarz im Hintergrund)
+for r = 1:length(additional_records)
+    rec_name = additional_records{r};
+    fprintf('  Zusätzlicher Record %d/%d: %s (transparent)\n', r, length(additional_records), rec_name);
+    
+    sqlIdQuery = sprintf(['SELECT bahn_id FROM bewegungsdaten.bahn_info ' ...
+        'WHERE record_filename = ''%s'' ORDER BY bahn_id ASC'], rec_name);
+    idData = fetch(conn, sqlIdQuery);
+    
+    if isempty(idData)
+        warning('Keine Daten für Record: %s', rec_name);
+        continue;
+    end
+    
+    ids = cellstr(string(idData.bahn_id));
+    
+    for i = 1:length(ids)
+        current_id = ids{i};
+        
+        sqlQuery = sprintf(['SELECT x_soll, y_soll, z_soll ' ...
+            'FROM bewegungsdaten.bahn_position_soll ' ...
+            'WHERE bahn_id = ''%s'' ORDER BY timestamp ASC'], current_id);
+        
+        try
+            data = fetch(conn, sqlQuery);
+            if isempty(data), continue; end
+            
+            x = data.x_soll;
+            y = data.y_soll;
+            z = data.z_soll;
+            
+            % Downsampling
+            idx = 1:downsample_factor:length(x);
+            x = x(idx);
+            y = y(idx);
+            z = z(idx);
+            
+            % Nur im Hauptplot, schwarz und transparent
+            plot3(axMain, x, y, z, ...
+                'Color', [0, 0, 0, additional_alpha], ...
+                'LineWidth', 0.5, ...
+                'HandleVisibility', 'off');
+            
+        catch ME
+            warning('Fehler bei Bahn %s: %s', current_id, ME.message);
+        end
+    end
 end
 
 %% 7. 3D-Würfel (Zoom-Boxen) im Hauptplot zeichnen
@@ -254,7 +329,7 @@ for z = 1:3
         'FaceAlpha', box_alpha, ...
         'EdgeColor', box_colors(z, :), ...
         'EdgeAlpha', box_edge_alpha, ...
-        'LineWidth', 1, ...
+        'LineWidth', 1.5, ...
         'HandleVisibility', 'off');
     
     edges = [1,2; 2,3; 3,4; 4,1; 5,6; 6,7; 7,8; 8,5; 1,5; 2,6; 3,7; 4,8];
@@ -265,7 +340,7 @@ for z = 1:3
             vertices(edges(e, :), 2), ...
             vertices(edges(e, :), 3), ...
             'Color', [box_colors(z, :), box_edge_alpha], ...
-            'LineWidth', 1.5, ...
+            'LineWidth', 1.0, ...
             'HandleVisibility', 'off');
     end
     
@@ -286,7 +361,7 @@ end
 
 %% 8. Legende und finale Anpassungen
 legend(axMain, 'show', ...
-    'Location', 'northwest', ...
+    'Location', 'northeast', ...
     'Orientation', 'horizontal', ...
     'FontSize', 20, ...
     'FontName', 'Courier New', ...
@@ -312,6 +387,6 @@ folder_path = fullfile('similarity', 'figs');
 file_name = 'multi_record_3d.pdf';
 full_path = fullfile(folder_path, file_name);
 
-exportgraphics(fig, full_path, ContentType="image")
+exportgraphics(fig, full_path, ContentType="vector")
 
 fprintf('Fertig!\n');

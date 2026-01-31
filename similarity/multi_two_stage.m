@@ -21,8 +21,8 @@ fprintf('╚══════════════════════�
 fprintf('═══ CONFIGURATION ═══\n\n');
 
 % === QUERY SETTINGS ===
-queries_quantity = 50;
-random_seed = 42;  % Für Reproduzierbarkeit
+queries_quantity = 100;
+random_seed = 21;  % Für Reproduzierbarkeit
 
 % === EMBEDDING SETTINGS ===
 K = 50;  % Stage 1 candidates
@@ -67,12 +67,55 @@ results_filename = sprintf('results/similarity_search_%s.csv', timestamp);
 % === EXCLUSION LIST (GT / Noisy Trajectories) ===
 % Diese IDs sollen NICHT im Random Sampling landen, um Data Leakage zu vermeiden
 exclude_ids = {
-    % clean
-    '1765989370'; '1765989294'; '1765988821'; '1765988920'; '1765989411';
-    % noisy - 2 mm
-    '1765990630'; '1765990747'; '1765990822'; '1765991047'; '1765991234';
-    % noisy - 5 mm
-    '1765991190'; '1765991445'; '1765991515'; '1765991949'; '1765991743'
+    %% clean - 0 mm
+    '1765989370'; % clean, np = 3 / 10 GT
+    '1765989294'; % clean, np = 3 / 20 GT
+    '1765988821'; % clean, np = 3 / 30 GT
+    '1765988920'; % clean; np = 3 / 40 GT
+    '1765989411'; % clean; np = 3 / 50 GT
+    
+    %% noisy - 2 mm
+
+    '1765990630'; % noisy; np = 3 / 10 GT
+    '1765990747'; % noisy; np = 3 / 20 GT
+    '1765990822'; % noisy; np = 3 / 30 GT
+    '1765991047'; % noisy; np = 3 / 40 GT
+    '1765991234'; % noisy; np = 3 / 50 GT
+    
+    %% noisy - 5 mm
+
+    '1765991190'; % noisy; np = 3 / 10 GT
+    '1765991445'; % noisy; np = 3 / 20 GT
+    '1765991515'; % noisy; np = 3 / 30 GT
+    '1765991949'; % noisy; np = 3 / 40 GT 
+    '1765991743'; % noisy; np = 3 / 50 GT
+
+    %% clean - 0 mm
+    '1769770498'; % clean, np = 3 / 10 GT
+    '1769770684'; % clean, np = 3 / 20 GT
+    '1769770935'; % clean, np = 3 / 30 GT
+    '1769771107'; % clean; np = 3 / 40 GT
+    '1769771447'; % clean; np = 3 / 50 GT
+    
+    %% noisy - 2 mm
+
+    '1769773928'; % noisy; np = 3 / 10 GT
+    '1769772060'; % noisy; np = 3 / 20 GT
+    '1769772213'; % noisy; np = 3 / 30 GT
+    '1769773985'; % noisy; np = 3 / 40 GT
+    '1769774278'; % noisy; np = 3 / 50 GT
+    
+    %% noisy - 5 mm
+
+    '1769772609'; % noisy; np = 3 / 10 GT
+    '1769773593'; % noisy; np = 3 / 20 GT
+    '1769772776'; % noisy; np = 3 / 30 GT
+    '1769772900'; % noisy; np = 3 / 39 (40) GT 
+    '1769773333'; % noisy; np = 3 / 50 GT
+
+    %% noise - 10 mm
+
+    '1769774581'; %noise; np = 3 / 10 GT
 };
 
 % Formatieren für SQL: 'id1', 'id2', 'id3' ...
@@ -84,12 +127,17 @@ conn = connectingToPostgres();
 
 % SQL Query mit NOT IN Filter
 query_sql = sprintf(['SELECT bahn_id FROM (' ...
-'SELECT DISTINCT b.bahn_id FROM bewegungsdaten.bahn_metadata b ' ...
-'INNER JOIN auswertung.info_sidtw s ON b.bahn_id = s.segment_id ' ...
-'WHERE b.segment_id = b.bahn_id ' ...
-'AND b.bahn_id NOT IN (%s) ' ...
-') AS distinct_bahnen ' ...
-'ORDER BY md5(bahn_id || %d) LIMIT %d'], ...
+    'SELECT DISTINCT b.bahn_id FROM bewegungsdaten.bahn_metadata b ' ...
+    'INNER JOIN auswertung.info_sidtw s ON b.bahn_id = s.segment_id ' ...
+    'WHERE b.segment_id = b.bahn_id ' ...
+    'AND b.bahn_id NOT IN (' ...
+        'SELECT t_all.bahn_id ' ...
+        'FROM bewegungsdaten.bahn_info t_exclude ' ...
+        'JOIN bewegungsdaten.bahn_info t_all ON t_exclude.record_filename = t_all.record_filename ' ... % <--- HIER GEÄNDERT
+        'WHERE t_exclude.bahn_id IN (%s) ' ...
+    ') ' ...
+    ') AS distinct_bahnen ' ...
+    'ORDER BY md5(bahn_id || ''%d'') LIMIT %d'], ...
     exclude_str, random_seed, queries_quantity);
 
 query_results = fetch(conn, query_sql);

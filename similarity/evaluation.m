@@ -16,9 +16,9 @@ cfg.dtw_norm = 0;
 cfg.weight_modes_tab3 = {'Joint + All', 'Position + All'};
 
 % Composite weights (summe = 1.0)
-cfg.w.spearman = 0.0;
+cfg.w.spearman = 1.0;
 cfg.w.ndcg50_dtw = 0.0;
-cfg.w.ndcg50_gt = 1.0;
+cfg.w.ndcg50_gt = 0.0;
 cfg.w.r50_dtw = 0.0;
 cfg.w.r50_gt = 0.0;
 
@@ -49,12 +49,10 @@ fprintf('Filtered: %d rows\n\n', height(filtered));
 
 %% FIGURE 1: DIMENSIONALITY (BASELINES)
 dtw_modes = {'joint_states', 'position'};
-baseline_weights = {'Joint only', 'Position only'};
 
 filtered_baselines = [];
 for m = 1:length(dtw_modes)
     mask = strcmp(data_table.dtw_mode, dtw_modes{m}) & ...
-           strcmp(data_table.weight_mode, baseline_weights{m}) & ...
            data_table.top_k == cfg.top_k;
     filtered_baselines = [filtered_baselines; data_table(mask, :)];
 end
@@ -98,20 +96,21 @@ h4 = plot(dims, comp, 's--', 'Color', c_shape*0.6, 'MarkerFaceColor', c_shape*0.
 ylim([0.8599, 0.9601])
 
 % Styling
-set(gca, 'XScale', 'log', 'XTick', [6,15,30,75,150,300,600,1200,3600], ...
+set(gca, 'XScale', 'log', 'XTick', [6,15,30,60,150,300,600,1200,3600], ...
     'FontName', 'Courier New', 'FontWeight', 'bold', 'FontSize', 18);
 set(gca, 'YTick', [0.86,0.88,0.90,0.92,0.94,0.96],'FontName', 'Courier New', 'FontWeight', 'bold', 'FontSize', 18);
 %set(gca, 'YTick', [0.3,0.4,0.5,0.6,0.7,0.8],'FontName', 'Courier New', 'FontWeight', 'bold', 'FontSize', 18);
 xlabel('Total embedding dimensions', 'FontWeight', 'bold', 'FontSize', 20);
 ylabel('NDCG@50_{GT}', 'FontWeight', 'bold', 'FontSize', 20);
-%ylabel('Spearman_{500}', 'FontWeight', 'bold', 'FontSize', 20);
-legend([h1 h2 h3 h4], {'Motion (T)', 'Shape (T)', 'Motion (S)', 'Shape (S)'}, 'Location', 'best', 'FontSize', 14);
+%ylabel('\rho_{500}', 'FontWeight', 'bold', 'FontSize', 20);
+legend([h1 h2 h3 h4], {'Motion (T)', 'Shape (T)', 'Motion (S)', 'Shape (S)'}, 'Location', [0.741333335558573,0.166500002622604,0.217333328882853,0.186999994754791],'FontSize', 14);
+%legend([h1 h2 h3 h4], {'Motion (T)', 'Shape (T)', 'Motion (S)', 'Shape (S)'}, 'Location', 'best','FontSize', 14);
 ax = gca; ax.Position = [0.15 0.14 0.84 0.84]; ax.YGrid = 'on';
 hold off;
 
-exportgraphics(gca, fullfile(cfg.figure_folder, 'dimensionality_ndcg_baseline.pdf'));
+%exportgraphics(gca, fullfile(cfg.figure_folder, 'dimensionality_ndcg_baseline.pdf'));
 
-%% FIGURE 1: DIMENSIONALITY (BASELINES)
+%% FIGURE 1: DIMENSIONALITY (ALL)
 dtw_modes = {'joint_states', 'position'};
 baseline_weights = {'Joint + All', 'Pos + All'};
 
@@ -159,22 +158,23 @@ d = filtered_baselines(strcmpi(filtered_baselines.level, 'segment') & strcmp(fil
 h4 = plot(dims, comp, 's--', 'Color', c_shape*0.6, 'MarkerFaceColor', c_shape*0.6, 'LineWidth', 2, 'MarkerSize', 8);
 
 
-%ylim([0.299,0.801])
-ylim([0.8599, 0.9601])
+ylim([0.299,0.801])
+%ylim([0.8599, 0.9601])
 
 % Styling
 set(gca, 'XScale', 'log', 'XTick', [6,15,30,60,150,300,600,1200,3600], ...
     'FontName', 'Courier New', 'FontWeight', 'bold', 'FontSize', 18);
-set(gca, 'YTick', [0.86,0.88,0.90,0.92,0.94,0.96], 'FontName', 'Courier New', 'FontWeight', 'bold', 'FontSize', 18);
-%set(gca, 'YTick', [0.3,0.4,0.5,0.6,0.7,0.8],'FontName', 'Courier New', 'FontWeight', 'bold', 'FontSize', 18);
+%set(gca, 'YTick', [0.86,0.88,0.90,0.92,0.94,0.96], 'FontName', 'Courier New', 'FontWeight', 'bold', 'FontSize', 18);
+set(gca, 'YTick', [0.3,0.4,0.5,0.6,0.7,0.8],'FontName', 'Courier New', 'FontWeight', 'bold', 'FontSize', 18);
 xlabel('Total embedding dimensions', 'FontWeight', 'bold', 'FontSize', 20);
-ylabel('NDCG@50_{GT}', 'FontWeight', 'bold', 'FontSize', 20);
-%ylabel('Spearman_{500}', 'FontWeight', 'bold', 'FontSize', 20);
-legend([h1 h2 h3 h4], {'Motion (T)', 'Shape (T)', 'Motion (S)', 'Shape (S)'}, 'Location', [0.75000000222524,0.282500002622604,0.217333328882853,0.186999994754791], 'FontSize', 14);
+%ylabel('NDCG@50_{GT}', 'FontWeight', 'bold', 'FontSize', 20);
+ylabel('\rho_{500}', 'FontWeight', 'bold', 'FontSize', 20);
+%legend([h1 h2 h3 h4], {'Motion (T)', 'Shape (T)', 'Motion (S)', 'Shape (S)'}, 'Location', [0.755333335558573,0.256500002622604,0.217333328882853,0.186999994754791], 'FontSize', 14);
+legend([h1 h2 h3 h4], {'Motion (T)', 'Shape (T)', 'Motion (S)', 'Shape (S)'}, 'Location', 'best', 'FontSize', 14);
 ax = gca; ax.Position = [0.15 0.14 0.84 0.84]; ax.YGrid = 'on';
 hold off;
 
-exportgraphics(gca, fullfile(cfg.figure_folder, 'dimensionality_ndcg_all.pdf'));
+%exportgraphics(gca, fullfile(cfg.figure_folder, 'dimensionality_spearman_all.pdf'));
 
 
 %% === TABLE 1 ===
@@ -219,140 +219,6 @@ T1 = sortrows(T1, {'Level', 'Mode', 'Composite'}, {'ascend', 'ascend', 'descend'
 writetable(T1, fullfile('results/', 'table1_dimensionality.csv'));
 fprintf('✓ Saved: table1_dimensionality.csv\n\n');
 
-%% === TABLE: EMBEDDING CONFIGS ===
-fprintf('Creating Embedding Config Table...\n');
-
-for i = 1:length(cfg.weight_modes_tab3)
-    data = data_table(data_table.database_size == cfg.db_size & ...
-                strcmpi(data_table.weight_mode, cfg.weight_modes_tab3{i}) & ...
-              data_table.top_k == cfg.top_k & ...
-              data_table.dtw_normalize == cfg.dtw_norm, :);
-
-end
-
-
-configs = unique(data.emb_config);
-table_data = {};
-
-for c = 1:length(configs)
-    config_name = configs{c};
-    d = data(strcmp(data.emb_config, config_name), :);
-    
-    n_coarse = d.n_coarse(1);
-    n_fine = d.n_fine(1);
-    total_motion = (n_coarse + n_fine) * 6;
-    total_shape = (n_coarse + n_fine) * 3;
-    
-    metrics = calcMetrics(d, cfg.w);
-    
-    table_data(end+1, :) = {config_name, n_coarse, n_fine, total_motion, total_shape, height(d), ...
-        metrics.spearman, ...
-        metrics.ndcg50_dtw, metrics.ndcg50_gt,  ...
-        metrics.ndcg10_dtw, metrics.ndcg10_gt, ...
-        metrics.r50_dtw , metrics.r50_gt, ...
-        metrics.r10_dtw, metrics.r10_gt, ...
-        metrics.composite};
-end
-
-T = cell2table(table_data, 'VariableNames', ...
-    {'Config', 'n_c', 'n_f', 'Dims_Motion', 'Dims_Shape', 'N', ...
-    'Spearman', ...
-    'NDCG50_DTW', 'NDCG50_GT', ...
-    'NDCG10_DTW', 'NDCG10_GT', ...
-    'R50_DTW', 'R50_GT', ...
-    'R10_DTW', 'R10_GT', ...
-    'Composite'});
-T = sortrows(T, 'Composite', 'descend');
-disp(T);
-writetable(T, fullfile(cfg.output_folder, 'table3_embedding_configs.csv'));
-fprintf('✓ Saved: table_embedding_configs.csv\n\n');
-
-
-% %% === DATA EXPLORATION: Parameter Coverage ===
-% fprintf('\n');
-% fprintf('╔════════════════════════════════════════════════════════════════╗\n');
-% fprintf('║  PARAMETER EXPLORATION                                         ║\n');
-% fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
-% 
-% data = readtable('results/experiment_data.xlsx', 'Sheet', 'embedding_validation', 'VariableNamingRule', 'preserve');
-% fprintf('Total experiments: %d\n\n', height(data));
-% 
-% % --- Unique values per parameter ---
-% fprintf('=== UNIQUE VALUES ===\n');
-% fprintf('top_k:          %s\n', mat2str(unique(data.top_k)'));
-% fprintf('database_size:  %s\n', mat2str(unique(data.database_size)'));
-% fprintf('dtw_normalize:  %s\n', mat2str(unique(data.dtw_normalize)'));
-% fprintf('level:          %s\n', strjoin(unique(data.level), ', '));
-% fprintf('dtw_mode:       %s\n', strjoin(unique(data.dtw_mode), ', '));
-% fprintf('weight_mode:    %s\n', strjoin(unique(data.weight_mode), ', '));
-% fprintf('query_ids:      %d unique\n', length(unique(data.query_id)));
-% fprintf('segment_ids:    %d unique\n', length(unique(data.segment_id)));
-% fprintf('\n');
-% 
-% % --- Coverage Matrix: top_k x database_size ---
-% fprintf('=== COVERAGE: top_k × database_size ===\n');
-% top_ks = sort(unique(data.top_k));
-% db_sizes = sort(unique(data.database_size));
-% fprintf('%10s', '');
-% for t = 1:length(top_ks), fprintf('%8d', top_ks(t)); end
-% fprintf('\n');
-% for d = 1:length(db_sizes)
-%     fprintf('%10d', db_sizes(d));
-%     for t = 1:length(top_ks)
-%         n = sum(data.top_k == top_ks(t) & data.database_size == db_sizes(d));
-%         fprintf('%8d', n);
-%     end
-%     fprintf('\n');
-% end
-% fprintf('\n');
-% 
-% % --- Coverage: dtw_normalize ---
-% fprintf('=== COVERAGE: dtw_normalize ===\n');
-% for val = unique(data.dtw_normalize)'
-%     n = sum(data.dtw_normalize == val);
-%     fprintf('  dtw_normalize=%d: %d experiments (%.1f%%)\n', val, n, 100*n/height(data));
-% end
-% fprintf('\n');
-% 
-% % --- Missing combinations ---
-% fprintf('=== MISSING COMBINATIONS ===\n');
-% missing = {};
-% for t = 1:length(top_ks)
-%     for d = 1:length(db_sizes)
-%         for norm = [0, 1]
-%             n = sum(data.top_k == top_ks(t) & data.database_size == db_sizes(d) & data.dtw_normalize == norm);
-%             if n == 0
-%                 missing{end+1} = sprintf('top_k=%d, db_size=%d, norm=%d', top_ks(t), db_sizes(d), norm);
-%             end
-%         end
-%     end
-% end
-% if isempty(missing)
-%     fprintf('  ✓ All combinations covered!\n');
-% else
-%     fprintf('  Missing %d combinations:\n', length(missing));
-%     for i = 1:min(10, length(missing))
-%         fprintf('    • %s\n', missing{i});
-%     end
-%     if length(missing) > 10
-%         fprintf('    ... and %d more\n', length(missing)-10);
-%     end
-% end
-% fprintf('\n');
-% 
-% % --- Recommendation ---
-% fprintf('=== RECOMMENDATIONS ===\n');
-% if length(unique(data.dtw_normalize)) < 2
-%     fprintf('  → Run experiments with dtw_normalize=%d\n', 1-unique(data.dtw_normalize));
-% end
-% if length(unique(data.top_k)) < 3
-%     fprintf('  → Try more top_k values (e.g., 100, 250, 500, 1000)\n');
-% end
-% if length(unique(data.database_size)) < 2
-%     fprintf('  → Test different database_size values\n');
-% end
-% fprintf('\n');
-
 
 %% FIGURE 2: WEIGHT MODE CONTRIBUTION
 fprintf('Creating Figure 2...\n');
@@ -360,6 +226,7 @@ fprintf('Creating Figure 2...\n');
 % Filter
 filtered_wm = data_table(data_table.database_size == 5000 & ...
                        data_table.top_k == 50 & ...
+                       strcmpi(data_table.emb_config, 'Single-10') & ...
                        data_table.dtw_normalize == 0, :);
 
 % Farben

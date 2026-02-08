@@ -21,11 +21,11 @@ fprintf('╚══════════════════════�
 fprintf('═══ CONFIGURATION ═══\n\n');
 
 % === QUERY SETTINGS ===
-queries_quantity = 15;
+queries_quantity = 5;
 random_seed = 105;  % Für Reproduzierbarkeit
 
 % === EMBEDDING SETTINGS ===
-K = 50;  % Stage 1 candidates
+K = 10;  % Stage 1 candidates
 rrf_k = 60;
 weights_conf = {    [1.0; 0.0; 0.0; 0.0; 0.0];
                     [1.0; 1.0; 0.0; 0.0; 0.0];
@@ -444,7 +444,7 @@ for q_idx = 1:length(query_ids)
             gt_result = fetch(conn, gt_sql);
             gt_bahn = [];
             if ~isempty(gt_result)
-                gt_bahn = gt_result.sidtw_average_distance(1);
+                gt_bahn = gt_result.qdtw_average_distance(1);
             end
             
             % For each K value
@@ -572,7 +572,7 @@ for q_idx = 1:length(query_ids)
                 gt_seg_result = fetch(conn, gt_seg_sql);
                 gt_seg = [];
                 if ~isempty(gt_seg_result)
-                    gt_seg = gt_seg_result.sidtw_average_distance(1);
+                    gt_seg = gt_seg_result.qdtw_average_distance(1);
                 end
                 
                 for k_idx = 1:length(all_k_values)
@@ -836,7 +836,7 @@ function [simple_mean, weighted_mean] = computePrognose(results_table, top_n, co
     for i = 1:n
         idx = find(strcmp(data.segment_id, ids{i}), 1);
         if ~isempty(idx)
-            values(i) = data.sidtw_average_distance(idx);
+            values(i) = data.qdtw_average_distance(idx);
         else
             values(i) = NaN;
         end

@@ -17,15 +17,15 @@ loop_all = 0;
 overwrite = 0;
 
 % Methodenauswahl
-use_euclidean = 1;
-use_sidtw = 1;
+use_euclidean = 0;
+use_sidtw = 0;
 use_dtw = 0;
 use_dfd = 0;
 use_lcss = 0;
-use_qad = 0;
-use_qdtw = 0;
+use_qad = 1;
+use_qdtw = 1;
 
-evaluate_orientation = 0;
+evaluate_orientation = 1;
 
 % Upload-Einstellungen
 upload_info = 1;

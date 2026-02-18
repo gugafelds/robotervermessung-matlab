@@ -16,9 +16,9 @@ cfg.dtw_norm = 0;
 cfg.weight_modes_tab3 = {'Joint only', 'Position + only'};
 
 % Composite weights (summe = 1.0)
-cfg.w.spearman = 0.0;
+cfg.w.spearman = 1.0;
 cfg.w.ndcg50_dtw = 0.0;
-cfg.w.ndcg50_gt = 1.0;
+cfg.w.ndcg50_gt = 0.0;
 cfg.w.r50_dtw = 0.0;
 cfg.w.r50_gt = 0.0;
 
@@ -77,43 +77,48 @@ c_shape  = [0.15, 0.39, 0.91];
 % Trajectory - Motion
 d = filtered_baselines(strcmpi(filtered_baselines.level, 'bahn') & strcmp(filtered_baselines.dtw_mode, 'joint_states'), :);
 [dims, comp] = calcDimComposite(d, 6, cfg.w);
+dims = dims / 6;
 h1 = plot(dims, comp, 'o-', 'Color', c_motion, 'MarkerFaceColor', c_motion, 'LineWidth', 3, 'MarkerSize', 11);
 
 % Trajectory - Shape
 d = filtered_baselines(strcmpi(filtered_baselines.level, 'bahn') & strcmp(filtered_baselines.dtw_mode, 'position'), :);
 [dims, comp] = calcDimComposite(d, 3, cfg.w);
+dims = dims / 3;
 h2 = plot(dims, comp, 's-', 'Color', c_shape, 'MarkerFaceColor', c_shape, 'LineWidth', 3, 'MarkerSize', 11);
 
 % Segment - Motion
 d = filtered_baselines(strcmp(filtered_baselines.dtw_mode, 'joint_states'), :);
 [dims, comp] = calcDimComposite(d, 6, cfg.w);
+dims = dims / 6;
 h3 = plot(dims, comp, 'o--', 'Color', c_motion*0.6, 'MarkerFaceColor', c_motion*0.6, 'LineWidth', 2, 'MarkerSize', 8);
 
 % Segment - Shape
 d = filtered_baselines(strcmpi(filtered_baselines.level, 'segment') & strcmp(filtered_baselines.dtw_mode, 'position'), :);
 [dims, comp] = calcDimComposite(d, 3, cfg.w);
+dims = dims / 3;
 h4 = plot(dims, comp, 's--', 'Color', c_shape*0.6, 'MarkerFaceColor', c_shape*0.6, 'LineWidth', 2, 'MarkerSize', 8);
 
-%ylim([0.299,0.801])
-ylim([0.8599, 0.9601])
+ylim([0.299,0.801])
+%ylim([0.8599, 0.9601])
+xlim([1.8, 110])
 
 % Styling
-set(gca, 'XScale', 'log', 'XTick', [6,15,30,60,150,300,600,1200,3600], ...
-    'FontName', 'Times New Roman', 'FontWeight', 'bold', 'FontSize', 18);
-set(gca, 'YTick', [0.86,0.88,0.90,0.92,0.94,0.96],'FontName', 'Times New Roman', 'FontWeight', 'bold', 'FontSize', 18);
-%set(gca, 'YTick', [0.3,0.4,0.5,0.6,0.7,0.8],'FontName', 'Times New Roman', 'FontWeight', 'bold', 'FontSize', 18);
-xlabel('Total embedding dimensions', 'FontWeight', 'bold', 'FontSize', 20);
-ylabel('NDCG@50_{GT}', 'FontWeight', 'bold', 'FontSize', 20);
-%ylabel('\rho_{500}', 'FontWeight', 'bold', 'FontSize', 20);
+set(gca, 'XScale', 'log', 'XTick', [2,5,10,20,50,100], ...
+'FontName', 'Times New Roman', 'FontWeight', 'bold', 'FontSize', 18);
+%set(gca, 'YTick', [0.86,0.88,0.90,0.92,0.94,0.96],'FontName', 'Times New Roman', 'FontWeight', 'bold', 'FontSize', 18);
+set(gca, 'YTick', [0.3,0.4,0.5,0.6,0.7,0.8],'FontName', 'Times New Roman', 'FontWeight', 'bold', 'FontSize', 18);
+xlabel('Samples per parameter', 'FontWeight', 'bold', 'FontSize', 20);
+%ylabel('NDCG@50_{GT}', 'FontWeight', 'bold', 'FontSize', 20);
+ylabel('\rho_{500}', 'FontWeight', 'bold', 'FontSize', 20);
 %legend([h1 h2 h3 h4], {'Motion (T)', 'Shape (T)', 'Motion (S)', 'Shape (S)'}, 'Location', [0.741333335558573,0.166500002622604,0.217333328882853,0.186999994754791],'FontSize', 14);
-%legend([h1 h2 h3 h4], {'Motion (T)', 'Shape (T)', 'Motion (S)', 'Shape (S)'}, 'Location', 'best','FontSize', 14);
+legend([h1 h2 h3 h4], {'Motion (T)', 'Shape (T)', 'Motion (S)', 'Shape (S)'}, 'Location', 'best','FontSize', 14);
 ax = gca; 
-ax.Position = [0.14 0.14 0.84 0.84]; 
+ax.Position = [0.134 0.14 0.84 0.84]; 
 ax.YGrid = 'on';
 ax.LooseInset = [0, 0, 0, 0];
 hold off;
 
-exportgraphics(gca, fullfile(cfg.figure_folder, 'dimensionality_ndcg_baseline.pdf'));
+exportgraphics(gca, fullfile(cfg.figure_folder, 'dimensionality_spearman_baseline.pdf'));
 
 %% FIGURE 1: DIMENSIONALITY (ALL)
 dtw_modes = {'joint_states', 'position'};
@@ -145,44 +150,49 @@ c_shape  = [0.15, 0.39, 0.91];
 % Trajectory - Motion
 d = filtered_baselines(strcmpi(filtered_baselines.level, 'bahn') & strcmp(filtered_baselines.dtw_mode, 'joint_states'), :);
 [dims, comp] = calcDimComposite(d, 6, cfg.w);
+dims = dims / 6;
 h1 = plot(dims, comp, 'o-', 'Color', c_motion, 'MarkerFaceColor', c_motion, 'LineWidth', 3, 'MarkerSize', 11);
 
 % Trajectory - Shape
 d = filtered_baselines(strcmpi(filtered_baselines.level, 'bahn') & strcmp(filtered_baselines.dtw_mode, 'position'), :);
 [dims, comp] = calcDimComposite(d, 3, cfg.w);
+dims = dims / 3;
 h2 = plot(dims, comp, 's-', 'Color', c_shape, 'MarkerFaceColor', c_shape, 'LineWidth', 3, 'MarkerSize', 11);
 
 % Segment - Motion
 d = filtered_baselines(strcmp(filtered_baselines.dtw_mode, 'joint_states'), :);
 [dims, comp] = calcDimComposite(d, 6, cfg.w);
+dims = dims / 6;
 h3 = plot(dims, comp, 'o--', 'Color', c_motion*0.6, 'MarkerFaceColor', c_motion*0.6, 'LineWidth', 2, 'MarkerSize', 8);
 
 % Segment - Shape
 d = filtered_baselines(strcmpi(filtered_baselines.level, 'segment') & strcmp(filtered_baselines.dtw_mode, 'position'), :);
 [dims, comp] = calcDimComposite(d, 3, cfg.w);
+dims = dims / 3;
 h4 = plot(dims, comp, 's--', 'Color', c_shape*0.6, 'MarkerFaceColor', c_shape*0.6, 'LineWidth', 2, 'MarkerSize', 8);
 
 
-%ylim([0.299,0.801])
-ylim([0.8599, 0.9601])
+ylim([0.299,0.801])
+%ylim([0.8599, 0.9601])
+xlim([1.8, 110])
 
 % Styling
-set(gca, 'XScale', 'log', 'XTick', [6,15,30,60,150,300,600,1200,3600], ...
-    'FontName', 'Times New Roman', 'FontWeight', 'bold', 'FontSize', 18);
-set(gca, 'YTick', [0.86,0.88,0.90,0.92,0.94,0.96], 'FontName', 'Times New Roman', 'FontWeight', 'bold', 'FontSize', 18);
-%set(gca, 'YTick', [0.3,0.4,0.5,0.6,0.7,0.8],'FontName', 'Times New Roman', 'FontWeight', 'bold', 'FontSize', 18);
-xlabel('Total embedding dimensions', 'FontWeight', 'bold', 'FontSize', 20);
-ylabel('NDCG@50_{GT}', 'FontWeight', 'bold', 'FontSize', 20);
-%ylabel('\rho_{500}', 'FontWeight', 'bold', 'FontSize', 20);
+set(gca, 'XScale', 'log', 'XTick', [2,5,10,20,50,100], ...
+'FontName', 'Times New Roman', 'FontWeight', 'bold', 'FontSize', 18);
+%set(gca, 'YTick', [0.86,0.88,0.90,0.92,0.94,0.96], 'FontName', 'Times New Roman', 'FontWeight', 'bold', 'FontSize', 18);
+set(gca, 'YTick', [0.3,0.4,0.5,0.6,0.7,0.8],'FontName', 'Times New Roman', 'FontWeight', 'bold', 'FontSize', 18);
+xlabel('Samples per parameter', 'FontWeight', 'bold', 'FontSize', 20);
+%ylabel('NDCG@50_{GT}', 'FontWeight', 'bold', 'FontSize', 20);
+ylabel('\rho_{500}', 'FontWeight', 'bold', 'FontSize', 20);
 %legend([h1 h2 h3 h4], {'Motion (T)', 'Shape (T)', 'Motion (S)', 'Shape (S)'}, 'Location', [0.755333335558573,0.256500002622604,0.217333328882853,0.186999994754791], 'FontSize', 14);
-%legend([h1 h2 h3 h4], {'Motion (T)', 'Shape (T)', 'Motion (S)', 'Shape (S)'}, 'Location', 'best', 'FontSize', 14);
+legend([h1 h2 h3 h4], {'Motion (T)', 'Shape (T)', 'Motion (S)', 'Shape (S)'}, 'Location', 'best', 'FontSize', 14);
 ax = gca; 
-ax.Position = [0.14 0.14 0.84 0.84]; 
+ax.Position = [0.134 0.14 0.84 0.84]; 
 ax.YGrid = 'on';
 ax.LooseInset = [0, 0, 0, 0];
 hold off;
 
-exportgraphics(gca, fullfile(cfg.figure_folder, 'dimensionality_ndcg_all.pdf'));
+exportgraphics(gca, fullfile(cfg.figure_folder, 'dimensionality_spearman_all.pdf'));
 
 
 %% === TABLE 1 ===
@@ -191,7 +201,7 @@ levels = {'bahn', 'segment'};
 level_labels = {'Trajectory', 'Segment'};
 dtw_modes = {'joint_states', 'position'};
 mode_labels = {'MOTION (Joint)', 'SHAPE (Cartesian)'};
-baseline_weights = {'Joint + All', 'Pos + All'};
+baseline_weights = {'Joint only', 'Position only'};
 dim_multiplier = [6, 3];
 
 for lvl = 1:length(levels)

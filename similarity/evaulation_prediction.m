@@ -237,8 +237,8 @@ h_shape  = scatter(gt_shape, pred1_shape, 90, c_shape, 'filled', 's', 'MarkerFac
 grid on; box on; axis square;
 xlim([0 limit_max1]); ylim([0 limit_max1]);
 
-xlabel('Measured TCP error [mm]', 'FontWeight', 'bold', 'FontSize', 16);
-ylabel('Predicted TCP error [mm]', 'FontWeight', 'bold', 'FontSize', 16);
+xlabel('Measured error [mm]', 'FontWeight', 'bold', 'FontSize', 16);
+ylabel('Predicted error [mm]', 'FontWeight', 'bold', 'FontSize', 16);
 yticks([0,0.2,0.4,0.6,0.8, 1.0]);
 yticklabels([0,0.2,0.4,0.6,0.8, 1.0]);
 set(gca, 'FontName', 'Times New Roman', 'FontWeight', 'bold', 'FontSize', 14);
@@ -598,7 +598,7 @@ target_timestamps = [ ...
 % CONSTRAINT 2: Timestamp muss in der Whitelist sein
 %%
 filter_idx = strcmpi(data2_table.level, 'bahn') & ...
-             strcmp(data2_table.dtw_mode, 'joint_states') & ... 
+             strcmp(data2_table.dtw_mode, 'position') & ... 
              strcmp(data2_table.weights, '1,1,1,1,1') & ...
              (data2_table.K == data2_table.dtw_calls) & ...
              ismember(string(data2_table.Timestamp), target_timestamps);
@@ -611,7 +611,7 @@ unique_K = unique(data_filtered.K);
 
 fprintf('\n=== RESULTS: Influence of Neighborhood Size (K) - SHAPE ===\n');
 fprintf('-------------------------------------------------------------\n');
-fprintf('%-10s | %-12s | %-12s | %-12s\n', 'Size (K)', 'Samples', 'RMSE (S1)', 'RMSE (S2)');
+fprintf('%-10s | %-12s | %-12s | %-12s\n', 'Size (K)', 'Samples', 'MAE (S1)', 'MAE (S2)','RMSE (S1)', 'RMSE (S2)');
 fprintf('-------------------------------------------------------------\n');
 
 % 3. LOOP & BERECHNUNG
@@ -627,11 +627,13 @@ for i = 1:length(unique_K)
     pred_s2_dec = sub_data.fromsegs_s2_weighted;
     
     % RMSE Berechnung
+    mae_s1 = mean(abs(pred_s1 - gt));
+    mae_2 = mean(abs(pred_s2_dec - gt));
     rmse_s1 = sqrt(mean((pred_s1 - gt).^2));
     rmse_s2 = sqrt(mean((pred_s2_dec - gt).^2));
     
     % Ausgabe
-    fprintf('K = %-6d | %5d        | %.5f      | %.5f\n', k_val, length(gt), rmse_s1, rmse_s2);
+    fprintf('K = %-6d | %5d        | %.5f      | %.5f      | %.5f      | %.5f\n', k_val, length(gt), mae_s1, mae_2, rmse_s1, rmse_s2);
 end
 fprintf('-------------------------------------------------------------\n');
 
@@ -898,5 +900,5 @@ xlim([40, 15000]);
 objhl = findobj(objh, 'type', 'patch'); 
 set(objhl, 'Markersize', 13); 
 
-exportgraphics(gca, fullfile('figs', 'efficiency_tradeoff_log_rmse.pdf'));
+%exportgraphics(gca, fullfile('figs', 'efficiency_tradeoff_log_rmse.pdf'));
 fprintf('Plot saved: efficiency_tradeoff_log_rmse.pdf\n');

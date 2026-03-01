@@ -132,10 +132,10 @@ zlim(axMain, [300, 1400]);
 xticks([900, 1200, 1500, 1800]);
 yticks([-600, -300, 0, 300, 600]);
 zticks([600,900,1200]);
-xlabel('X [mm]', 'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Courier New');
-ylabel('Y [mm]', 'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Courier New');
-zlabel('Z [mm]', 'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Courier New');
-set(axMain, 'FontSize', 20, 'FontWeight', 'bold', 'GridAlpha', 0.4, 'FontName', 'Courier New');
+xlabel('X [mm]', 'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Times New Roman');
+ylabel('Y [mm]', 'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Times New Roman');
+zlabel('Z [mm]', 'FontSize', 20, 'FontWeight', 'bold', 'FontName', 'Times New Roman');
+set(axMain, 'FontSize', 20, 'FontWeight', 'bold', 'GridAlpha', 0.4, 'FontName', 'Times New Roman');
 axMain.XAxis.LineWidth = 1.5;
 axMain.YAxis.LineWidth = 1.5;
 axMain.ZAxis.LineWidth = 1.5;
@@ -153,7 +153,7 @@ for z = 1:3
     axZoom(z) = axes('Position', [zoom_left, zoom_bottom, zoom_width, zoom_height]);
     hold on; grid on; axis equal;
     view(120,25);
-    set(axZoom(z), 'FontSize', 16, 'FontWeight', 'bold', 'GridAlpha', 0.4, 'FontName', 'Courier New');
+    set(axZoom(z), 'FontSize', 16, 'FontWeight', 'bold', 'GridAlpha', 0.4, 'FontName', 'Times New Roman');
     axZoom(z).XAxis.LineWidth = 1.5;
     axZoom(z).YAxis.LineWidth = 1.5;
     axZoom(z).ZAxis.LineWidth = 1.5;
@@ -237,12 +237,12 @@ for r = 1:length(target_records)
     elseif r == 2
 
     plot3(axMain, NaN, NaN, NaN, 'Color', bahn_color, 'LineWidth', 3, ...
-        'DisplayName', ' 2 mm');
+        'DisplayName', ' \pm 2 mm');
 
     else
 
     plot3(axMain, NaN, NaN, NaN, 'Color', bahn_color, 'LineWidth', 3, ...
-        'DisplayName', ' 5 mm');
+        'DisplayName', ' \pm 5 mm');
     
     end
     
@@ -364,7 +364,7 @@ legend(axMain, 'show', ...
     'Location', 'northeast', ...
     'Orientation', 'horizontal', ...
     'FontSize', 20, ...
-    'FontName', 'Courier New', ...
+    'FontName', 'Times New Roman', ...
     'NumColumns', 1, ...
     'Box', 'on', 'LineWidth', 1.5);
 

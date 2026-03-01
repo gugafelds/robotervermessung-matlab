@@ -637,7 +637,7 @@ for i = 1:length(unique_K)
 end
 fprintf('-------------------------------------------------------------\n');
 
-%% === EFFICIENCY + ACCURACY ANALYSIS: RUNTIME (ms), MAE, RMSE ===
+%% === EFFICIENCY + ACCURACY ANALYSIS: RUNTIME (ms), MAE, RMSE === // DIRECT
 % Load Data
 data2_table = readtable('experiment_data.xlsx', 'Sheet', 'similarity_search', 'VariableNamingRule', 'preserve');
 fprintf('Loaded total: %d rows\n', height(data2_table));
@@ -680,10 +680,25 @@ for i = 1:length(unique_K)
     sub_data = data_filtered(data_filtered.K == k_val, :);
     
     % Zeiten berechnen (Mittelwert * 1000 für ms)
-    t_s1 = mean(sub_data.stage1_time_sec) * 1000;
-    t_s2 = mean(sub_data.stage2_time_sec) * 1000;
-    t_load = mean(sub_data.loading_time_sec) * 1000;
-    t_total = mean(sub_data.total_time_sec) * 1000;
+    t_s1_all   = sub_data.stage1_time_sec * 1000;
+    t_s2_all   = sub_data.stage2_time_sec * 1000;
+    t_load_all = sub_data.loading_time_sec * 1000;
+    t_total_all= sub_data.total_time_sec * 1000;
+    
+    % Mittelwerte
+    t_s1_mean   = mean(t_s1_all, 'omitnan');
+    t_s2_mean   = mean(t_s2_all, 'omitnan');
+    t_load_mean = mean(t_load_all, 'omitnan');
+    t_total_mean= mean(t_total_all, 'omitnan');
+    
+    % Median
+    t_total_median = median(t_total_all, 'omitnan');
+    
+    % p90
+    t_total_p90 = prctile(t_total_all, 90);
+    
+    % Max
+    t_total_max = max(t_total_all);
     
     % Ground Truth & Predictions
     gt = sub_data.ground_truth;
@@ -702,101 +717,181 @@ for i = 1:length(unique_K)
     mae_val_s2_dec = mean(abs(pred_s2_dec - gt));
     rmse_val_s2_dec = sqrt(mean((pred_s2_dec - gt).^2));
     
-    fprintf('K = %-6d | %8.2f ms   | %8.2f ms   | %8.2f ms   | %8.2f ms   | %8.5f mm  | %8.5f mm | %8.5f mm | %8.5f mm | %8.5f mm | %8.5f mm | %8.5f mm | %8.5f mm\n', ...
-        k_val, t_s1, t_s2, t_load, t_total, mae_val_s1_dir, rmse_val_s1_dir ,mae_val_s1_dec, rmse_val_s1_dec, mae_val_s2_dir, rmse_val_s2_dir, mae_val_s2_dec, rmse_val_s2_dec);
+    fprintf('K = %-6d | S1: %6.1f ms | S2: %6.1f ms | Total mean: %6.1f ms | median: %6.1f | p90: %6.1f | max: %6.1f\n', ...
+    k_val, t_s1_mean, t_s2_mean, t_total_mean, ...
+    t_total_median, t_total_p90, t_total_max);
 end
 fprintf('---------------------------------------------------------------------------------------------\n');
 
+%% === EFFICIENCY + ACCURACY ANALYSIS: RUNTIME (ms), MAE, RMSE === // DIRECT + DECOMPOSED
+% Load Data
+data2_table = readtable('experiment_data.xlsx', 'Sheet', 'similarity_search', 'VariableNamingRule', 'preserve');
+%fprintf('Loaded total: %d rows\n', height(data2_table));
 
-%% === FINAL PLOT: ACCURACY VS EFFICIENCY (CLEAN LOG SCALE) ===
-clear; clc; close all;
-% 1. DATA LOADING
-filename = 'experiment_data.xlsx';
-data_all = readtable(filename, 'Sheet', 'similarity_search', 'VariableNamingRule', 'preserve');
+% 1. TIMESTAMPS
 target_timestamps = [ ...
-    "20260201_231314", "20260202_232739", "20260203_143040", ...
-    "20260201_230706", "20260202_181345", "20260203_143127", "20260203_172314", ...
-    "20260203_172348"];
-% 2. BERECHNUNG
-K_vals = [5, 10, 25, 50];
-p_s1_dir = zeros(3, 2); p_s1_dec = zeros(3, 2);
-p_s2_dir = zeros(3, 2); p_s2_dec = zeros(3, 2);
+    "20260201_231314", ...
+    "20260202_232739", ...
+    "20260203_143040", ...
+    "20260201_230706", ...
+    "20260202_181345", ...
+    "20260203_143127", ...
+    "20260203_172314", ...
+    "20260203_172348" ...
+];
+%%
+% 2. FILTERUNG - Bahn level (Direct)
+filter_idx = strcmpi(data2_table.level, 'bahn') & ...
+             strcmp(data2_table.weights, '1,1,1,1,1') & ...
+             (data2_table.K == data2_table.dtw_calls) & ...
+             ismember(string(data2_table.Timestamp), target_timestamps);
+data_filtered = data2_table(filter_idx, :);
+fprintf('Filtered rows (bahn): %d\n', height(data_filtered));
 
-fprintf('Calculating metrics...\n');
-for i = 1:4
-    k = K_vals(i);
-    idx_base = strcmp(data_all.weights, '1,1,1,1,1') & ...
-               (data_all.K == k) & (data_all.K == data_all.dtw_calls) & ...
-               ismember(string(data_all.Timestamp), target_timestamps);
-    rows_bahn = data_all(idx_base & strcmpi(data_all.level, 'bahn'), :);
-    if isempty(rows_bahn), continue; end
-    
-    % Metrics
-    p_s1_dir(i, 1) = mean(rows_bahn.stage1_time_sec) * 1000;
-    p_s1_dir(i, 2) = mean(rows_bahn.err_direct_s1_weighted); 
-    p_s1_dec(i, 1) = mean(rows_bahn.stage1_time_sec) * 1000;
-    p_s1_dec(i, 2) = mean(rows_bahn.err_fromsegs_s1_weighted); 
-    p_s2_dir(i, 1) = mean(rows_bahn.total_time_sec) * 1000;
-    p_s2_dir(i, 2) = mean(rows_bahn.err_direct_s2_weighted);
-    p_s2_dec(i, 2) = mean(rows_bahn.err_fromsegs_s2_weighted);
-    
-    % Segment Time Summation
-    rows_seg_all = data_all(idx_base & contains(lower(data_all.level), 'seg'), :);
-    total_times_sum = zeros(height(rows_bahn), 1);
-    for r = 1:height(rows_bahn)
-        ids_str = string(rows_bahn.segment_id{r});
-        if ismissing(ids_str) || strlength(ids_str)==0, continue; end
-        mask_segs = ismember(rows_seg_all.query_id, ids_str);
-        if any(mask_segs), total_times_sum(r) = sum(rows_seg_all.total_time_sec(mask_segs)); end
+% Pre-filter segment rows (for Decomposed timing)
+filter_seg_idx = contains(lower(data2_table.level), 'seg') & ...
+                 strcmp(data2_table.weights, '1,1,1,1,1') & ...
+                 (data2_table.K == data2_table.dtw_calls) & ...
+                 ismember(string(data2_table.Timestamp), target_timestamps);
+data_seg_all = data2_table(filter_seg_idx, :);
+fprintf('Filtered rows (seg):  %d\n', height(data_seg_all));
+
+% 3. ANALYSE NACH K
+unique_K = unique(data_filtered.K);
+
+fprintf('\n========================================================================\n');
+fprintf('=== TIMING STATISTICS (ms) - Direct vs Decomposed ===\n');
+fprintf('========================================================================\n');
+
+for i = 1:length(unique_K)
+    k_val = unique_K(i);
+    filter_join = strcmpi(data_filtered.dtw_mode, 'position') & ...
+                 (data_filtered.K == k_val);
+    filter_joint = strcmp(data_filtered.dtw_mode, 'joint_states') & ...
+                 (data_filtered.K == k_val);
+    sub_data_pos = data_filtered(filter_join, :);
+    sub_data_joint = data_filtered(filter_joint, :);
+
+
+    % --- Direct Zeiten Pos (in ms) ---
+    t_s1_all_pos     = sub_data_pos.stage1_time_sec * 1000;
+    t_s2_dir_all_pos = sub_data_pos.stage2_time_sec * 1000;
+    t_total_dir_all_pos = sub_data_pos.total_time_sec * 1000;
+
+    % --- Direct Zeiten Joint (in ms) ---
+    t_s1_all_joint     = sub_data_joint.stage1_time_sec * 1000;
+    t_s2_dir_all_joint = sub_data_joint.stage2_time_sec * 1000;
+    t_total_dir_all_joint = sub_data_joint.total_time_sec * 1000;
+
+    t_s1_all = (t_s1_all_pos+t_s1_all_joint)/2;
+    t_s2_dir_all = (t_s2_dir_all_pos+t_s2_dir_all_joint)/2;
+    t_total_dir_all = (t_total_dir_all_pos+t_total_dir_all_joint)/2;
+
+    % --- Decomposed Zeiten (Summe der total_time_sec der Segmente pro Bahn) ---
+    filter_join = strcmpi(data_seg_all.dtw_mode, 'position') & ...
+                 (data_seg_all.K == k_val);
+    seg_rows_k_pos = data_seg_all(filter_join, :);
+
+    t_total_dec_all_pos = zeros(height(sub_data_pos), 1);
+    t_s2_dec_all_pos    = zeros(height(sub_data_pos), 1);
+
+    for r = 1:height(sub_data_pos)
+        ids_str = string(sub_data_pos.segment_id{r});
+        
+        segs_filter = startsWith(seg_rows_k_pos.segment_id, ids_str);
+        segs = seg_rows_k_pos(segs_filter, :);
+
+        t_total_dec_all_pos(r) = sum(seg_rows_k_pos.total_time_sec(segs_filter)) * 1000;
+        t_s2_dec_all_pos(r)    = sum(seg_rows_k_pos.stage2_time_sec(segs_filter)) * 1000;
     end
-    p_s2_dec(i, 1) = mean(total_times_sum) * 1000;
+
+    % --- Decomposed Zeiten (Summe der total_time_sec der Segmente pro Bahn) ---
+    filter_join = strcmpi(data_seg_all.dtw_mode, 'position') & ...
+                 (data_seg_all.K == k_val);
+    seg_rows_k_joint = data_seg_all(filter_join, :);
+
+    t_total_dec_all_joint = zeros(height(sub_data_joint), 1);
+    t_s2_dec_all_joint    = zeros(height(sub_data_joint), 1);
+
+    for r = 1:height(sub_data_joint)
+        ids_str = string(sub_data_joint.segment_id{r});
+        
+        segs_filter = startsWith(seg_rows_k_joint.segment_id, ids_str);
+        segs = seg_rows_k_joint(segs_filter, :);
+
+        t_total_dec_all_joint(r) = sum(seg_rows_k_joint.total_time_sec(segs_filter)) * 1000;
+        t_s2_dec_all_joint(r)    = sum(seg_rows_k_joint.stage2_time_sec(segs_filter)) * 1000;
+    end
+
+    t_s2_dec_all = (t_s2_dec_all_pos+t_s2_dec_all_joint)/2;
+    t_total_dec_all = (t_total_dec_all_pos+t_total_dec_all_joint)/2;
+    
+
+    fprintf('\n--- K = %d ---\n', k_val);
+    fprintf('%-20s | %8s | %8s | %8s | %8s | %8s\n', ...
+        '', 'Mean', 'Median', 'Std', 'P90', 'Max');
+    fprintf('%s\n', repmat('-', 1, 75));
+
+    % Stage 1
+    fprintf('%-20s | %8.1f | %8.1f | %8.1f | %8.1f | %8.1f\n', ...
+        'Stage 1', ...
+        mean(t_s1_all, 'omitnan'), median(t_s1_all, 'omitnan'), ...
+        std(t_s1_all, 'omitnan'), prctile(t_s1_all, 90), max(t_s1_all));
+
+    % Stage 2 Direct
+    fprintf('%-20s | %8.1f | %8.1f | %8.1f | %8.1f | %8.1f\n', ...
+        'S2 Direct', ...
+        mean(t_s2_dir_all, 'omitnan'), median(t_s2_dir_all, 'omitnan'), ...
+        std(t_s2_dir_all, 'omitnan'), prctile(t_s2_dir_all, 90), max(t_s2_dir_all));
+
+    % Stage 2 Decomposed
+    fprintf('%-20s | %8.1f | %8.1f | %8.1f | %8.1f | %8.1f\n', ...
+        'S2 Decomposed', ...
+        mean(t_s2_dec_all, 'omitnan'), median(t_s2_dec_all, 'omitnan'), ...
+        std(t_s2_dec_all, 'omitnan'), prctile(t_s2_dec_all, 90), max(t_s2_dec_all));
+
+    fprintf('%s\n', repmat('-', 1, 75));
+
+    % Total Direct
+    fprintf('%-20s | %8.1f | %8.1f | %8.1f | %8.1f | %8.1f\n', ...
+        'Total Direct', ...
+        mean(t_total_dir_all, 'omitnan'), median(t_total_dir_all, 'omitnan'), ...
+        std(t_total_dir_all, 'omitnan'), prctile(t_total_dir_all, 90), max(t_total_dir_all));
+
+    % Total Decomposed
+    fprintf('%-20s | %8.1f | %8.1f | %8.1f | %8.1f | %8.1f\n', ...
+        'Total Decomposed', ...
+        mean(t_total_dec_all, 'omitnan'), median(t_total_dec_all, 'omitnan'), ...
+        std(t_total_dec_all, 'omitnan'), prctile(t_total_dec_all, 90), max(t_total_dec_all));
+
+    % --- Ground Truth & Predictions ---
+    gt = sub_data.ground_truth;
+    pred_s1_dir = sub_data.direct_s1_weighted;
+    pred_s1_dec = sub_data.fromsegs_s1_weighted;
+    pred_s2_dir = sub_data.direct_s2_weighted;
+    pred_s2_dec = sub_data.fromsegs_s2_weighted;
+
+    % --- MAE & RMSE ---
+    mae_s1_dir  = mean(abs(pred_s1_dir - gt));
+    mae_s1_dec  = mean(abs(pred_s1_dec - gt));
+    mae_s2_dir  = mean(abs(pred_s2_dir - gt));
+    mae_s2_dec  = mean(abs(pred_s2_dec - gt));
+    rmse_s1_dir = sqrt(mean((pred_s1_dir - gt).^2));
+    rmse_s1_dec = sqrt(mean((pred_s1_dec - gt).^2));
+    rmse_s2_dir = sqrt(mean((pred_s2_dir - gt).^2));
+    rmse_s2_dec = sqrt(mean((pred_s2_dec - gt).^2));
+
+    fprintf('%s\n', repmat('-', 1, 75));
+    fprintf('%-20s | %8s | %8s\n', 'Prediction', 'MAE', 'RMSE');
+    fprintf('%s\n', repmat('-', 1, 45));
+    fprintf('%-20s | %8.4f | %8.4f\n', 'S1 Direct',      mae_s1_dir, rmse_s1_dir);
+    fprintf('%-20s | %8.4f | %8.4f\n', 'S1 Decomposed',  mae_s1_dec, rmse_s1_dec);
+    fprintf('%-20s | %8.4f | %8.4f\n', 'S2 Direct',      mae_s2_dir, rmse_s2_dir);
+    fprintf('%-20s | %8.4f | %8.4f\n', 'S2 Decomposed',  mae_s2_dec, rmse_s2_dec);
 end
 
-%% === PLOTTING ===
-fig = figure('Position', [100, 100, 750, 500], 'Color', 'w');
-ax = axes('XScale', 'log', 'YScale', 'linear', 'XMinorGrid', 'off');
-hold on; grid on; box off;
+fprintf('\n========================================================================\n');
 
-c_dir = [0.86, 0.13, 0.15]; c_dec = [0.15, 0.39, 0.91];
-sz = 120;
-
-% Verbindungslinien
-for i = 1:4
-    plot([p_s1_dir(i,1), p_s2_dir(i,1)], [p_s1_dir(i,2), p_s2_dir(i,2)], '-', 'Color', [c_dir, 0.5], 'LineWidth', 2.5); 
-    plot([p_s1_dec(i,1), p_s2_dec(i,1)], [p_s1_dec(i,2), p_s2_dec(i,2)], '-', 'Color', [c_dec, 0.5], 'LineWidth', 2.5);
-end
-
-% Marker
-h_s1_dir = scatter(p_s1_dir(:,1), p_s1_dir(:,2), sz, c_dir, 'filled', '^', 'MarkerEdgeColor', 'k');
-h_s2_dir = scatter(p_s2_dir(:,1), p_s2_dir(:,2), sz, c_dir, 'filled', 'o', 'MarkerEdgeColor', 'k');
-h_s1_dec = scatter(p_s1_dec(:,1), p_s1_dec(:,2), sz, c_dec, 'filled', '^', 'MarkerEdgeColor', 'k');
-h_s2_dec = scatter(p_s2_dec(:,1), p_s2_dec(:,2), sz, c_dec, 'filled', 'o', 'MarkerEdgeColor', 'k');
-
-% Labels
-font_args = {'FontName', 'Times New Roman', 'FontSize', 18, 'FontWeight', 'bold'};
-for i = 1:4
-    text(p_s2_dir(i,1)*1.15, p_s2_dir(i,2), sprintf('K=%d  ', K_vals(i)), 'Color', c_dir, 'HorizontalAlignment', 'left', font_args{:});
-    text(p_s2_dec(i,1)*1.15, p_s2_dec(i,2), sprintf('K=%d  ', K_vals(i)), 'Color', c_dec, 'HorizontalAlignment', 'left', font_args{:});
-end
-
-xlabel('Inference time [ms]', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', 'Times New Roman');
-ylabel('MAE [mm]', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', 'Times New Roman');
-yticks([0.0, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 1.0])
-ylim([0.02, 0.09])
-set(gca, 'FontName', 'Times New Roman', 'FontSize', 14, 'LineWidth', 1, 'FontWeight', 'bold');
-xticks([50 100 200 500 1000 2000 5000 10000]);
-xticklabels({'50', '100', '200', '500', '1000', '2000', '5000', '10000'});
-xlim([40, 15000]);
-
-[~, objh] = legend([h_s1_dir,  h_s2_dir, h_s1_dec, h_s2_dec], ...
-    {'Stage 1 (Direct)', 'Stage 2 (Direct)', 'Stage 1 (Decomposed)',  'Stage 2 (Decomposed)'}, ...
-    'Location', 'northeast', 'FontSize', 15, 'FontWeight', 'bold');
-
-objhl = findobj(objh, 'type', 'patch'); %// objects of legend of type line
-set(objhl, 'Markersize', 13); %// set marker size as desired
-
-exportgraphics(gca, fullfile('figs', 'efficiency_tradeoff_log_mae.pdf'));
-fprintf('Plot saved: efficiency_tradeoff_log_clean.pdf\n');
 
 %% === TRADE-OFF PLOT: S1 vs DIRECT vs DECOMPOSED (RMSE CALCULATED) ===
 clear; clc; close all;
@@ -811,8 +906,8 @@ target_timestamps = [ ...
 
 % 2. BERECHNUNG
 K_vals = [5, 10, 25, 50];
-p_s1_dir = zeros(3, 2); p_s1_dec = zeros(3, 2);
-p_s2_dir = zeros(3, 2); p_s2_dec = zeros(3, 2);
+p_s1_dir = zeros(4, 2); p_s1_dec = zeros(4, 2);
+p_s2_dir = zeros(4, 2); p_s2_dec = zeros(4, 2);
 
 fprintf('Calculating RMSE from deviations...\n');
 
@@ -825,33 +920,52 @@ for i = 1:4
            
     rows_bahn = data_all(idx_base & strcmpi(data_all.level, 'bahn'), :);
     if isempty(rows_bahn), continue; end
-    
-    % --- RMSE BERECHNUNG (sqrt(mean(x^2))) ---
-    
-    % 1. STAGE 1 (Baseline)
-    p_s1_dir(i, 1) = mean(rows_bahn.stage1_time_sec) * 1000;
-    p_s1_dir(i, 2) = sqrt(mean(rows_bahn.err_direct_s1_weighted .^ 2)); % RMSE berechnen
-    
-    p_s1_dec(i, 1) = mean(rows_bahn.stage1_time_sec) * 1000;
-    p_s1_dec(i, 2) = sqrt(mean(rows_bahn.err_fromsegs_s1_weighted .^ 2)); % RMSE berechnen
-    
-    % 2. STAGE 2 DIRECT
-    p_s2_dir(i, 1) = mean(rows_bahn.total_time_sec) * 1000;
-    p_s2_dir(i, 2) = sqrt(mean(rows_bahn.err_direct_s2_weighted .^ 2)); % RMSE berechnen
-    
-    % 3. STAGE 2 DECOMPOSED
-    p_s2_dec(i, 2) = sqrt(mean(rows_bahn.err_fromsegs_s2_weighted .^ 2)); % RMSE berechnen
-    
-    % Zeit: ECHTE Berechnung über Segment-IDs (Wie gehabt)
+
+    % Trennung nach dtw_mode
+    sub_pos   = rows_bahn(strcmpi(rows_bahn.dtw_mode, 'position'), :);
+    sub_joint = rows_bahn(strcmp(rows_bahn.dtw_mode, 'joint_states'), :);
+
+    % --- Direct Zeiten (elementweise Mittelung, dann Median) ---
+    t_s1_all        = (sub_pos.stage1_time_sec + sub_joint.stage1_time_sec) / 2 * 1000;
+    t_total_dir_all = (sub_pos.total_time_sec  + sub_joint.total_time_sec)  / 2 * 1000;
+
+    p_s1_dir(i, 1) = median(t_s1_all);
+    p_s1_dec(i, 1) = median(t_s1_all);
+    p_s2_dir(i, 1) = median(t_total_dir_all);
+
+    % --- Decomposed Zeiten (pro Mode summieren, elementweise mitteln, dann Median) ---
     rows_seg_all = data_all(idx_base & contains(lower(data_all.level), 'seg'), :);
-    total_times_sum = zeros(height(rows_bahn), 1);
-    for r = 1:height(rows_bahn)
-        ids_str = string(rows_bahn.segment_id{r});
-        if ismissing(ids_str) || strlength(ids_str)==0, continue; end
-        mask_segs = ismember(rows_seg_all.query_id, ids_str);
-        if any(mask_segs), total_times_sum(r) = sum(rows_seg_all.total_time_sec(mask_segs)); end
+    seg_pos   = rows_seg_all(strcmpi(rows_seg_all.dtw_mode, 'position'), :);
+    seg_joint = rows_seg_all(strcmp(rows_seg_all.dtw_mode, 'joint_states'), :);
+
+    t_total_dec_pos   = zeros(height(sub_pos), 1);
+    t_total_dec_joint = zeros(height(sub_joint), 1);
+
+    for r = 1:height(sub_pos)
+        ids_str = string(sub_pos.segment_id{r});
+        segs_filter = startsWith(seg_pos.segment_id, ids_str);
+        if any(segs_filter), t_total_dec_pos(r) = sum(seg_pos.total_time_sec(segs_filter)) * 1000; end
     end
-    p_s2_dec(i, 1) = mean(total_times_sum) * 1000;
+
+    for r = 1:height(sub_joint)
+        ids_str = string(sub_joint.segment_id{r});
+        segs_filter = startsWith(seg_joint.segment_id, ids_str);
+        if any(segs_filter), t_total_dec_joint(r) = sum(seg_joint.total_time_sec(segs_filter)) * 1000; end
+    end
+
+    t_total_dec_all = (t_total_dec_pos + t_total_dec_joint) / 2;
+    p_s2_dec(i, 1) = median(t_total_dec_all);
+
+    % --- RMSE (über beide Modi) ---
+    err_s1_dir_all = [sub_pos.err_direct_s1_weighted; sub_joint.err_direct_s1_weighted];
+    err_s1_dec_all = [sub_pos.err_fromsegs_s1_weighted; sub_joint.err_fromsegs_s1_weighted];
+    err_s2_dir_all = [sub_pos.err_direct_s2_weighted; sub_joint.err_direct_s2_weighted];
+    err_s2_dec_all = [sub_pos.err_fromsegs_s2_weighted; sub_joint.err_fromsegs_s2_weighted];
+
+    p_s1_dir(i, 2) = sqrt(mean(err_s1_dir_all .^ 2));
+    p_s1_dec(i, 2) = sqrt(mean(err_s1_dec_all .^ 2));
+    p_s2_dir(i, 2) = sqrt(mean(err_s2_dir_all .^ 2));
+    p_s2_dec(i, 2) = sqrt(mean(err_s2_dec_all .^ 2));
 end
 
 %% === PLOTTING (PERFECT STYLE - RMSE) ===
@@ -900,5 +1014,124 @@ xlim([40, 15000]);
 objhl = findobj(objh, 'type', 'patch'); 
 set(objhl, 'Markersize', 13); 
 
-%exportgraphics(gca, fullfile('figs', 'efficiency_tradeoff_log_rmse.pdf'));
+exportgraphics(gca, fullfile('figs', 'efficiency_tradeoff_log_rmse.pdf'));
 fprintf('Plot saved: efficiency_tradeoff_log_rmse.pdf\n');
+
+%% === FINAL PLOT: ACCURACY VS EFFICIENCY (MAE) ===
+clear; clc; close all;
+
+% 1. DATA LOADING
+filename = 'experiment_data.xlsx';
+data_all = readtable(filename, 'Sheet', 'similarity_search', 'VariableNamingRule', 'preserve');
+target_timestamps = [ ...
+    "20260201_231314", "20260202_232739", "20260203_143040", ...
+    "20260201_230706", "20260202_181345", "20260203_143127", "20260203_172314", ...
+    "20260203_172348"];
+
+% Pre-filter
+filter_base = strcmp(data_all.weights, '1,1,1,1,1') & ...
+              (data_all.K == data_all.dtw_calls) & ...
+              ismember(string(data_all.Timestamp), target_timestamps);
+
+data_bahn = data_all(filter_base & strcmpi(data_all.level, 'bahn'), :);
+data_seg  = data_all(filter_base & contains(lower(data_all.level), 'seg'), :);
+
+% 2. BERECHNUNG (identisch zum Analyse-Script)
+K_vals = [5, 10, 25, 50];
+p_s1_dir = zeros(4, 2); p_s1_dec = zeros(4, 2);
+p_s2_dir = zeros(4, 2); p_s2_dec = zeros(4, 2);
+
+for i = 1:4
+    k = K_vals(i);
+
+    % Trennung nach dtw_mode
+    sub_pos   = data_bahn(strcmpi(data_bahn.dtw_mode, 'position') & data_bahn.K == k, :);
+    sub_joint = data_bahn(strcmp(data_bahn.dtw_mode, 'joint_states') & data_bahn.K == k, :);
+
+    % --- Direct Zeiten (elementweise Mittelung, dann Median) ---
+    t_s1_all        = (sub_pos.stage1_time_sec + sub_joint.stage1_time_sec) / 2 * 1000;
+    t_total_dir_all = (sub_pos.total_time_sec  + sub_joint.total_time_sec)  / 2 * 1000;
+
+    p_s1_dir(i, 1) = median(t_s1_all);
+    p_s1_dec(i, 1) = median(t_s1_all);
+    p_s2_dir(i, 1) = median(t_total_dir_all);
+
+    % --- Decomposed Zeiten (pro Mode summieren, elementweise mitteln, dann Median) ---
+    seg_pos   = data_seg(strcmpi(data_seg.dtw_mode, 'position') & data_seg.K == k, :);
+    seg_joint = data_seg(strcmp(data_seg.dtw_mode, 'joint_states') & data_seg.K == k, :);
+
+    t_total_dec_pos   = zeros(height(sub_pos), 1);
+    t_total_dec_joint = zeros(height(sub_joint), 1);
+
+    for r = 1:height(sub_pos)
+        ids_str = string(sub_pos.segment_id{r});
+        segs_filter = startsWith(seg_pos.segment_id, ids_str);
+        if any(segs_filter), t_total_dec_pos(r) = sum(seg_pos.total_time_sec(segs_filter)) * 1000; end
+    end
+
+    for r = 1:height(sub_joint)
+        ids_str = string(sub_joint.segment_id{r});
+        segs_filter = startsWith(seg_joint.segment_id, ids_str);
+        if any(segs_filter), t_total_dec_joint(r) = sum(seg_joint.total_time_sec(segs_filter)) * 1000; end
+    end
+
+    t_total_dec_all = (t_total_dec_pos + t_total_dec_joint) / 2;
+    p_s2_dec(i, 1) = median(t_total_dec_all);
+
+    % --- MAE (über beide Modi, wie im Analyse-Script) ---
+    gt_all          = [sub_pos.ground_truth; sub_joint.ground_truth];
+    pred_s1_dir_all = [sub_pos.direct_s1_weighted; sub_joint.direct_s1_weighted];
+    pred_s1_dec_all = [sub_pos.fromsegs_s1_weighted; sub_joint.fromsegs_s1_weighted];
+    pred_s2_dir_all = [sub_pos.direct_s2_weighted; sub_joint.direct_s2_weighted];
+    pred_s2_dec_all = [sub_pos.fromsegs_s2_weighted; sub_joint.fromsegs_s2_weighted];
+
+    p_s1_dir(i, 2) = mean(abs(pred_s1_dir_all - gt_all));
+    p_s1_dec(i, 2) = mean(abs(pred_s1_dec_all - gt_all));
+    p_s2_dir(i, 2) = mean(abs(pred_s2_dir_all - gt_all));
+    p_s2_dec(i, 2) = mean(abs(pred_s2_dec_all - gt_all));
+end
+
+%% === PLOTTING ===
+fig = figure('Position', [100, 100, 750, 500], 'Color', 'w');
+ax = axes('XScale', 'log', 'YScale', 'linear', 'XMinorGrid', 'off');
+hold on; grid on; box off;
+
+c_dir = [0.86, 0.13, 0.15]; c_dec = [0.15, 0.39, 0.91];
+sz = 120;
+
+% Verbindungslinien
+for i = 1:4
+    plot([p_s1_dir(i,1), p_s2_dir(i,1)], [p_s1_dir(i,2), p_s2_dir(i,2)], '-', 'Color', [c_dir, 0.5], 'LineWidth', 2.5);
+    plot([p_s1_dec(i,1), p_s2_dec(i,1)], [p_s1_dec(i,2), p_s2_dec(i,2)], '-', 'Color', [c_dec, 0.5], 'LineWidth', 2.5);
+end
+
+% Marker
+h_s1_dir = scatter(p_s1_dir(:,1), p_s1_dir(:,2), sz, c_dir, 'filled', '^', 'MarkerEdgeColor', 'k');
+h_s2_dir = scatter(p_s2_dir(:,1), p_s2_dir(:,2), sz, c_dir, 'filled', 'o', 'MarkerEdgeColor', 'k');
+h_s1_dec = scatter(p_s1_dec(:,1), p_s1_dec(:,2), sz, c_dec, 'filled', '^', 'MarkerEdgeColor', 'k');
+h_s2_dec = scatter(p_s2_dec(:,1), p_s2_dec(:,2), sz, c_dec, 'filled', 'o', 'MarkerEdgeColor', 'k');
+
+% Labels
+font_args = {'FontName', 'Times New Roman', 'FontSize', 18, 'FontWeight', 'bold'};
+for i = 1:4
+    text(p_s2_dir(i,1)*1.15, p_s2_dir(i,2), sprintf('K=%d  ', K_vals(i)), 'Color', c_dir, 'HorizontalAlignment', 'left', font_args{:});
+    text(p_s2_dec(i,1)*1.15, p_s2_dec(i,2), sprintf('K=%d  ', K_vals(i)), 'Color', c_dec, 'HorizontalAlignment', 'left', font_args{:});
+end
+
+xlabel('Inference time [ms]', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', 'Times New Roman');
+ylabel('MAE [mm]', 'FontWeight', 'bold', 'FontSize', 16, 'FontName', 'Times New Roman');
+yticks([0.0, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 1.0])
+ylim([0.02, 0.09])
+set(gca, 'FontName', 'Times New Roman', 'FontSize', 14, 'LineWidth', 1, 'FontWeight', 'bold');
+xticks([50 100 200 500 1000 2000 5000 10000]);
+xticklabels({'50', '100', '200', '500', '1000', '2000', '5000', '10000'});
+xlim([40, 15000]);
+
+[~, objh] = legend([h_s1_dir, h_s2_dir, h_s1_dec, h_s2_dec], ...
+    {'Stage 1 (Direct)', 'Stage 2 (Direct)', 'Stage 1 (Decomposed)', 'Stage 2 (Decomposed)'}, ...
+    'Location', 'northeast', 'FontSize', 15, 'FontWeight', 'bold');
+objhl = findobj(objh, 'type', 'patch');
+set(objhl, 'Markersize', 13);
+
+exportgraphics(gca, fullfile('figs', 'efficiency_tradeoff_log_mae.pdf'));
+fprintf('Plot saved: efficiency_tradeoff_log_mae.pdf\n');

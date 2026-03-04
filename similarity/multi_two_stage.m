@@ -22,7 +22,7 @@ fprintf('═══ CONFIGURATION ═══\n\n');
 
 % === QUERY SETTINGS ===
 queries_quantity = 15;
-random_seed = 105;  % Für Reproduzierbarkeit
+random_seed = 21;  % Für Reproduzierbarkeit
 
 % === EMBEDDING SETTINGS ===
 K = 10;  % Stage 1 candidates

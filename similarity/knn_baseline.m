@@ -4,7 +4,7 @@
 %  Includes timing measurements for deployment comparison
 %  ========================================================================
 
-clear; clc;
+%clear; clc;
 
 addpath(genpath(pwd));
 addpath(genpath('../main'));
@@ -34,6 +34,15 @@ exclude_ids = {
 fprintf('Queries:        %d\n', queries_quantity);
 fprintf('K values:       [%s]\n', strjoin(string(all_k_values), ', '));
 fprintf('Random seed:    %d\n\n', random_seed);
+
+% === DTW SETTINGS ===
+dtw_active = false;
+dtw_mode = 'position';
+dtw_window = 0.2;
+normalize_dtw = false;
+use_rotation_alignment = false;
+lb_kim_keep_ratio = 1.0;
+lb_keogh_candidates = 50;
 
 % ========================================================================
 %% SECTION 2: LOAD ALL DATA (TIMED)
@@ -144,33 +153,77 @@ fprintf('═══ BUILDING FEATURE MATRICES ═══\n\n');
 
 t_build = tic;
 
-% --- Bahn features ---
-all_movement_types = meta_all.movement_type;
-unique_types = unique(all_movement_types);
-type_map = containers.Map();
-for i = 1:length(unique_types)
-    type_map(unique_types{i}) = i;
-end
-
-movement_numeric = zeros(height(meta_all), 1);
+movement_ratio = zeros(height(meta_all), 1);
 for i = 1:height(meta_all)
-    movement_numeric(i) = type_map(all_movement_types{i});
+    mt = lower(meta_all.movement_type{i});
+    n_l = sum(mt == 'l');
+    n_c = sum(mt == 'c');
+    total = n_l + n_c;
+    if total > 0
+        movement_ratio(i) = n_c / total;
+    else
+        movement_ratio(i) = 0;
+    end
 end
 
-feature_cols = [movement_numeric, ...
-    meta_all.duration, meta_all.weight, meta_all.length, ...
+feature_cols = [movement_ratio, ...
+    %meta_all.duration, meta_all.weight, meta_all.length, ...
+    meta_all.duration, meta_all.length, ...
     meta_all.min_twist_ist, meta_all.max_twist_ist, meta_all.mean_twist_ist, ...
     meta_all.median_twist_ist, meta_all.std_twist_ist, ...
     meta_all.min_acceleration_ist, meta_all.max_acceleration_ist, meta_all.mean_acceleration_ist, ...
     meta_all.median_acceleration_ist, meta_all.std_acceleration_ist, ...
-    meta_all.position_x, meta_all.position_y, meta_all.position_z];
+    %meta_all.position_x, meta_all.position_y, meta_all.position_z];
+    ];
 
 feature_cols(isnan(feature_cols)) = 0;
-feat_min = min(feature_cols, [], 1);
-feat_max = max(feature_cols, [], 1);
-feat_range = feat_max - feat_min;
-feat_range(feat_range == 0) = 1;
-X = (feature_cols - feat_min) ./ feat_range;
+
+vel_max = 3200.0;
+accel_max = 10200.0;
+max_length = 9000.0;
+max_duration = 25.0;
+max_payload = 60.0;
+ws_min_x = 400; ws_max_x = 1900;
+ws_min_y = -1100; ws_max_y = 1100;
+ws_min_z = 400; ws_max_z = 2000;
+
+X = zeros(size(feature_cols));
+X(:,1) = feature_cols(:,1);                                            % movement_ratio [0,1]
+X(:,2) = min(feature_cols(:,2) / max_duration, 1);                     % duration
+%X(:,3) = min(feature_cols(:,3) / max_payload, 1);                      % weight
+X(:,3) = min(feature_cols(:,3) / max_length, 1);                       % length
+X(:,4) = min(max((feature_cols(:,4) + vel_max) / (2*vel_max), 0), 1);  % min_twist
+X(:,5) = min(max((feature_cols(:,5) + vel_max) / (2*vel_max), 0), 1);  % max_twist
+X(:,6) = min(max((feature_cols(:,6) + vel_max) / (2*vel_max), 0), 1);  % mean_twist
+X(:,7) = min(max((feature_cols(:,7) + vel_max) / (2*vel_max), 0), 1);  % median_twist
+X(:,8) = min(feature_cols(:,8) / vel_max, 1);                          % std_twist
+X(:,9) = min(max((feature_cols(:,9) + accel_max) / (2*accel_max), 0), 1); % min_accel
+X(:,10) = min(max((feature_cols(:,10) + accel_max) / (2*accel_max), 0), 1); % max_accel
+X(:,11) = min(max((feature_cols(:,11) + accel_max) / (2*accel_max), 0), 1); % mean_accel
+X(:,12) = min(max((feature_cols(:,12) + accel_max) / (2*accel_max), 0), 1); % median_accel
+X(:,13) = min(feature_cols(:,13) / accel_max, 1);                      % std_accel
+%X(:,15) = min(max((feature_cols(:,15) - ws_min_x) / (ws_max_x - ws_min_x), 0), 1); % pos_x
+%X(:,16) = min(max((feature_cols(:,16) - ws_min_y) / (ws_max_y - ws_min_y), 0), 1); % pos_y
+%X(:,17) = min(max((feature_cols(:,17) - ws_min_z) / (ws_max_z - ws_min_z), 0), 1); % pos_z
+
+% X = zeros(size(feature_cols));
+% X(:,1) = feature_cols(:,1);                                            % movement_ratio [0,1]
+% X(:,2) = min(feature_cols(:,2) / max_duration, 1);                     % duration
+% X(:,3) = min(feature_cols(:,3) / max_payload, 1);                      % weight
+% X(:,4) = min(feature_cols(:,4) / max_length, 1);                       % length
+% X(:,5) = min(max((feature_cols(:,5) + vel_max) / (2*vel_max), 0), 1);  % min_twist
+% X(:,6) = min(max((feature_cols(:,6) + vel_max) / (2*vel_max), 0), 1);  % max_twist
+% X(:,7) = min(max((feature_cols(:,7) + vel_max) / (2*vel_max), 0), 1);  % mean_twist
+% X(:,8) = min(max((feature_cols(:,8) + vel_max) / (2*vel_max), 0), 1);  % median_twist
+% X(:,9) = min(feature_cols(:,9) / vel_max, 1);                          % std_twist
+% X(:,10) = min(max((feature_cols(:,10) + accel_max) / (2*accel_max), 0), 1); % min_accel
+% X(:,11) = min(max((feature_cols(:,11) + accel_max) / (2*accel_max), 0), 1); % max_accel
+% X(:,12) = min(max((feature_cols(:,12) + accel_max) / (2*accel_max), 0), 1); % mean_accel
+% X(:,13) = min(max((feature_cols(:,13) + accel_max) / (2*accel_max), 0), 1); % median_accel
+% X(:,14) = min(feature_cols(:,14) / accel_max, 1);                      % std_accel
+% X(:,15) = min(max((feature_cols(:,15) - ws_min_x) / (ws_max_x - ws_min_x), 0), 1); % pos_x
+% X(:,16) = min(max((feature_cols(:,16) - ws_min_y) / (ws_max_y - ws_min_y), 0), 1); % pos_y
+% X(:,17) = min(max((feature_cols(:,17) - ws_min_z) / (ws_max_z - ws_min_z), 0), 1); % pos_z
 
 all_bahn_ids = meta_all.bahn_id;
 y = nan(height(meta_all), 1);
@@ -182,30 +235,65 @@ for i = 1:height(meta_all)
 end
 
 % --- Segment features ---
-seg_movement_numeric = zeros(height(seg_meta), 1);
+seg_movement_ratio = zeros(height(seg_meta), 1);
 for i = 1:height(seg_meta)
-    mt = seg_meta.movement_type{i};
-    if type_map.isKey(mt)
-        seg_movement_numeric(i) = type_map(mt);
+    mt = lower(seg_meta.movement_type{i});
+    if contains(mt, 'circular')
+        seg_movement_ratio(i) = 1.0;
     else
-        seg_movement_numeric(i) = 0;
+        seg_movement_ratio(i) = 0.0;
     end
 end
 
-seg_feature_cols = [seg_movement_numeric, ...
-    seg_meta.duration, seg_meta.weight, seg_meta.length, ...
+seg_feature_cols = [seg_movement_ratio, ...
+    %seg_meta.duration, seg_meta.weight, seg_meta.length, ...
+    seg_meta.duration, seg_meta.length, ...
     seg_meta.min_twist_ist, seg_meta.max_twist_ist, seg_meta.mean_twist_ist, ...
     seg_meta.median_twist_ist, seg_meta.std_twist_ist, ...
     seg_meta.min_acceleration_ist, seg_meta.max_acceleration_ist, seg_meta.mean_acceleration_ist, ...
     seg_meta.median_acceleration_ist, seg_meta.std_acceleration_ist, ...
-    seg_meta.position_x, seg_meta.position_y, seg_meta.position_z];
+    %seg_meta.position_x, seg_meta.position_y, seg_meta.position_z];
+    ];
 
 seg_feature_cols(isnan(seg_feature_cols)) = 0;
-seg_feat_min = min(seg_feature_cols, [], 1);
-seg_feat_max = max(seg_feature_cols, [], 1);
-seg_feat_range = seg_feat_max - seg_feat_min;
-seg_feat_range(seg_feat_range == 0) = 1;
-X_seg = (seg_feature_cols - seg_feat_min) ./ seg_feat_range;
+
+X_seg = zeros(size(seg_feature_cols));
+X_seg(:,1) = seg_feature_cols(:,1);
+X_seg(:,2) = min(seg_feature_cols(:,2) / max_duration, 1);
+%X_seg(:,3) = min(seg_feature_cols(:,3) / max_payload, 1);
+X_seg(:,3) = min(seg_feature_cols(:,3) / max_length, 1);
+X_seg(:,4) = min(max((seg_feature_cols(:,4) + vel_max) / (2*vel_max), 0), 1);
+X_seg(:,5) = min(max((seg_feature_cols(:,5) + vel_max) / (2*vel_max), 0), 1);
+X_seg(:,6) = min(max((seg_feature_cols(:,6) + vel_max) / (2*vel_max), 0), 1);
+X_seg(:,7) = min(max((seg_feature_cols(:,7) + vel_max) / (2*vel_max), 0), 1);
+X_seg(:,8) = min(seg_feature_cols(:,8) / vel_max, 1);
+X_seg(:,9) = min(max((seg_feature_cols(:,9) + accel_max) / (2*accel_max), 0), 1);
+X_seg(:,10) = min(max((seg_feature_cols(:,10) + accel_max) / (2*accel_max), 0), 1);
+X_seg(:,11) = min(max((seg_feature_cols(:,11) + accel_max) / (2*accel_max), 0), 1);
+X_seg(:,12) = min(max((seg_feature_cols(:,12) + accel_max) / (2*accel_max), 0), 1);
+X_seg(:,13) = min(seg_feature_cols(:,13) / accel_max, 1);
+%X_seg(:,15) = min(max((seg_feature_cols(:,15) - ws_min_x) / (ws_max_x - ws_min_x), 0), 1);
+%X_seg(:,16) = min(max((seg_feature_cols(:,16) - ws_min_y) / (ws_max_y - ws_min_y), 0), 1);
+%X_seg(:,17) = min(max((seg_feature_cols(:,17) - ws_min_z) / (ws_max_z - ws_min_z), 0), 1);
+
+% X_seg = zeros(size(seg_feature_cols));
+% X_seg(:,1) = seg_feature_cols(:,1);
+% X_seg(:,2) = min(seg_feature_cols(:,2) / max_duration, 1);
+% X_seg(:,3) = min(seg_feature_cols(:,3) / max_payload, 1);
+% X_seg(:,4) = min(seg_feature_cols(:,4) / max_length, 1);
+% X_seg(:,5) = min(max((seg_feature_cols(:,5) + vel_max) / (2*vel_max), 0), 1);
+% X_seg(:,6) = min(max((seg_feature_cols(:,6) + vel_max) / (2*vel_max), 0), 1);
+% X_seg(:,7) = min(max((seg_feature_cols(:,7) + vel_max) / (2*vel_max), 0), 1);
+% X_seg(:,8) = min(max((seg_feature_cols(:,8) + vel_max) / (2*vel_max), 0), 1);
+% X_seg(:,9) = min(seg_feature_cols(:,9) / vel_max, 1);
+% X_seg(:,10) = min(max((seg_feature_cols(:,10) + accel_max) / (2*accel_max), 0), 1);
+% X_seg(:,11) = min(max((seg_feature_cols(:,11) + accel_max) / (2*accel_max), 0), 1);
+% X_seg(:,12) = min(max((seg_feature_cols(:,12) + accel_max) / (2*accel_max), 0), 1);
+% X_seg(:,13) = min(max((seg_feature_cols(:,13) + accel_max) / (2*accel_max), 0), 1);
+% X_seg(:,14) = min(seg_feature_cols(:,14) / accel_max, 1);
+% X_seg(:,15) = min(max((seg_feature_cols(:,15) - ws_min_x) / (ws_max_x - ws_min_x), 0), 1);
+% X_seg(:,16) = min(max((seg_feature_cols(:,16) - ws_min_y) / (ws_max_y - ws_min_y), 0), 1);
+% X_seg(:,17) = min(max((seg_feature_cols(:,17) - ws_min_z) / (ws_max_z - ws_min_z), 0), 1);
 
 all_seg_ids = seg_meta.segment_id;
 all_seg_bahn_ids = seg_meta.bahn_id;
@@ -244,6 +332,14 @@ query_times_direct = zeros(length(query_ids), 1);
 query_times_decomp = zeros(length(query_ids), 1);
 query_num_segments = zeros(length(query_ids), 1);
 
+% === Coverage analysis arrays ===
+nearest_distances = nan(length(query_ids),1);
+prediction_errors = nan(length(query_ids),1);
+
+coverage_dists = [];
+coverage_errors = [];
+
+knn_dtw_results = [];
 for q_idx = 1:length(query_ids)
     query_id = query_ids{q_idx};
     
@@ -264,6 +360,9 @@ for q_idx = 1:length(query_ids)
     dists(q_row) = inf;
     dists(isnan(y)) = inf;
     [sorted_dists, sorted_idx] = sort(dists, 'ascend');
+
+    % === Coverage metric ===
+    nearest_distances(q_idx) = sorted_dists(1);
     
     for k_idx = 1:length(all_k_values)
         K = all_k_values(k_idx);
@@ -275,6 +374,10 @@ for q_idx = 1:length(query_ids)
         w = 1 ./ (neighbor_dists + 1e-6);
         w = w / sum(w);
         pred_weighted = sum(w .* neighbor_values);
+
+        if K == 5
+            prediction_errors(q_idx) = abs(gt_value - pred_weighted);
+        end
         
         row = struct();
         row.query_id = query_id;
@@ -370,6 +473,187 @@ for q_idx = 1:length(query_ids)
         row.err_simple = abs(gt_value - agg_simple);
         row.err_weighted = abs(gt_value - agg_weighted);
         decomp_results = [decomp_results; row];
+
+    end
+
+    % === COVERAGE ANALYSIS (Decomposed) ===
+    for s = 1:length(query_seg_indices)
+        si = query_seg_indices(s);
+        seg_id = all_seg_ids{si};
+        
+        if isnan(y_seg(si)), continue; end
+        
+        query_seg_feat = X_seg(si, :);
+        dists_seg = vecnorm(X_seg - query_seg_feat, 2, 2);
+        dists_seg(si) = inf;
+        same_bahn = strcmp(all_seg_bahn_ids, query_id);
+        dists_seg(same_bahn) = inf;
+        dists_seg(isnan(y_seg)) = inf;
+        
+        [min_d, min_i] = min(dists_seg);
+        if isinf(min_d), continue; end
+        
+        pred_err = abs(y_seg(si) - y_seg(min_i));
+        coverage_dists = [coverage_dists; min_d];
+        coverage_errors = [coverage_errors; pred_err];
+    end
+ 
+    % ════════════════════════════════════════
+    % DECOMPOSED kNN + DTW RERANKING
+    % ════════════════════════════════════════
+    
+    if dtw_active
+        % For each segment, get kNN candidates, load sequences, run DTW
+        K_pool = max(all_k_values); % Use largest K as candidate pool
+        
+        seg_dtw_preds_simple = zeros(length(query_seg_indices), length(all_k_values));
+        seg_dtw_preds_weighted = zeros(length(query_seg_indices), length(all_k_values));
+        seg_dtw_weights_len = zeros(length(query_seg_indices), 1);
+        seg_dtw_valid = true(length(query_seg_indices), 1);
+        
+        for s = 1:length(query_seg_indices)
+            si = query_seg_indices(s);
+            seg_id = all_seg_ids{si};
+            
+            if isnan(y_seg(si))
+                seg_dtw_valid(s) = false;
+                continue;
+            end
+            
+            % Load query sequence from DB
+            conn_dtw = connectingToPostgres();
+            q_pos_sql = sprintf([...
+                'SELECT x_soll, y_soll, z_soll ' ...
+                'FROM %s.bahn_position_soll ' ...
+                'WHERE segment_id = ''%s'' ORDER BY timestamp'], schema, seg_id);
+            q_pos = fetch(conn_dtw, q_pos_sql);
+            if isempty(q_pos)
+                seg_dtw_valid(s) = false;
+                close(conn_dtw);
+                continue;
+            end
+            query_seg_seq = [q_pos.x_soll, q_pos.y_soll, q_pos.z_soll];
+            
+            % kNN: find top K_pool candidates
+            query_seg_feat = X_seg(si, :);
+            dists_seg = vecnorm(X_seg - query_seg_feat, 2, 2);
+            dists_seg(si) = inf;
+            same_bahn = strcmp(all_seg_bahn_ids, query_id);
+            dists_seg(same_bahn) = inf;
+            dists_seg(isnan(y_seg)) = inf;
+            [sorted_d, sorted_i] = sort(dists_seg, 'ascend');
+            
+            if sorted_d(1) == inf
+                seg_dtw_valid(s) = false;
+                continue;
+            end
+            
+            nb_idx = sorted_i(1:K_pool);
+            nb_ids = all_seg_ids(nb_idx);
+            
+            % Load candidate sequences from DB
+            cand_ids_str = sprintf('''%s'',', nb_ids{:});
+            cand_ids_str = cand_ids_str(1:end-1);
+            cand_pos_sql = sprintf([...
+                'SELECT segment_id, x_soll, y_soll, z_soll ' ...
+                'FROM %s.bahn_position_soll ' ...
+                'WHERE segment_id IN (%s) ' ...
+                'ORDER BY segment_id, timestamp'], schema, cand_ids_str);
+            cand_pos_data = fetch(conn_dtw, cand_pos_sql);
+            close(conn_dtw);
+            
+            [Gc, gc_ids] = findgroups(cand_pos_data.segment_id);
+            cand_vals = [cand_pos_data.x_soll, cand_pos_data.y_soll, cand_pos_data.z_soll];
+            cand_map = containers.Map();
+            for c = 1:length(gc_ids)
+                cand_map(gc_ids{c}) = cand_vals(Gc == c, :);
+            end
+            
+            cand_seqs = cell(K_pool, 1);
+            for c = 1:K_pool
+                if cand_map.isKey(nb_ids{c})
+                    cand_seqs{c} = cand_map(nb_ids{c});
+                else
+                    cand_seqs{c} = [];
+                end
+            end
+            
+            % Build table for performReranking
+            cand_table = table(nb_ids(:), sorted_d(1:K_pool), (1:K_pool)', cand_seqs, ...
+                'VariableNames', {'segment_id', 'knn_dist', 'rank', 'sequence'});
+            
+            % Run DTW reranking
+            cfg = struct();
+            cfg.mode = dtw_mode;
+            cfg.window = dtw_window;
+            cfg.normalize = normalize_dtw;
+            cfg.rot_align = use_rotation_alignment;
+            cfg.lb_kim_ratio = lb_kim_keep_ratio;
+            cfg.lb_keogh_n = lb_keogh_candidates;
+            
+            [reranked, ~] = performReranking(cand_table, query_seg_seq, cfg);
+            
+            % Get ground truth values for reranked candidates
+            reranked_gt = nan(K_pool, 1);
+            for c = 1:K_pool
+                idx = find(strcmp(seg_gt.segment_id, reranked.segment_id{c}), 1);
+                if ~isempty(idx)
+                    reranked_gt(c) = seg_gt.sidtw_average_distance(idx);
+                end
+            end
+            
+            % Compute predictions for each K
+            for k_idx = 1:length(all_k_values)
+                K = all_k_values(k_idx);
+                top_gt = reranked_gt(1:K);
+                top_dtw = reranked.dtw_dist(1:K);
+                
+                valid_k = ~isnan(top_gt) & ~isinf(top_dtw);
+                if ~any(valid_k)
+                    seg_dtw_preds_simple(s, k_idx) = NaN;
+                    seg_dtw_preds_weighted(s, k_idx) = NaN;
+                    continue;
+                end
+                
+                seg_dtw_preds_simple(s, k_idx) = mean(top_gt(valid_k));
+                w = 1 ./ (top_dtw(valid_k) + 1e-6);
+                w = w / sum(w);
+                seg_dtw_preds_weighted(s, k_idx) = sum(w .* top_gt(valid_k));
+            end
+            
+            if seg_len_map.isKey(seg_id)
+                seg_dtw_weights_len(s) = seg_len_map(seg_id);
+            else
+                seg_dtw_weights_len(s) = 1;
+            end
+        end
+        
+        % Aggregate kNN+DTW predictions
+        for k_idx = 1:length(all_k_values)
+            K = all_k_values(k_idx);
+            
+            valid_s = seg_dtw_valid & ~isnan(seg_dtw_preds_simple(:, k_idx));
+            if any(valid_s)
+                sw = seg_dtw_weights_len(valid_s) / sum(seg_dtw_weights_len(valid_s));
+                agg_simple = sum(sw .* seg_dtw_preds_simple(valid_s, k_idx));
+                agg_weighted = sum(sw .* seg_dtw_preds_weighted(valid_s, k_idx));
+            else
+                agg_simple = NaN;
+                agg_weighted = NaN;
+            end
+            
+            row = struct();
+            row.query_id = query_id;
+            row.K = K;
+            row.ground_truth = gt_value;
+            row.pred_simple = agg_simple;
+            row.pred_weighted = agg_weighted;
+            row.err_simple = abs(gt_value - agg_simple);
+            row.err_weighted = abs(gt_value - agg_weighted);
+            knn_dtw_results = [knn_dtw_results; row];
+        end
+        
+        
     end
     
     query_times_decomp(q_idx) = toc(t_decomp);
@@ -418,6 +702,21 @@ for k_idx = 1:length(all_k_values)
     fprintf('%-5d  %-12.4f %-12.4f %-12.4f %-12.4f\n', K, ...
         mean(decomp_table.err_simple(mask)), mean(decomp_table.err_weighted(mask)), ...
         sqrt(mean(decomp_table.err_simple(mask).^2)), sqrt(mean(decomp_table.err_weighted(mask).^2)));
+end
+
+if dtw_active
+    fprintf('\n═══ PREDICTION RESULTS (kNN + DTW) ═══\n\n');
+    fprintf('%-5s  %-12s %-12s %-12s %-12s\n', 'K', 'MAE_simple', 'MAE_weighted', 'RMSE_simple', 'RMSE_weighted');
+    fprintf('%s\n', repmat('-', 1, 57));
+    
+    knn_dtw_table = struct2table(knn_dtw_results);
+    for k_idx = 1:length(all_k_values)
+        K = all_k_values(k_idx);
+        mask = knn_dtw_table.K == K;
+        fprintf('%-5d  %-12.4f %-12.4f %-12.4f %-12.4f\n', K, ...
+            mean(knn_dtw_table.err_simple(mask)), mean(knn_dtw_table.err_weighted(mask)), ...
+            sqrt(mean(knn_dtw_table.err_simple(mask).^2)), sqrt(mean(knn_dtw_table.err_weighted(mask).^2)));
+    end
 end
 
 % ========================================================================
@@ -492,3 +791,118 @@ writetable(decomp_table, decomp_filename);
 fprintf('\n✓ Saved: %s\n', results_filename);
 fprintf('✓ Saved: %s\n', decomp_filename);
 fprintf('✓ Done!\n');
+
+% ========================================================================
+%% SECTION 7: DATABASE COVERAGE ANALYSIS
+% ========================================================================
+
+fprintf('\n═══ DATABASE COVERAGE ANALYSIS ═══\n\n');
+
+valid_mask = ~isnan(nearest_distances) & ~isnan(prediction_errors);
+
+distances = nearest_distances(valid_mask);
+errors = prediction_errors(valid_mask);
+
+fprintf('Nearest neighbor distance statistics:\n');
+fprintf(' Mean: %.4f\n', mean(distances));
+fprintf(' Median: %.4f\n', median(distances));
+fprintf(' Min: %.4f\n', min(distances));
+fprintf(' Max: %.4f\n\n', max(distances));
+
+corr_val = corr(distances, errors);
+
+fprintf('Correlation between NN distance and prediction error: %.3f\n\n', corr_val);
+
+% === Plot 1: Histogram ===
+figure;
+histogram(distances, 40);
+xlabel('Nearest Neighbor Distance (Euclidean)');
+ylabel('Frequency');
+title('Database Coverage: Distance to Nearest Neighbor');
+
+% === Plot 2: Distance vs Prediction Error ===
+figure;
+scatter(distances, errors, 25, 'filled');
+xlabel('Nearest Neighbor Distance');
+ylabel('Prediction Error (mm)');
+title('Prediction Error vs Database Coverage');
+
+lsline
+grid on
+
+fprintf('\n═══ DATABASE COVERAGE ANALYSIS (Decomposed) ═══\n');
+fprintf('Nearest neighbor distance statistics:\n');
+fprintf('  Mean:   %.4f\n', mean(coverage_dists));
+fprintf('  Median: %.4f\n', median(coverage_dists));
+fprintf('  Min:    %.4f\n', min(coverage_dists));
+fprintf('  Max:    %.4f\n', max(coverage_dists));
+fprintf('Correlation between NN distance and prediction error: %.3f\n', ...
+    corr(coverage_dists, coverage_errors));
+
+figure;
+subplot(1,2,1);
+histogram(coverage_dists, 50);
+xlabel('Nearest Neighbor Distance (Euclidean)');
+ylabel('Frequency');
+title('Database Coverage: Segment-Level');
+
+subplot(1,2,2);
+scatter(coverage_dists, coverage_errors, 20, 'filled', 'MarkerFaceAlpha', 0.5);
+xlabel('Nearest Neighbor Distance');
+ylabel('Prediction Error (mm)');
+title(sprintf('Correlation: %.3f', corr(coverage_dists, coverage_errors)));
+lsline;
+
+
+function [sorted_table, stats] = performReranking(input_table, query_seq, cfg)
+    n = height(input_table);
+    dists = inf(n, 1);
+    
+    stats.lb_kim_calls = 0;
+    stats.lb_keogh_calls = 0;
+    stats.dtw_calls = 0;
+    
+    % === STAGE 2a: LB_Kim ===
+    lb_kim_vals = inf(n, 1);
+    for i = 1:n
+        cand_seq = input_table.sequence{i};
+        if isempty(cand_seq) || size(cand_seq,1) < 2, continue; end
+        lb_kim_vals(i) = LB_Kim(query_seq, cand_seq, cfg.mode, cfg.rot_align, cfg.normalize);
+        stats.lb_kim_calls = stats.lb_kim_calls + 1;
+    end
+    
+    num_keep_kim = ceil(n * cfg.lb_kim_ratio);
+    [~, kim_order] = sort(lb_kim_vals, 'ascend');
+    kim_survivors = kim_order(1:min(num_keep_kim, n));
+    
+    % === STAGE 2b: LB_Keogh ===
+    lb_keogh_vals = inf(n, 1);
+    for i = kim_survivors'
+        cand_seq = input_table.sequence{i};
+        lb_keogh_vals(i) = LB_Keogh(query_seq, cand_seq, cfg.window, ...
+                                    cfg.mode, cfg.rot_align, cfg.normalize);
+        stats.lb_keogh_calls = stats.lb_keogh_calls + 1;
+    end
+    
+    [~, keogh_order] = sort(lb_keogh_vals, 'ascend');
+    num_keep_keogh = min(cfg.lb_keogh_n, length(kim_survivors));
+    keogh_survivors = keogh_order(1:num_keep_keogh);
+    
+    % === STAGE 2c: DTW ===
+    for i = keogh_survivors'
+        cand_seq = input_table.sequence{i};
+        dists(i) = cDTW(query_seq, cand_seq, cfg.mode, cfg.window, ...
+                        Inf, cfg.rot_align, cfg.normalize);
+        stats.dtw_calls = stats.dtw_calls + 1;
+    end
+    
+    % === Sortieren & Ranks ===
+    input_table.dtw_dist = dists;
+    [~, sort_idx] = sort(dists, 'ascend');
+    sorted_table = input_table(sort_idx, :);
+    sorted_table.Properties.VariableNames{'rank'} = 'rank_s1';
+    sorted_table.rank_s2 = (1:n)';
+    sorted_table.rank_change = sorted_table.rank_s1 - sorted_table.rank_s2;
+end
+
+

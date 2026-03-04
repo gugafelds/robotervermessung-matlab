@@ -20,12 +20,12 @@ fprintf('═══ TWO-STAGE RETRIEVAL ═══\n');
 fprintf('═══ SECTION 1: SETUP & CONFIGURATION ═══\n\n');
 
 % === WAS SUCHEN WIR? ===
-query_id = '1765991743';
+query_id = '1764335953';
 
 % === STAGE 1: EMBEDDING-BASIERTE VORFILTERUNG ===
 % K = Anzahl der Kandidaten, die aus der Embedding-Suche geholt werden.
 % Höherer Wert = mehr Kandidaten für DTW, aber langsamer.
-K = 50;
+K = 10;
 
 % RRF (Reciprocal Rank Fusion) Parameter:
 % Kombiniert Rankings aus verschiedenen Embedding-Modalitäten.
@@ -51,7 +51,7 @@ weights = weights / sum(weights);     % Normalisieren
 %   'position'     - Vergleiche 3D Positionen (x,y,z) - gut für Bahnform
 %   'joint_states' - Vergleiche Gelenkwinkel - gut für Armkonfiguration
 %   'off'          - Kein DTW, nur Embedding-Ranking (Stage 1 only)
-dtw_mode = 'off';
+dtw_mode = 'position';
 
 % dtw_window: Sakoe-Chiba Band als Anteil der Sequenzlänge.
 % 0.2 = 20% = DTW darf max 20% der Länge "warpen".
@@ -87,7 +87,7 @@ lb_keogh_candidates = 500;
 % === PROGNOSE (Performance-Vorhersage) ===
 % prognose: Soll die SIDTW-Distanz prognostiziert werden?
 % Nutzt die gefundenen ähnlichen Bahnen um die Performance vorherzusagen.
-prognose = false;
+prognose = true;
 
 % prognose_top_n: Wie viele Top-Kandidaten für Prognose verwenden?
 % Höher = stabilere Vorhersage, aber evtl. weniger ähnliche Bahnen dabei.
@@ -96,7 +96,7 @@ prognose_top_n = 10;
 
 % === VISUALISIERUNG ===
 % final_top_n: Wie viele Top-Ergebnisse in den Plots anzeigen?
-plot = false;
+plot = true;
 final_top_n = 5;
 
 fprintf('Query ID:              %s\n', query_id);
